@@ -1,4 +1,4 @@
-"""Export the approved Skyknot dragon blockout with runtime pivot groups.
+"""Export the RC7 Skyknot dragon with runtime pivot groups.
 
 Run Blender with the source .blend already open and pass the output after `--`:
 blender source.blend --background --python export_dragon_glb.py -- --output model.glb
@@ -93,16 +93,35 @@ def merge_runtime_meshes(root: bpy.types.Object) -> None:
         )
 
 
+def apply_export_modifiers() -> None:
+    for obj in tuple(bpy.data.objects):
+        if obj.type != "MESH" or len(obj.modifiers) == 0:
+            continue
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        for modifier in tuple(obj.modifiers):
+            bpy.ops.object.modifier_apply(modifier=modifier.name)
+
+
 def consolidate_runtime_materials() -> None:
     base_source = bpy.data.materials.get("M_Dragon_Ember")
+    membrane_source = bpy.data.materials.get("M_Wing_Membrane")
     glow_source = bpy.data.materials.get("M_Rune_Teal")
-    if base_source is None or glow_source is None:
+    if base_source is None or membrane_source is None or glow_source is None:
         raise RuntimeError("Dragon source materials are incomplete")
 
     base = base_source.copy()
-    base.name = "M_Dragon_Vertex"
+    base.name = "M_Dragon_Scale"
     base.diffuse_color = (1.0, 1.0, 1.0, 1.0)
-    base["vertex_palette"] = "ember-burgundy-gold-charcoal"
+    base["vertex_palette"] = (
+        "ember-ember-light-burgundy-gold-charcoal"
+    )
+
+    membrane = membrane_source.copy()
+    membrane.name = "M_Dragon_Membrane"
+    membrane.diffuse_color = (1.0, 1.0, 1.0, 1.0)
+    membrane["vertex_palette"] = "sunrise-amber-gradient"
 
     glow = glow_source.copy()
     glow.name = "M_Dragon_Glow"
@@ -112,32 +131,39 @@ def consolidate_runtime_materials() -> None:
     for obj in bpy.data.objects:
         if obj.type != "MESH" or not obj.data.materials:
             continue
-        uses_glow = obj.data.materials[0].name.startswith("M_Rune_Teal")
+        source_name = obj.data.materials[0].name
+        uses_glow = source_name.startswith("M_Rune_Teal")
+        uses_membrane = source_name.startswith("M_Wing_Membrane")
         obj.data.materials.clear()
-        obj.data.materials.append(glow if uses_glow else base)
+        if uses_glow:
+            obj.data.materials.append(glow)
+        elif uses_membrane:
+            obj.data.materials.append(membrane)
+        else:
+            obj.data.materials.append(base)
 
 
 def build_runtime_hierarchy(root: bpy.types.Object) -> None:
     collection = root.users_collection[0]
 
     left_wing = create_pivot(
-        "WingRig_L", (-0.68, 0.52, 3.18), root, collection
+        "WingRig_L", (-0.68, 0.48, 3.16), root, collection
     )
     right_wing = create_pivot(
-        "WingRig_R", (0.68, 0.52, 3.18), root, collection
+        "WingRig_R", (0.68, 0.48, 3.16), root, collection
     )
     group_named_parts(left_wing, lambda name: name.startswith("Wing_L_"))
     group_named_parts(right_wing, lambda name: name.startswith("Wing_R_"))
 
-    head = create_pivot("HeadRig", (0.0, 2.92, 4.24), root, collection)
-    jaw = create_pivot("JawRig", (0.0, 3.62, 4.08), head, collection)
+    head = create_pivot("HeadRig", (0.0, 2.40, 4.48), root, collection)
+    jaw = create_pivot("JawRig", (0.0, 3.23, 4.22), head, collection)
     group_named_parts(jaw, lambda name: name.startswith("Jaw_"))
 
     left_eye = create_pivot(
-        "EyeRig_L", (-0.36, 3.90, 4.42), head, collection
+        "EyeRig_L", (-0.33, 3.49, 4.63), head, collection
     )
     right_eye = create_pivot(
-        "EyeRig_R", (0.36, 3.90, 4.42), head, collection
+        "EyeRig_R", (0.33, 3.49, 4.63), head, collection
     )
     group_named_parts(left_eye, lambda name: name.startswith("Eye_L_"))
     group_named_parts(right_eye, lambda name: name.startswith("Eye_R_"))
@@ -153,11 +179,11 @@ def build_runtime_hierarchy(root: bpy.types.Object) -> None:
     group_named_parts(head, lambda name: name.startswith(head_prefixes))
 
     tail_starts = (
-        (0.0, -1.62, 2.23),
-        (0.0, -2.64, 2.09),
-        (0.0, -3.72, 1.94),
-        (0.0, -4.82, 1.80),
-        (0.0, -5.90, 1.78),
+        (0.0, -1.72, 2.30),
+        (0.0, -2.68, 2.16),
+        (0.0, -3.66, 2.02),
+        (0.0, -4.65, 1.95),
+        (0.0, -5.63, 1.98),
     )
     tail_parent = root
     for index, location in enumerate(tail_starts, start=1):
@@ -177,8 +203,9 @@ def build_runtime_hierarchy(root: bpy.types.Object) -> None:
         tail_parent, lambda name: name.startswith(tail_end_prefixes)
     )
 
-    root["runtime_rig"] = "wing-head-tail-expression-pivots-v2"
+    root["runtime_rig"] = "wing-head-tail-expression-pivots-v3"
     root["asset_license"] = "project-authored"
+    root["material_contract"] = "scale-membrane-glow-v1"
     merge_runtime_meshes(root)
     root["render_mesh_target"] = 12
 
@@ -188,6 +215,7 @@ def export_glb(output: Path) -> None:
     if root is None:
         raise RuntimeError("DragonRoot was not found in the source blend")
 
+    apply_export_modifiers()
     consolidate_runtime_materials()
     build_runtime_hierarchy(root)
     bpy.ops.object.select_all(action="DESELECT")
