@@ -26,6 +26,24 @@ async function readSnapshot(
   })
 }
 
+async function startTouchRace(page: Page): Promise<void> {
+  const joystick = page.locator('[data-touch-role="joystick"]')
+  await expect(joystick).toBeHidden()
+  await page.getByRole('button', { name: '비행 시작' }).tap()
+  await expect
+    .poll(async () => (await readSnapshot(page))?.race.phase, {
+      timeout: 100,
+      intervals: [10],
+    })
+    .toBe('countdown')
+  await expect(joystick).toBeVisible()
+  await expect
+    .poll(async () => (await readSnapshot(page))?.race.phase, {
+      timeout: 4_000,
+    })
+    .toBe('racing')
+}
+
 async function dispatchTouch(
   client: CDPSession,
   type: 'touchStart' | 'touchMove' | 'touchEnd',
@@ -63,6 +81,7 @@ test.describe('touch flight flow', () => {
     page,
   }, testInfo) => {
     const client = await page.context().newCDPSession(page)
+    await startTouchRace(page)
     const joystick = page.locator('[data-touch-role="joystick"]')
     const joystickBox = await joystick.boundingBox()
     expect(joystickBox).not.toBeNull()
@@ -76,18 +95,6 @@ test.describe('touch flight flow', () => {
       y: joystickBox.y + joystickBox.height / 2,
     }
     await dispatchTouch(client, 'touchStart', center)
-
-    await expect
-      .poll(async () => (await readSnapshot(page))?.race.phase, {
-        timeout: 100,
-        intervals: [10],
-      })
-      .toBe('countdown')
-    await expect
-      .poll(async () => (await readSnapshot(page))?.race.phase, {
-        timeout: 4_000,
-      })
-      .toBe('racing')
 
     const beforeSteer = await readSnapshot(page)
     await dispatchTouch(client, 'touchMove', {
@@ -152,6 +159,7 @@ test.describe('touch flight flow', () => {
 
   test('uses only the last active device', async ({ page }) => {
     const client = await page.context().newCDPSession(page)
+    await startTouchRace(page)
     const joystick = page.locator('[data-touch-role="joystick"]')
     const joystickBox = await joystick.boundingBox()
     expect(joystickBox).not.toBeNull()
@@ -209,12 +217,7 @@ test.describe('touch flight flow', () => {
   }, testInfo) => {
     await page.goto('/?qaCourse=1')
     const joystick = page.locator('[data-touch-role="joystick"]')
-    await joystick.tap({ position: { x: 56, y: 30 } })
-    await expect
-      .poll(async () => (await readSnapshot(page))?.race.phase, {
-        timeout: 4_000,
-      })
-      .toBe('racing')
+    await startTouchRace(page)
 
     for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
       await page.evaluate(() => {

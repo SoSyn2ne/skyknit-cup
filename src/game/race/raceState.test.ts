@@ -22,6 +22,7 @@ const options = {
   spawnPosition: { x: 2, y: 12, z: -4 },
   persistent: {
     muted: true,
+    musicVolume: 0.35,
     quality: 'high' as const,
     bestTimeMs: 50_000,
     missionGrades: { 'first-skyknot': 'silver' as const },
@@ -441,6 +442,23 @@ describe('race state', () => {
       ...state.persistent,
       muted: false,
     })
+  })
+
+  it('updates clamped BGM volume without touching active run data', () => {
+    const state = makeState('racing')
+    const changed = transitionRace(state, {
+      type: 'SET_MUSIC_VOLUME',
+      musicVolume: 1.4,
+    })
+
+    expect(changed.persistent.musicVolume).toBe(1)
+    expect(changed.run).toBe(state.run)
+    expect(
+      transitionRace(changed, {
+        type: 'SET_MUSIC_VOLUME',
+        musicVolume: Number.NaN,
+      }),
+    ).toBe(changed)
   })
 
   it('keeps identity when a setting already has the requested value', () => {

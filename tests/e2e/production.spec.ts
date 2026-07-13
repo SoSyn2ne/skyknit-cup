@@ -6,7 +6,7 @@ interface CanvasSample {
   readonly hash: number
 }
 
-const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'm6'
+const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
 
 async function sampleCanvas(page: Page): Promise<CanvasSample | null> {
   return page.evaluate(async () => {
@@ -54,17 +54,44 @@ test('ships a clean production race in every required viewport', async ({
   page,
 }, testInfo) => {
   const errors: string[] = []
+  const warnings: string[] = []
   const failedRequests: string[] = []
+  const loadedAudio: Array<{
+    readonly url: string
+    readonly status: number
+    readonly contentType: string
+  }> = []
   page.on('console', (message) => {
     if (message.type() === 'error') {
       errors.push(message.text())
+    } else if (
+      message.type() === 'warning' &&
+      !message.text().includes('GPU stall due to ReadPixels')
+    ) {
+      warnings.push(message.text())
     }
   })
   page.on('pageerror', (error) => errors.push(error.message))
   page.on('requestfailed', (request) => {
+    if (
+      request.url().includes('/assets/audio/') &&
+      request.failure()?.errorText.includes('ERR_ABORTED') === true
+    ) {
+      return
+    }
     failedRequests.push(`${request.method()} ${request.url()}`)
   })
   page.on('response', (response) => {
+    if (
+      response.url().includes('/assets/audio/') &&
+      response.status() < 400
+    ) {
+      loadedAudio.push({
+        url: response.url(),
+        status: response.status(),
+        contentType: response.headers()['content-type'] ?? '',
+      })
+    }
     if (response.status() >= 400) {
       failedRequests.push(`${response.status()} ${response.url()}`)
     }
@@ -91,6 +118,21 @@ test('ships a clean production race in every required viewport', async ({
     })),
   ).toEqual({ testHook: false, debugMirror: false })
 
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await expect(page.locator('[data-explore-music-volume="true"]')).toBeVisible()
+  await expect.poll(() => loadedAudio.length).toBeGreaterThan(0)
+  expect(
+    loadedAudio.some(
+      ({ url, status, contentType }) =>
+        url.endsWith('sovereign-of-the-sunrise-skies-loop.ogg') &&
+        (status === 200 || status === 206) &&
+        /^(?:audio|application)\/ogg(?:;|$)/i.test(contentType),
+    ),
+  ).toBe(true)
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '미션 선택으로' }).click()
+  await expect(page.locator('[data-mission-select="true"]')).toBeVisible()
+
   const first = await sampleCanvas(page)
   expect(first).not.toBeNull()
   expect((first?.maximumLuma ?? 0) - (first?.minimumLuma ?? 255)).toBeGreaterThan(
@@ -98,9 +140,7 @@ test('ships a clean production race in every required viewport', async ({
   )
 
   if (testInfo.project.name.startsWith('touch')) {
-    await page.locator('[data-touch-role="joystick"]').tap({
-      position: { x: 56, y: 30 },
-    })
+    await page.getByRole('button', { name: '비행 시작' }).tap()
   } else {
     await page.keyboard.press('ArrowUp')
   }
@@ -127,5 +167,6 @@ test('ships a clean production race in every required viewport', async ({
   })
 
   expect(errors).toEqual([])
+  expect(warnings).toEqual([])
   expect(failedRequests).toEqual([])
 })

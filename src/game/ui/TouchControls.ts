@@ -231,7 +231,10 @@ export function createTouchControls(
     update: (phase, mode = 'race') => {
       root.dataset.phase = phase
       root.dataset.mode = mode
-      flightControls.hidden = phase === 'paused' || (mode === 'race' && phase === 'finished')
+      flightControls.hidden =
+        (mode === 'race' && phase === 'ready') ||
+        phase === 'paused' ||
+        (mode === 'race' && phase === 'finished')
       brake.hidden = mode !== 'explore'
       pause.hidden =
         mode === 'race'

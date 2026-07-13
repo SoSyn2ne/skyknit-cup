@@ -22,6 +22,7 @@ export interface DragonDebugSnapshot {
   readonly breathScale: number
   readonly blinkAmount: number
   readonly jawOpenRadians: number
+  readonly shadowsEnabled: boolean
 }
 
 export interface DragonVisual {
@@ -32,6 +33,7 @@ export interface DragonVisual {
     pose: DragonPoseState,
     simulationSeconds: number,
   ): void
+  setShadows(enabled: boolean): void
   debugSnapshot(): DragonDebugSnapshot
   dispose(): void
 }
@@ -223,6 +225,15 @@ function disposeObject(root: THREE.Object3D): void {
   })
 }
 
+function setObjectShadows(root: THREE.Object3D, enabled: boolean): void {
+  root.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      object.castShadow = enabled
+      object.receiveShadow = false
+    }
+  })
+}
+
 export function createDragon(palette: DragonPalette): DragonVisual {
   const movementRoot = new THREE.Group()
   movementRoot.name = 'M3_DragonMovementRoot'
@@ -238,6 +249,7 @@ export function createDragon(palette: DragonPalette): DragonVisual {
   let breathScale = 1
   let blinkAmount = 0
   let jawOpenRadians = 0
+  let shadowsEnabled = false
   const hitColor = new THREE.Color(palette.collisionCoral)
   const forceFallback =
     import.meta.env.DEV &&
@@ -263,6 +275,7 @@ export function createDragon(palette: DragonPalette): DragonVisual {
       gltf.scene.name = 'M3_SkyknotDragonAsset'
       gltf.scene.scale.setScalar(0.34)
       gltf.scene.position.set(0, -1.32, 0.08)
+      setObjectShadows(gltf.scene, shadowsEnabled)
       poseRoot.add(gltf.scene)
       fallback.root.visible = false
       rig = loadedRig
@@ -325,6 +338,16 @@ export function createDragon(palette: DragonPalette): DragonVisual {
           : state.emissiveIntensity
       }
     },
+    setShadows: (enabled) => {
+      shadowsEnabled = enabled
+      setObjectShadows(fallback.root, enabled)
+      if (source === 'glb') {
+        const loadedAsset = poseRoot.getObjectByName('M3_SkyknotDragonAsset')
+        if (loadedAsset !== undefined) {
+          setObjectShadows(loadedAsset, enabled)
+        }
+      }
+    },
     debugSnapshot: () => ({
       source,
       meshCount,
@@ -333,6 +356,7 @@ export function createDragon(palette: DragonPalette): DragonVisual {
       breathScale,
       blinkAmount,
       jawOpenRadians,
+      shadowsEnabled,
     }),
     dispose: () => {
       disposed = true

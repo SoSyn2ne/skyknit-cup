@@ -4,9 +4,10 @@ import path from 'node:path'
 
 import type { FlightDebugSnapshot } from '../../src/game/createRenderer'
 
-const BASE_URL = 'http://127.0.0.1:4176'
+const BASE_URL =
+  process.env.DRAGON_PERFORMANCE_URL ?? 'http://127.0.0.1:4176'
 const SAMPLE_DURATION_MS = 30_000
-const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc4'
+const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
 
 interface FrameMeasurement {
   readonly durationMs: number
@@ -32,6 +33,7 @@ interface PerformanceResult {
   readonly geometries: number
   readonly textures: number
   readonly gameMode: 'race' | 'explore'
+  readonly bgmPlaying: boolean
 }
 
 async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
@@ -86,17 +88,18 @@ async function measure(
   viewport: readonly [number, number],
   mode: 'race' | 'explore' = 'race',
 ): Promise<PerformanceResult> {
-  await page.context().addInitScript((selectedQuality) => {
+  await page.context().addInitScript(({ selectedQuality, muted }) => {
     localStorage.setItem(
       'skyknit-cup:settings',
       JSON.stringify({
-        version: 2,
+        version: 6,
         bestTimeMs: null,
-        muted: true,
+        muted,
+        musicVolume: 0.35,
         quality: selectedQuality,
       }),
     )
-  }, quality)
+  }, { selectedQuality: quality, muted: mode === 'race' })
   await page.goto(BASE_URL)
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
@@ -118,10 +121,11 @@ async function measure(
         )?.status,
       )
       .toBe('loaded')
+    await expect
+      .poll(async () => (await readSnapshot(page))?.audio.bgmPlaying)
+      .toBe(true)
   } else if (touch) {
-    await page.locator('[data-touch-role="joystick"]').tap({
-      position: { x: 56, y: 30 },
-    })
+    await page.getByRole('button', { name: '비행 시작' }).tap()
   } else {
     await page.keyboard.press('ArrowUp')
   }
@@ -165,6 +169,7 @@ async function measure(
     geometries: end?.render.geometries ?? 0,
     textures: end?.render.textures ?? 0,
     gameMode: end?.gameMode ?? mode,
+    bgmPlaying: end?.audio.bgmPlaying ?? false,
   }
 }
 
@@ -269,6 +274,10 @@ test('meets the 30 second desktop and mobile frame budgets', async ({
   expect(mobileExplore.minimumBucketFps).toBeGreaterThanOrEqual(30)
   expect(desktopExplore.fixedSteps).toBeGreaterThanOrEqual(1_790)
   expect(desktopExplore.fixedSteps).toBeLessThanOrEqual(1_810)
+  expect(desktop.drawCalls).toBeLessThanOrEqual(120)
+  expect(desktopExplore.drawCalls).toBeLessThanOrEqual(120)
+  expect(desktopExplore.bgmPlaying).toBe(true)
   expect(mobileExplore.fixedSteps).toBeGreaterThanOrEqual(1_790)
   expect(mobileExplore.fixedSteps).toBeLessThanOrEqual(1_810)
+  expect(mobileExplore.bgmPlaying).toBe(true)
 })

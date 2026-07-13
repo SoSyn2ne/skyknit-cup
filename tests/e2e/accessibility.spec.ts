@@ -70,6 +70,9 @@ test.describe('accessible race focus', () => {
   }, testInfo) => {
     test.skip(!testInfo.project.name.startsWith('touch'))
 
+    await page.getByRole('button', { name: '비행 시작' }).tap()
+    await expect.poll(() => readPhase(page), { timeout: 4_000 }).toBe('racing')
+
     await expect(
       page.getByRole('group', { name: '비행 방향 조이스틱' }),
     ).toBeVisible()

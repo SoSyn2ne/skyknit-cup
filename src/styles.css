@@ -445,11 +445,40 @@ button {
 
 .race-hud__settings {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid color-mix(in srgb, var(--sky-haze) 22%, transparent);
+}
+
+.race-hud__music-volume {
+  display: grid;
+  grid-template-columns: auto minmax(72px, 1fr) 38px;
+  flex: 1 1 170px;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--sky-haze);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.race-hud__music-volume input,
+.exploration-hud__audio input {
+  min-width: 0;
+  height: 44px;
+  accent-color: var(--active);
+  cursor: pointer;
+}
+
+.race-hud__music-volume output,
+.exploration-hud__audio output {
+  color: var(--cloud);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .race-hud__mute {
@@ -495,6 +524,7 @@ button {
 }
 
 .race-hud__mute:focus-visible,
+.race-hud__music-volume input:focus-visible,
 .race-hud__quality select:focus-visible,
 .race-hud__mission-picker select:focus-visible,
 .race-hud__mission-start:focus-visible {
@@ -587,6 +617,31 @@ button {
   pointer-events: auto;
 }
 
+.exploration-hud__audio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding-right: 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 82%, transparent);
+}
+
+.exploration-hud__audio label {
+  display: grid;
+  grid-template-columns: auto minmax(54px, 82px) 34px;
+  align-items: center;
+  gap: 6px;
+  color: var(--sky-haze);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.exploration-hud__audio .exploration-hud__mute {
+  border-color: transparent;
+  background: transparent;
+}
+
 .exploration-hud__controls button,
 .exploration-hud__context,
 .exploration-hud__map button,
@@ -628,6 +683,18 @@ button {
   box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 28%, transparent);
   transform: translate(-50%, -50%);
   pointer-events: auto;
+}
+
+.exploration-hud__paused .exploration-hud__audio {
+  width: 100%;
+  margin: 12px 0 4px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--cloud) 28%, transparent);
+}
+
+.exploration-hud__paused .exploration-hud__audio label {
+  grid-template-columns: auto minmax(80px, 1fr) 38px;
+  flex: 1;
 }
 
 .exploration-hud__map h2,
@@ -860,6 +927,80 @@ button {
   .race-hud[data-phase='ready'] .race-hud__panel {
     top: max(16px, env(safe-area-inset-top));
     bottom: auto;
+    width: min(360px, calc(100% - 32px));
+    padding: 12px 14px;
+    overflow: hidden;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__eyebrow,
+  .race-hud[data-phase='ready'] .race-hud__mission-best,
+  .race-hud[data-phase='ready'] .race-hud__quality {
+    display: none;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__panel h1 {
+    font-size: 1.5rem;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__detail {
+    margin-top: 4px;
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__mission-picker {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__mission-picker label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__mission-picker select {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__mission-start {
+    grid-row: 1;
+    grid-column: 2;
+    min-height: 44px;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__mission-objective {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    overflow: hidden;
+    font-size: 0.6875rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__explore-start {
+    grid-row: 3;
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__settings {
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__music-volume {
+    grid-template-columns: auto minmax(64px, 1fr) 34px;
+    gap: 6px;
   }
 
   .touch-controls__joystick {
@@ -900,6 +1041,15 @@ button {
 }
 
 @media (max-width: 420px) {
+  .exploration-hud__controls .exploration-hud__audio label {
+    grid-template-columns: minmax(54px, 72px);
+  }
+
+  .exploration-hud__controls .exploration-hud__audio label > span,
+  .exploration-hud__controls .exploration-hud__audio label > output {
+    display: none;
+  }
+
   .race-hud[data-phase='finished'] .race-hud__settings {
     display: none;
   }
@@ -962,13 +1112,24 @@ button {
   }
 
   .exploration-hud__coin-run {
-    top: max(16px, env(safe-area-inset-top));
+    top: max(72px, calc(env(safe-area-inset-top) + 56px));
     left: 50%;
     gap: 6px;
     min-width: 138px;
     padding: 8px 6px;
     font-size: 0.72rem;
     transform: translateX(-50%);
+  }
+
+  .exploration-hud__context {
+    top: max(72px, calc(env(safe-area-inset-top) + 56px));
+    bottom: auto;
+    left: max(8px, env(safe-area-inset-left));
+    min-width: 96px;
+    padding: 0 10px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    transform: none;
   }
 
   .exploration-hud__destination {
@@ -991,7 +1152,7 @@ button {
   }
 }
 
-@media (max-width: 340px) {
+@media (max-width: 360px) {
   .exploration-hud__coin-run {
     right: 62px;
     left: auto;
@@ -1017,5 +1178,15 @@ button {
   .race-hud[data-phase='ready'] .race-hud__detail {
     margin-top: 4px;
     font-size: 0.8125rem;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__settings {
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .race-hud[data-phase='ready'] .race-hud__quality {
+    display: none;
   }
 }

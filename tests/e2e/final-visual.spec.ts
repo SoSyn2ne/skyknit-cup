@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { FlightDebugSnapshot } from '../../src/game/createRenderer'
 
-const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'm6'
+const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
 
 async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
   return page.evaluate(() => window.__DRAGON_RACE_TEST__?.snapshot() ?? null)
@@ -34,11 +34,26 @@ test('frames the RC3 dragon closely on the ready screen', async ({
       source: 'glb',
       expressionNodes: 3,
       dragonVisible: true,
-      gateVisible:
-        testInfo.project.name !== 'touch-portrait' &&
-        testInfo.project.name !== 'touch-minimum',
-      distance: 7.5,
+      gateVisible: true,
+      distance:
+        testInfo.project.name === 'touch-minimum'
+          ? 14.3
+          : testInfo.project.name === 'touch-portrait'
+            ? 12.6
+            : 7.5,
     })
+
+  if (
+    testInfo.project.name === 'touch-portrait' ||
+    testInfo.project.name === 'touch-minimum'
+  ) {
+    await expect
+      .poll(
+        async () =>
+          (await readSnapshot(page))?.camera.dragonBoundsNdc.allVisible,
+      )
+      .toBe(true)
+  }
 
   await page.screenshot({
     path: `artifacts/browser-qa/${QA_SCOPE}/${testInfo.project.name}-ready-character.png`,
@@ -54,9 +69,7 @@ test('keeps the dragon, wind threads, and active gate readable in flight', async
     'renderer-ready',
   )
   if (testInfo.project.name.startsWith('touch')) {
-    await page.locator('[data-touch-role="joystick"]').tap({
-      position: { x: 56, y: 30 },
-    })
+    await page.getByRole('button', { name: '비행 시작' }).tap()
   } else {
     await page.keyboard.press('ArrowUp')
   }
@@ -76,6 +89,8 @@ test('keeps the dragon, wind threads, and active gate readable in flight', async
             dragonVisible: camera.dragonNdc.visible,
             gateVisible: camera.gateNdc.visible,
             windThreads: camera.windThreadCount,
+            routeOuterRadius: camera.windThreadOuterRadius,
+            routeCoreRadius: camera.windThreadCoreRadius,
             distanceInRange:
               camera.cameraDistanceToDragon >= 8.2 &&
               camera.cameraDistanceToDragon <= 8.8,
@@ -86,6 +101,8 @@ test('keeps the dragon, wind threads, and active gate readable in flight', async
       dragonVisible: true,
       gateVisible: true,
       windThreads: 2,
+      routeOuterRadius: 0.16,
+      routeCoreRadius: 0.052,
       distanceInRange: true,
     })
 
@@ -125,9 +142,7 @@ test('drives the RC3 boost and collision expressions', async ({
     'renderer-ready',
   )
   if (testInfo.project.name.startsWith('touch')) {
-    await page.locator('[data-touch-role="joystick"]').tap({
-      position: { x: 56, y: 30 },
-    })
+    await page.getByRole('button', { name: '비행 시작' }).tap()
   } else {
     await page.keyboard.press('ArrowUp')
   }
@@ -149,14 +164,23 @@ test('drives the RC3 boost and collision expressions', async ({
           }
     })
     .toEqual({ jawOpen: true, squinting: true })
+  await page.locator('.qa-course-control').evaluateAll((controls) => {
+    for (const control of controls) control.setAttribute('hidden', '')
+  })
   await page.screenshot({
     path: `artifacts/browser-qa/${QA_SCOPE}/${testInfo.project.name}-boost-expression.png`,
+  })
+  await page.locator('.qa-course-control').evaluateAll((controls) => {
+    for (const control of controls) control.removeAttribute('hidden')
   })
 
   await page.getByRole('button', { name: 'QA 충돌' }).click()
   await expect
     .poll(async () => (await readSnapshot(page))?.camera.dragon.blinkAmount)
     .toBe(1)
+  await page.locator('.qa-course-control').evaluateAll((controls) => {
+    for (const control of controls) control.setAttribute('hidden', '')
+  })
   await page.screenshot({
     path: `artifacts/browser-qa/${QA_SCOPE}/${testInfo.project.name}-hit-expression.png`,
   })

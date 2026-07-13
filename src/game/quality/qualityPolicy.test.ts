@@ -20,6 +20,11 @@ describe('render quality policy', () => {
       pixelRatio: 1.75,
       cloudCount: 32,
       boostRingCount: 3,
+      shadows: true,
+      shadowMapSize: 1_024,
+      cloudWispCount: 16,
+      cloudDeckCount: 8,
+      speedStreakCount: 18,
     })
   })
 
@@ -32,6 +37,11 @@ describe('render quality policy', () => {
       pixelRatio: 1.25,
       cloudCount: 24,
       boostRingCount: 1,
+      shadows: false,
+      shadowMapSize: 0,
+      cloudWispCount: 12,
+      cloudDeckCount: 0,
+      speedStreakCount: 0,
     })
   })
 

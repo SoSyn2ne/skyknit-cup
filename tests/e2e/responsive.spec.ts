@@ -44,8 +44,31 @@ test('fits the race UI inside the required viewport', async ({
   }
 
   if (testInfo.project.name.startsWith('touch')) {
+    await expect(page.locator('[data-touch-control]:visible')).toHaveCount(0)
+    const start = page.getByRole('button', { name: '비행 시작' })
+    await expect(start).toBeVisible()
+    const startBox = await start.boundingBox()
+    expect(startBox).not.toBeNull()
+    if (startBox !== null) {
+      expect(startBox.width).toBeGreaterThanOrEqual(44)
+      expect(startBox.height).toBeGreaterThanOrEqual(44)
+      expect(startBox.x).toBeGreaterThanOrEqual(0)
+      expect(startBox.y).toBeGreaterThanOrEqual(0)
+      expect(startBox.x + startBox.width).toBeLessThanOrEqual(
+        expectedViewport[0],
+      )
+      expect(startBox.y + startBox.height).toBeLessThanOrEqual(
+        expectedViewport[1],
+      )
+    }
+    await start.tap()
+    await expect(page.locator('.race-hud')).toHaveAttribute(
+      'data-phase',
+      'racing',
+      { timeout: 4_000 },
+    )
     const controls = page.locator('[data-touch-control]:visible')
-    await expect(controls).toHaveCount(2)
+    await expect(controls).toHaveCount(3)
     for (const control of await controls.all()) {
       const box = await control.boundingBox()
       expect(box).not.toBeNull()

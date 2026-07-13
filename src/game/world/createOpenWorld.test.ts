@@ -65,6 +65,11 @@ describe('open-world region GLB streaming', () => {
 
     await settleLoads()
     expect(scene.getObjectByName('RC5_Region_festival-hub')).toBeDefined()
+    const highMesh = scene.getObjectByName(
+      'Asset_/assets/models/world/festival-hub-high.glb_Mesh',
+    ) as THREE.Mesh
+    expect(highMesh.castShadow).toBe(true)
+    expect(highMesh.receiveShadow).toBe(true)
     expect(world.debugSnapshot().regionAssets).toEqual([
       { id: 'festival-hub', lod: 'high', status: 'loaded' },
     ])
@@ -80,6 +85,32 @@ describe('open-world region GLB streaming', () => {
 
     world.dispose()
     expect(world.debugSnapshot().regionGroupCount).toBe(0)
+  })
+
+  it('clears loaded regions for a mode transition and can stream them again', async () => {
+    const scene = new THREE.Scene()
+    const load = vi.fn(async (url: string) => createAsset(url))
+    const world = createOpenWorld(scene, {
+      qualityTier: 'high',
+      assetLoader: { load },
+    })
+
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    await settleLoads()
+    expect(world.debugSnapshot().regionAssets).toEqual([
+      { id: 'festival-hub', lod: 'high', status: 'loaded' },
+    ])
+
+    world.clear()
+    expect(world.debugSnapshot().loadedRegionIds).toEqual([])
+    expect(scene.getObjectByName('RC5_Region_festival-hub')).toBeUndefined()
+
+    world.update({ x: 0, y: 8, z: -40 }, 1)
+    await settleLoads()
+    expect(load).toHaveBeenCalledTimes(2)
+    expect(world.debugSnapshot().regionAssets).toEqual([
+      { id: 'festival-hub', lod: 'high', status: 'loaded' },
+    ])
   })
 
   it('replaces loaded region art when the quality tier changes', async () => {
@@ -117,6 +148,11 @@ describe('open-world region GLB streaming', () => {
     expect(scene.getObjectByName(
       '/assets/models/world/festival-hub-low.glb',
     )).toBeDefined()
+    const lowMesh = scene.getObjectByName(
+      '/assets/models/world/festival-hub-low.glb_Mesh',
+    ) as THREE.Mesh
+    expect(lowMesh.castShadow).toBe(false)
+    expect(lowMesh.receiveShadow).toBe(false)
   })
 
   it('uses low art for distant regions and restores high art when close', async () => {
@@ -145,6 +181,38 @@ describe('open-world region GLB streaming', () => {
     await settleLoads()
     expect(load).toHaveBeenLastCalledWith(
       '/assets/models/world/festival-hub-high.glb',
+    )
+  })
+
+  it('uses the 220 enter and 260 exit radii for a newly loaded region', async () => {
+    const load = vi.fn(async (url: string) => createAsset(url))
+    const world = createOpenWorld(new THREE.Scene(), {
+      qualityTier: 'high',
+      assetLoader: { load },
+    })
+
+    world.update({ x: 0, y: 8, z: 181 }, 0)
+    await settleLoads()
+    expect(load).toHaveBeenLastCalledWith(
+      '/assets/models/world/festival-hub-low.glb',
+    )
+
+    world.update({ x: 0, y: 8, z: 179 }, 1)
+    await settleLoads()
+    expect(load).toHaveBeenLastCalledWith(
+      '/assets/models/world/festival-hub-high.glb',
+    )
+
+    world.update({ x: 0, y: 8, z: 219 }, 2)
+    await settleLoads()
+    expect(load).toHaveBeenLastCalledWith(
+      '/assets/models/world/festival-hub-high.glb',
+    )
+
+    world.update({ x: 0, y: 8, z: 221 }, 3)
+    await settleLoads()
+    expect(load).toHaveBeenLastCalledWith(
+      '/assets/models/world/festival-hub-low.glb',
     )
   })
 

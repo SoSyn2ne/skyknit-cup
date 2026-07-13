@@ -29,13 +29,20 @@ export interface FlightSandboxDebugSnapshot {
   readonly cameraDistanceToDragon: number
   readonly cameraUpDotWorldUp: number
   readonly dragonNdc: ProjectedPoint
+  readonly dragonBoundsNdc: ProjectedBounds
   readonly gateNdc: ProjectedPoint
   readonly windThreadCount: number
+  readonly windThreadOuterRadius: number
+  readonly windThreadCoreRadius: number
   readonly activeGateIndex: number
   readonly gateProjectedDiameterCss: number
   readonly gatePassWaveActive: boolean
+  readonly gatePulseScale: number
+  readonly gateHaloOpacity: number
   readonly boostRingCount: number
   readonly boostRingsVisible: boolean
+  readonly speedStreakCount: number
+  readonly speedStreaksVisible: boolean
   readonly collisionCameraShakeDistance: number
   readonly reducedMotion: boolean
   readonly dragon: DragonDebugSnapshot
@@ -47,6 +54,16 @@ export interface ProjectedPoint {
   readonly y: number
   readonly z: number
   readonly visible: boolean
+}
+
+export interface ProjectedBounds {
+  readonly minX: number
+  readonly maxX: number
+  readonly minY: number
+  readonly maxY: number
+  readonly minZ: number
+  readonly maxZ: number
+  readonly allVisible: boolean
 }
 
 export interface FlightSandbox {
@@ -71,9 +88,27 @@ export interface FlightSandbox {
 }
 
 interface WindThread {
-  readonly line: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>
+  readonly outer: THREE.InstancedMesh<
+    THREE.CylinderGeometry,
+    THREE.MeshBasicMaterial
+  >
+  readonly core: THREE.InstancedMesh<
+    THREE.CylinderGeometry,
+    THREE.MeshBasicMaterial
+  >
+  readonly segmentGeometry: THREE.CylinderGeometry
   readonly positions: Float32Array
   readonly side: number
+}
+
+export interface ReadyCameraFraming {
+  readonly mode: 'landscape' | 'portrait' | 'compact-portrait'
+  readonly backDistance: number
+  readonly sideDistance: number
+  readonly height: number
+  readonly lookAhead: number
+  readonly lookHeight: number
+  readonly fov: number
 }
 
 interface GateVisual {
@@ -95,14 +130,68 @@ const CAMERA_BACK_DISTANCE = 8
 const CAMERA_HEIGHT = 3.2
 const CAMERA_LOOK_AHEAD = 7
 const CAMERA_LOOK_HEIGHT = 1
-const READY_CAMERA_BACK_DISTANCE = 6
-const READY_CAMERA_SIDE_DISTANCE = -3.5
-const READY_CAMERA_HEIGHT = 2.7
-const READY_CAMERA_LOOK_AHEAD = 5
-const READY_CAMERA_LOOK_HEIGHT = 0.2
 const THREAD_POINT_COUNT = 28
 const GATE_PASS_WAVE_SECONDS = 0.65
 const BOOST_RING_COUNT = 3
+const SPEED_STREAK_CAPACITY = 18
+
+export const WIND_THREAD_VISUAL_SPEC = Object.freeze({
+  outerRadius: 0.16,
+  coreRadius: 0.052,
+  leftColorRole: 'gateRune' as const,
+  rightColorRole: 'wingGold' as const,
+})
+
+const LANDSCAPE_READY_CAMERA: ReadyCameraFraming = Object.freeze({
+  mode: 'landscape',
+  backDistance: 6,
+  sideDistance: -3.5,
+  height: 2.7,
+  lookAhead: 5,
+  lookHeight: 0.2,
+  fov: 55,
+})
+
+const PORTRAIT_READY_CAMERA: ReadyCameraFraming = Object.freeze({
+  mode: 'portrait',
+  backDistance: 11.7,
+  sideDistance: -1.2,
+  height: 4.5,
+  lookAhead: 6.5,
+  lookHeight: 0.35,
+  fov: 62,
+})
+
+const COMPACT_PORTRAIT_READY_CAMERA: ReadyCameraFraming = Object.freeze({
+  mode: 'compact-portrait',
+  backDistance: 13.5,
+  sideDistance: -0.8,
+  height: 4.5,
+  lookAhead: 22,
+  lookHeight: 7.5,
+  fov: 64,
+})
+
+export function getReadyCameraFraming(
+  viewportWidth: number,
+  viewportHeight: number,
+): ReadyCameraFraming {
+  const safeWidth =
+    Number.isFinite(viewportWidth) && viewportWidth > 0
+      ? viewportWidth
+      : 1_440
+  const safeHeight =
+    Number.isFinite(viewportHeight) && viewportHeight > 0
+      ? viewportHeight
+      : 900
+
+  if (safeWidth >= safeHeight) {
+    return LANDSCAPE_READY_CAMERA
+  }
+  return safeHeight <= 600
+    ? COMPACT_PORTRAIT_READY_CAMERA
+    : PORTRAIT_READY_CAMERA
+}
 
 
 function createGate(
@@ -191,19 +280,44 @@ function createWindThread(
   palette: FlightSandboxPalette,
 ): WindThread {
   const positions = new Float32Array(THREAD_POINT_COUNT * 3)
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-  const material = new THREE.LineBasicMaterial({
-    color: palette.cloud,
+  const segmentGeometry = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true)
+  const colorRole =
+    side < 0
+      ? WIND_THREAD_VISUAL_SPEC.leftColorRole
+      : WIND_THREAD_VISUAL_SPEC.rightColorRole
+  const outerMaterial = new THREE.MeshBasicMaterial({
+    color: palette[colorRole],
     transparent: true,
-    opacity: 0.86,
+    opacity: 0.48,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+  const coreMaterial = new THREE.MeshBasicMaterial({
+    color: palette[colorRole],
+    transparent: true,
+    opacity: 0.98,
     depthWrite: false,
   })
-  const line = new THREE.Line(geometry, material)
-  line.name = side < 0 ? 'M1_WindThreadLeft' : 'M1_WindThreadRight'
-  line.frustumCulled = false
+  const segmentCount = THREAD_POINT_COUNT - 1
+  const outer = new THREE.InstancedMesh(
+    segmentGeometry,
+    outerMaterial,
+    segmentCount,
+  )
+  const core = new THREE.InstancedMesh(
+    segmentGeometry,
+    coreMaterial,
+    segmentCount,
+  )
+  const sideName = side < 0 ? 'Left' : 'Right'
+  outer.name = `RC7_WindThreadHalo${sideName}`
+  core.name = `RC7_WindThreadCore${sideName}`
+  outer.frustumCulled = false
+  core.frustumCulled = false
+  outer.renderOrder = 2
+  core.renderOrder = 3
 
-  return { line, positions, side }
+  return { outer, core, segmentGeometry, positions, side }
 }
 
 function getForward(state: FlightState, target: THREE.Vector3): THREE.Vector3 {
@@ -259,6 +373,96 @@ function projectedPoint(
   }
 }
 
+function projectedVisibleObjectBounds(
+  object: THREE.Object3D,
+  camera: THREE.PerspectiveCamera,
+): ProjectedBounds {
+  const projectedBounds = {
+    minX: Number.POSITIVE_INFINITY,
+    maxX: Number.NEGATIVE_INFINITY,
+    minY: Number.POSITIVE_INFINITY,
+    maxY: Number.NEGATIVE_INFINITY,
+    minZ: Number.POSITIVE_INFINITY,
+    maxZ: Number.NEGATIVE_INFINITY,
+  }
+  const projectedCorner = new THREE.Vector3()
+  let hasBounds = false
+  object.updateWorldMatrix(true, true)
+  object.traverseVisible((child) => {
+    const mesh = child as THREE.Mesh
+    const geometry = mesh.geometry
+    if (geometry === undefined) return
+    const skinnedMesh = child as THREE.SkinnedMesh
+    let localBounds: THREE.Box3 | null
+    if (skinnedMesh.isSkinnedMesh) {
+      skinnedMesh.computeBoundingBox()
+      localBounds = skinnedMesh.boundingBox
+    } else {
+      geometry.computeBoundingBox()
+      localBounds = geometry.boundingBox
+    }
+    if (localBounds === null) return
+    hasBounds = true
+    for (const x of [localBounds.min.x, localBounds.max.x]) {
+      for (const y of [localBounds.min.y, localBounds.max.y]) {
+        for (const z of [localBounds.min.z, localBounds.max.z]) {
+          projectedCorner
+            .set(x, y, z)
+            .applyMatrix4(child.matrixWorld)
+            .project(camera)
+          projectedBounds.minX = Math.min(
+            projectedBounds.minX,
+            projectedCorner.x,
+          )
+          projectedBounds.maxX = Math.max(
+            projectedBounds.maxX,
+            projectedCorner.x,
+          )
+          projectedBounds.minY = Math.min(
+            projectedBounds.minY,
+            projectedCorner.y,
+          )
+          projectedBounds.maxY = Math.max(
+            projectedBounds.maxY,
+            projectedCorner.y,
+          )
+          projectedBounds.minZ = Math.min(
+            projectedBounds.minZ,
+            projectedCorner.z,
+          )
+          projectedBounds.maxZ = Math.max(
+            projectedBounds.maxZ,
+            projectedCorner.z,
+          )
+        }
+      }
+    }
+  })
+
+  if (!hasBounds) {
+    return {
+      minX: 0,
+      maxX: 0,
+      minY: 0,
+      maxY: 0,
+      minZ: 2,
+      maxZ: 2,
+      allVisible: false,
+    }
+  }
+
+  return {
+    ...projectedBounds,
+    allVisible:
+      projectedBounds.minX >= -1 &&
+      projectedBounds.maxX <= 1 &&
+      projectedBounds.minY >= -1 &&
+      projectedBounds.maxY <= 1 &&
+      projectedBounds.minZ >= -1 &&
+      projectedBounds.maxZ <= 1,
+  }
+}
+
 export function createFlightSandbox(
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
@@ -267,6 +471,7 @@ export function createFlightSandbox(
   course: readonly CourseCheckpoint[] = SKYKNOT_COURSE,
 ): FlightSandbox {
   const dragon = createDragonVisual(palette)
+  dragon.setShadows(initialQuality.shadows)
   let dragonPose = createDragonPoseState()
   let characterAnimationSeconds = 0
   let quality = initialQuality
@@ -307,6 +512,28 @@ export function createFlightSandbox(
     dragon.movementRoot.add(ring)
     return ring
   })
+  const speedStreakGeometry = new THREE.CylinderGeometry(0.012, 0.028, 1.6, 5)
+  speedStreakGeometry.rotateX(Math.PI / 2)
+  const speedStreaks = new THREE.InstancedMesh(
+    speedStreakGeometry,
+    new THREE.MeshBasicMaterial({
+      color: palette.cloud,
+      transparent: true,
+      opacity: 0.18,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+    SPEED_STREAK_CAPACITY,
+  )
+  speedStreaks.name = 'RC7_BoostSpeedStreaks'
+  speedStreaks.frustumCulled = false
+  speedStreaks.count = initialQuality.speedStreakCount
+  speedStreaks.visible = false
+  dragon.movementRoot.add(speedStreaks)
+  const speedStreakMatrix = new THREE.Matrix4()
+  const speedStreakPosition = new THREE.Vector3()
+  const speedStreakQuaternion = new THREE.Quaternion()
+  const speedStreakScale = new THREE.Vector3()
 
   scene.add(dragon.movementRoot)
   scene.add(passWave)
@@ -314,7 +541,7 @@ export function createFlightSandbox(
     scene.add(gate.group)
   }
   for (const thread of windThreads) {
-    scene.add(thread.line)
+    scene.add(thread.outer, thread.core)
   }
 
   const cameraPosition = new THREE.Vector3()
@@ -327,6 +554,13 @@ export function createFlightSandbox(
   const targetCameraPosition = new THREE.Vector3()
   const targetLookPosition = new THREE.Vector3()
   const cameraShakeOffset = new THREE.Vector3()
+  const threadSegmentStart = new THREE.Vector3()
+  const threadSegmentEnd = new THREE.Vector3()
+  const threadSegmentDirection = new THREE.Vector3()
+  const threadSegmentMidpoint = new THREE.Vector3()
+  const threadSegmentQuaternion = new THREE.Quaternion()
+  const threadSegmentScale = new THREE.Vector3()
+  const threadSegmentMatrix = new THREE.Matrix4()
   let cameraInitialized = false
   let currentActiveGateIndex = 0
   let passWaveAgeSeconds = GATE_PASS_WAVE_SECONDS
@@ -350,6 +584,7 @@ export function createFlightSandbox(
     simulationSeconds: number,
   ): void => {
     currentActiveGateIndex = activeGateIndex
+    const motionReduced = reducedMotion()
 
     for (const [index, gate] of gates.entries()) {
       const active = index === activeGateIndex
@@ -360,10 +595,14 @@ export function createFlightSandbox(
       gate.runeMaterial.opacity = active ? 1 : 0.16
       gate.runeMaterial.emissiveIntensity = active ? 0.7 : 0.08
       gate.haloMaterial.opacity = active
-        ? 0.1 + Math.sin(simulationSeconds * 2.4) * 0.025
+        ? motionReduced
+          ? 0.08
+          : 0.1 + Math.sin(simulationSeconds * 2.4) * 0.025
         : 0
-      gate.runeWheel.rotation.z = simulationSeconds * 0.2
-      const pulse = active
+      gate.runeWheel.rotation.z = motionReduced
+        ? 0
+        : simulationSeconds * 0.2
+      const pulse = active && !motionReduced
         ? 1 + Math.sin(simulationSeconds * 3.2) * 0.018
         : 1
       gate.group.scale.setScalar(pulse)
@@ -402,6 +641,33 @@ export function createFlightSandbox(
       ringMaterial.opacity =
         Math.sin(cycle * Math.PI) * 0.24
     }
+
+    const showSpeedStreaks =
+      flight.isBoosting &&
+      !reducedMotion() &&
+      quality.speedStreakCount > 0
+    speedStreaks.visible = showSpeedStreaks
+    speedStreaks.count = showSpeedStreaks ? quality.speedStreakCount : 0
+    if (showSpeedStreaks) {
+      for (let index = 0; index < speedStreaks.count; index += 1) {
+        const angle = index * 2.3999632297
+        const phase = (simulationSeconds * 2.8 + index * 0.381966) % 1
+        const radius = 1.4 + (index % 4) * 0.42
+        speedStreakPosition.set(
+          Math.cos(angle) * radius,
+          Math.sin(angle * 1.7) * (0.75 + (index % 3) * 0.28),
+          1.2 + phase * 7.2,
+        )
+        speedStreakScale.set(1, 1, 0.62 + phase * 0.9)
+        speedStreakMatrix.compose(
+          speedStreakPosition,
+          speedStreakQuaternion,
+          speedStreakScale,
+        )
+        speedStreaks.setMatrixAt(index, speedStreakMatrix)
+      }
+      speedStreaks.instanceMatrix.needsUpdate = true
+    }
   }
 
   const updateThreads = (flight: FlightState, simulationSeconds: number): void => {
@@ -409,7 +675,8 @@ export function createFlightSandbox(
 
     if (activeGate === undefined) {
       for (const thread of windThreads) {
-        thread.line.visible = false
+        thread.outer.visible = false
+        thread.core.visible = false
       }
       return
     }
@@ -423,7 +690,8 @@ export function createFlightSandbox(
     )
 
     for (const thread of windThreads) {
-      thread.line.visible = true
+      thread.outer.visible = true
+      thread.core.visible = true
       const start = dragonPosition
         .clone()
         .addScaledVector(forward, 3.2)
@@ -455,8 +723,53 @@ export function createFlightSandbox(
         thread.positions[offset + 2] = point.z
       }
 
-      const positionAttribute = thread.line.geometry.getAttribute('position')
-      positionAttribute.needsUpdate = true
+      for (let index = 0; index < THREAD_POINT_COUNT - 1; index += 1) {
+        const offset = index * 3
+        const nextOffset = offset + 3
+        threadSegmentStart.fromArray(thread.positions, offset)
+        threadSegmentEnd.fromArray(thread.positions, nextOffset)
+        threadSegmentDirection
+          .copy(threadSegmentEnd)
+          .sub(threadSegmentStart)
+        const segmentLength = threadSegmentDirection.length()
+        threadSegmentMidpoint
+          .copy(threadSegmentStart)
+          .add(threadSegmentEnd)
+          .multiplyScalar(0.5)
+        threadSegmentQuaternion.setFromUnitVectors(
+          WORLD_UP,
+          threadSegmentDirection.normalize(),
+        )
+        threadSegmentScale.set(
+          WIND_THREAD_VISUAL_SPEC.outerRadius,
+          segmentLength + 0.08,
+          WIND_THREAD_VISUAL_SPEC.outerRadius,
+        )
+        threadSegmentMatrix.compose(
+          threadSegmentMidpoint,
+          threadSegmentQuaternion,
+          threadSegmentScale,
+        )
+        thread.outer.setMatrixAt(index, threadSegmentMatrix)
+        threadSegmentScale.set(
+          WIND_THREAD_VISUAL_SPEC.coreRadius,
+          segmentLength + 0.1,
+          WIND_THREAD_VISUAL_SPEC.coreRadius,
+        )
+        threadSegmentMatrix.compose(
+          threadSegmentMidpoint,
+          threadSegmentQuaternion,
+          threadSegmentScale,
+        )
+        thread.core.setMatrixAt(index, threadSegmentMatrix)
+      }
+      thread.outer.instanceMatrix.needsUpdate = true
+      thread.core.instanceMatrix.needsUpdate = true
+      const motion = reducedMotion()
+        ? 0
+        : Math.sin(simulationSeconds * 2.1 + thread.side) * 0.06
+      thread.outer.material.opacity = 0.48 + motion
+      thread.core.material.opacity = 0.94 + motion * 0.4
     }
   }
 
@@ -489,6 +802,10 @@ export function createFlightSandbox(
     collisionFeedbackSeconds: number,
     presentation: 'ready' | 'countdown' | 'race' | 'explore',
   ): void => {
+    const readyFraming = getReadyCameraFraming(
+      window.innerWidth,
+      window.innerHeight,
+    )
     getForward(flight, forward)
     getRight(flight, right)
     dragonPosition.set(
@@ -499,13 +816,13 @@ export function createFlightSandbox(
     if (presentation === 'ready') {
       targetCameraPosition
         .copy(dragonPosition)
-        .addScaledVector(forward, -READY_CAMERA_BACK_DISTANCE)
-        .addScaledVector(right, READY_CAMERA_SIDE_DISTANCE)
-        .addScaledVector(WORLD_UP, READY_CAMERA_HEIGHT)
+        .addScaledVector(forward, -readyFraming.backDistance)
+        .addScaledVector(right, readyFraming.sideDistance)
+        .addScaledVector(WORLD_UP, readyFraming.height)
       targetLookPosition
         .copy(dragonPosition)
-        .addScaledVector(forward, READY_CAMERA_LOOK_AHEAD)
-        .addScaledVector(WORLD_UP, READY_CAMERA_LOOK_HEIGHT)
+        .addScaledVector(forward, readyFraming.lookAhead)
+        .addScaledVector(WORLD_UP, readyFraming.lookHeight)
     } else {
       targetCameraPosition
         .copy(dragonPosition)
@@ -526,6 +843,8 @@ export function createFlightSandbox(
     if (!cameraInitialized) {
       cameraPosition.copy(targetCameraPosition)
       lookPosition.copy(targetLookPosition)
+      camera.fov =
+        presentation === 'ready' ? readyFraming.fov : CAMERA_DEFAULT_FOV
       cameraInitialized = true
     } else if (fixedDt > 0) {
       stepCriticalSpring(
@@ -562,7 +881,9 @@ export function createFlightSandbox(
 
     if (fixedDt > 0) {
       const targetFov =
-        flight.isBoosting && !reducedMotion()
+        presentation === 'ready'
+          ? readyFraming.fov
+          : flight.isBoosting && !reducedMotion()
           ? CAMERA_BOOST_FOV
           : CAMERA_DEFAULT_FOV
       camera.fov +=
@@ -603,6 +924,13 @@ export function createFlightSandbox(
       const passedGate = gates[checkpointIndex]
 
       if (passedGate === undefined) {
+        return
+      }
+
+      if (reducedMotion()) {
+        passWaveAgeSeconds = GATE_PASS_WAVE_SECONDS
+        passWaveMaterial.opacity = 0
+        passWave.visible = false
         return
       }
 
@@ -649,13 +977,25 @@ export function createFlightSandbox(
     setQuality: (nextQuality) => {
       quality = nextQuality
       world.setQuality(nextQuality)
+      dragon.setShadows(nextQuality.shadows)
+      speedStreaks.count = nextQuality.speedStreakCount
+      if (nextQuality.speedStreakCount === 0) {
+        speedStreaks.visible = false
+      }
       for (const [index, ring] of boostRings.entries()) {
         if (index >= nextQuality.boostRingCount) {
           ring.visible = false
         }
       }
     },
-    dispose: () => dragon.dispose(),
+    dispose: () => {
+      dragon.dispose()
+      for (const thread of windThreads) {
+        thread.segmentGeometry.dispose()
+        thread.outer.material.dispose()
+        thread.core.material.dispose()
+      }
+    },
     ...(import.meta.env.DEV
       ? {
           debugSnapshot: (
@@ -679,16 +1019,26 @@ export function createFlightSandbox(
               ),
               cameraUpDotWorldUp: cameraWorldUp.dot(WORLD_UP),
               dragonNdc: projectedPoint(dragonWorldPosition, camera),
+              dragonBoundsNdc: projectedVisibleObjectBounds(
+                dragon.movementRoot,
+                camera,
+              ),
               gateNdc:
                 activeGate === undefined
                   ? { x: 0, y: 0, z: 2, visible: false }
                   : projectedPoint(activeGate.group.position, camera),
               windThreadCount: windThreads.length,
+              windThreadOuterRadius: WIND_THREAD_VISUAL_SPEC.outerRadius,
+              windThreadCoreRadius: WIND_THREAD_VISUAL_SPEC.coreRadius,
               activeGateIndex: currentActiveGateIndex,
               gateProjectedDiameterCss: lastGateProjectedDiameterCss,
               gatePassWaveActive: passWave.visible,
+              gatePulseScale: activeGate?.group.scale.x ?? 1,
+              gateHaloOpacity: activeGate?.haloMaterial.opacity ?? 0,
               boostRingCount: quality.boostRingCount,
               boostRingsVisible: boostRings.some((ring) => ring.visible),
+              speedStreakCount: quality.speedStreakCount,
+              speedStreaksVisible: speedStreaks.visible,
               collisionCameraShakeDistance,
               reducedMotion: reducedMotion(),
               dragon: dragon.debugSnapshot(),

@@ -162,6 +162,8 @@ export interface FlightDebugSnapshot {
     readonly qualityPreference: RaceState['persistent']['quality']
     readonly qualityTier: RenderQualityBudget['tier']
     readonly pixelRatio: number
+    readonly shadows: boolean
+    readonly shadowMapSize: number
   }
   readonly exploration: {
     readonly movement: ExplorationFlightState['movement']
@@ -169,6 +171,7 @@ export interface FlightDebugSnapshot {
     readonly destinationRegionId: OpenWorldRegionId | null
     readonly loadedRegionIds: readonly OpenWorldRegionId[]
     readonly regionAssets: readonly OpenWorldRegionAssetSnapshot[]
+    readonly regionMeshCount: number
     readonly paused: boolean
     readonly mapOpen: boolean
     readonly coinRun: CoinRunState
@@ -199,6 +202,7 @@ export interface RendererRecoveryState {
   readonly mapOpen: boolean
   readonly coinRunState: CoinRunState
   readonly coinRunIsNewBest: boolean
+  readonly musicPlaybackPositionSeconds: number
 }
 
 interface ScenePalette extends FlightSandboxPalette {
@@ -291,6 +295,7 @@ export function createRenderer(
   let pendingOpenWorld: OpenWorldVisual | null = null
   let pendingCoinCourseVisual: CoinCourseVisual | null = null
   let pendingGameAudio: GameAudio | null = null
+  let pendingVisibilityChangeHandler: (() => void) | null = null
   const pendingQaControls: HTMLButtonElement[] = []
 
   try {
@@ -298,6 +303,7 @@ export function createRenderer(
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.05
+    renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.setClearColor(palette.skyZenith, 1)
 
     canvas.className = 'game-canvas'
@@ -336,8 +342,21 @@ export function createRenderer(
             },
           }
         : readSettings(recordStorage))
-    const gameAudio = createGameAudio(undefined, storedSettings.muted)
+    const gameAudio = createGameAudio(
+      undefined,
+      storedSettings.muted,
+      storedSettings.musicVolume,
+    )
     pendingGameAudio = gameAudio
+    gameAudio.setMusicPositionSeconds(
+      recovery?.musicPlaybackPositionSeconds ?? 0,
+    )
+    const handleVisibilityChange = (): void => {
+      gameAudio.setPageVisible(!document.hidden)
+    }
+    pendingVisibilityChangeHandler = handleVisibilityChange
+    handleVisibilityChange()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     const coarsePointerQuery = window.matchMedia('(pointer: coarse)')
     const navigatorCapabilities = window.navigator as Navigator & {
       readonly deviceMemory?: number
@@ -350,6 +369,7 @@ export function createRenderer(
       deviceMemoryGb: navigatorCapabilities.deviceMemory,
       hardwareConcurrency: window.navigator.hardwareConcurrency,
     })
+    renderer.shadowMap.enabled = renderQuality.shadows
     const sandbox = createFlightSandbox(
       scene,
       camera,
@@ -413,6 +433,10 @@ export function createRenderer(
     let coinRunIsNewBest = recovery?.coinRunIsNewBest ?? false
     if (gameMode === 'explore') {
       flightState = explorationState.flight
+    }
+    gameAudio.setExplorationActive(gameMode === 'explore')
+    if (recovery?.gameMode === 'explore') {
+      void gameAudio.unlock()
     }
     let outOfBoundsTracker: OutOfBoundsTracker = {
       outsideDurationSeconds: 0,
@@ -517,6 +541,32 @@ export function createRenderer(
       }
     }
 
+    const toggleMute = (): void => {
+      const muted = !raceState.persistent.muted
+      raceState = transitionRace(raceState, {
+        type: 'SET_MUTED',
+        muted,
+      })
+      gameAudio.setMuted(muted)
+      if (!muted) void gameAudio.unlock()
+      savePersistentSettings()
+    }
+
+    const setMusicVolume = (musicVolume: number): void => {
+      raceState = transitionRace(raceState, {
+        type: 'SET_MUSIC_VOLUME',
+        musicVolume,
+      })
+      gameAudio.setMusicVolume(raceState.persistent.musicVolume)
+      if (
+        raceState.persistent.musicVolume > 0 &&
+        !raceState.persistent.muted
+      ) {
+        void gameAudio.unlock()
+      }
+      savePersistentSettings()
+    }
+
     const applyCoinRunStep = (step: CoinRunStepResult): void => {
       const previousPhase = coinRunState.phase
       coinRunState = step.state
@@ -584,11 +634,12 @@ export function createRenderer(
     const startRaceFromExplore = (): void => {
       syncExplorationPersistence()
       gameMode = 'race'
+      gameAudio.setExplorationActive(false)
       coinRunState = createCoinRunState()
       coinRunIsNewBest = false
       explorationPaused = false
       mapOpen = false
-      openWorld.dispose()
+      openWorld.clear()
       if (pendingExplorationHud !== null) {
         pendingExplorationHud.element.hidden = true
       }
@@ -674,6 +725,7 @@ export function createRenderer(
     const raceHud = createRaceHud(host, {
       start: () => {
         gameMode = 'race'
+        gameAudio.setExplorationActive(false)
         previousBestTimeMs = raceState.persistent.bestTimeMs
         raceState = transitionRace(raceState, {
           type: 'START',
@@ -681,6 +733,8 @@ export function createRenderer(
         })
       },
       startExplore: () => {
+        gameAudio.setExplorationActive(true)
+        void gameAudio.unlock()
         gameMode = 'explore'
         explorationPaused = false
         mapOpen = false
@@ -717,18 +771,8 @@ export function createRenderer(
         previousBestTimeMs = raceState.persistent.bestTimeMs
         resetFlight()
       },
-      toggleMute: () => {
-        const muted = !raceState.persistent.muted
-        raceState = transitionRace(raceState, {
-          type: 'SET_MUTED',
-          muted,
-        })
-        gameAudio.setMuted(muted)
-        if (!muted) {
-          void gameAudio.unlock()
-        }
-        savePersistentSettings()
-      },
+      toggleMute,
+      setMusicVolume,
       setQuality: (quality: RaceQuality) => {
         raceState = transitionRace(raceState, {
           type: 'SET_QUALITY',
@@ -753,14 +797,17 @@ export function createRenderer(
         explorationPaused = !explorationPaused
         if (explorationPaused) clearInputs()
       },
+      toggleMute,
+      setMusicVolume,
       returnToMissions: () => {
         syncExplorationPersistence()
         gameMode = 'race'
+        gameAudio.setExplorationActive(false)
         coinRunState = createCoinRunState()
         coinRunIsNewBest = false
         explorationPaused = false
         mapOpen = false
-        openWorld.dispose()
+        openWorld.clear()
         explorationHud?.element.setAttribute('hidden', '')
         raceHud.element.hidden = false
         raceState = transitionRace(raceState, { type: 'RETURN_TO_READY' })
@@ -877,6 +924,7 @@ export function createRenderer(
       })
       sandbox.setQuality(renderQuality)
       openWorld.setQuality(renderQuality.tier)
+      renderer.shadowMap.enabled = renderQuality.shadows
       renderer.setPixelRatio(renderQuality.pixelRatio)
       renderer.setSize(width, height, false)
       camera.aspect = width / height
@@ -890,6 +938,7 @@ export function createRenderer(
     const handleContextLost = (event: Event): void => {
       event.preventDefault()
       renderer.setAnimationLoop(null)
+      gameAudio.setExplorationActive(false)
       if (gameMode === 'explore') syncExplorationPersistence(false)
       onContextLost({
         raceState: prepareRaceForRecovery(raceState),
@@ -917,6 +966,7 @@ export function createRenderer(
         mapOpen,
         coinRunState: { ...coinRunState },
         coinRunIsNewBest,
+        musicPlaybackPositionSeconds: gameAudio.getMusicPositionSeconds(),
       })
     }
     pendingContextLostHandler = handleContextLost
@@ -1195,6 +1245,7 @@ export function createRenderer(
         gateIndicator,
         inputDevice: inputController.activeDevice,
         muted: raceState.persistent.muted,
+        musicVolume: raceState.persistent.musicVolume,
         quality: raceState.persistent.quality,
         resolvedQuality: renderQuality.tier,
         mission: raceState.mission,
@@ -1220,6 +1271,8 @@ export function createRenderer(
           atChallenge: isAtChallengeBeacon(),
           mapOpen,
           paused: explorationPaused,
+          muted: raceState.persistent.muted,
+          musicVolume: raceState.persistent.musicVolume,
           coinRun: coinRunState,
           coinBestTimesMs: raceState.persistent.coinBestTimesMs,
           coinRunIsNewBest,
@@ -1258,6 +1311,7 @@ export function createRenderer(
             const keyboardSnapshot = keyboardInput.debugSnapshot()
             const touchSnapshot = touchInput.debugSnapshot()
             const cameraSnapshot = sandbox.debugSnapshot?.(flightState)
+            const openWorldSnapshot = openWorld.debugSnapshot()
 
             if (cameraSnapshot === undefined) {
               throw new Error('Missing development camera snapshot')
@@ -1320,13 +1374,16 @@ export function createRenderer(
                 qualityPreference: raceState.persistent.quality,
                 qualityTier: renderQuality.tier,
                 pixelRatio: renderer.getPixelRatio(),
+                shadows: renderer.shadowMap.enabled,
+                shadowMapSize: renderQuality.shadowMapSize,
               },
               exploration: {
                 movement: explorationState.movement,
                 discoveredRegionIds: [...discoveredRegionIds],
                 destinationRegionId,
-                loadedRegionIds: openWorld.debugSnapshot().loadedRegionIds,
-                regionAssets: openWorld.debugSnapshot().regionAssets,
+                loadedRegionIds: openWorldSnapshot.loadedRegionIds,
+                regionAssets: openWorldSnapshot.regionAssets,
+                regionMeshCount: openWorldSnapshot.meshCount,
                 paused: explorationPaused,
                 mapOpen,
                 coinRun: { ...coinRunState },
@@ -1340,6 +1397,7 @@ export function createRenderer(
           qaExploreRegion: (regionId: OpenWorldRegionId): void => {
             const region = getRegionById(regionId)
             gameMode = 'explore'
+            gameAudio.setExplorationActive(true)
             explorationPaused = false
             mapOpen = false
             coinRunState = createCoinRunState()
@@ -1374,6 +1432,7 @@ export function createRenderer(
           qaExploreChallenge: (): void => {
             const hub = getRegionById('festival-hub')
             gameMode = 'explore'
+            gameAudio.setExplorationActive(true)
             explorationPaused = false
             coinRunState = createCoinRunState()
             coinRunIsNewBest = false
@@ -1404,6 +1463,7 @@ export function createRenderer(
             const coin = course.coins[index]
             if (coin === undefined) return
             gameMode = 'explore'
+            gameAudio.setExplorationActive(true)
             explorationPaused = false
             mapOpen = false
             if (index === 0) {
@@ -1483,6 +1543,11 @@ export function createRenderer(
         touchControls.dispose()
         raceHud.dispose()
         explorationHud?.dispose()
+        document.removeEventListener(
+          'visibilitychange',
+          handleVisibilityChange,
+        )
+        pendingVisibilityChangeHandler = null
         gameAudio.dispose()
         resourceNotice.remove()
         for (const qaControl of qaControls) {
@@ -1512,6 +1577,12 @@ export function createRenderer(
     pendingExplorationHud?.dispose()
     pendingOpenWorld?.dispose()
     pendingCoinCourseVisual?.dispose()
+    if (pendingVisibilityChangeHandler !== null) {
+      document.removeEventListener(
+        'visibilitychange',
+        pendingVisibilityChangeHandler,
+      )
+    }
     pendingGameAudio?.dispose()
     for (const qaControl of pendingQaControls) {
       qaControl.remove()

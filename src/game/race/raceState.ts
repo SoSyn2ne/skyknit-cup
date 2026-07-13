@@ -50,6 +50,7 @@ export interface RaceRunState {
 
 export interface RacePersistentState {
   readonly muted: boolean
+  readonly musicVolume: number
   readonly quality: RaceQuality
   readonly bestTimeMs: number | null
   readonly missionGrades: Readonly<
@@ -93,6 +94,7 @@ export type RaceEvent =
   | { readonly type: 'RETRY' }
   | { readonly type: 'RETURN_TO_READY' }
   | { readonly type: 'SET_MUTED'; readonly muted: boolean }
+  | { readonly type: 'SET_MUSIC_VOLUME'; readonly musicVolume: number }
   | { readonly type: 'SET_QUALITY'; readonly quality: RaceQuality }
 
 const COUNTDOWN_DURATION_MS = 3_000
@@ -197,6 +199,17 @@ export function transitionRace(
       : {
           ...state,
           persistent: { ...state.persistent, muted: event.muted },
+        }
+  }
+
+  if (event.type === 'SET_MUSIC_VOLUME') {
+    if (!Number.isFinite(event.musicVolume)) return state
+    const musicVolume = Math.min(1, Math.max(0, event.musicVolume))
+    return musicVolume === state.persistent.musicVolume
+      ? state
+      : {
+          ...state,
+          persistent: { ...state.persistent, musicVolume },
         }
   }
 

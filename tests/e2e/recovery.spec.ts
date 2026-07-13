@@ -134,9 +134,11 @@ test('uses a visible non-blocking fallback when the GLB resource fails', async (
     'data-state',
     'renderer-ready',
   )
-  await expect(page.getByRole('status')).toContainText(
-    '기본 드래곤으로 비행합니다',
-  )
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: '기본 드래곤으로 비행합니다' }),
+  ).toBeVisible()
   await expect
     .poll(async () => (await readSnapshot(page))?.camera.dragon.source)
     .toBe('fallback')
@@ -150,4 +152,53 @@ test('uses a visible non-blocking fallback when the GLB resource fails', async (
   await page.screenshot({
     path: 'artifacts/browser-qa/m5/desktop-dragon-fallback.png',
   })
+})
+
+test('restores exploration BGM from the context-loss retry gesture', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await page.goto('/')
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await expect
+    .poll(async () => (await readSnapshot(page))?.audio.bgmPlaying)
+    .toBe(true)
+  await page.waitForTimeout(350)
+  const positionBeforeLoss =
+    (await readSnapshot(page))?.audio.bgmPositionSeconds ?? 0
+  expect(positionBeforeLoss).toBeGreaterThan(0.1)
+
+  await page.evaluate(() => window.__DRAGON_RACE_TEST__?.loseContext())
+  await expect(page.locator('#app')).toHaveAttribute(
+    'data-state',
+    'renderer-error',
+  )
+  await page.getByRole('button', { name: '다시 시도' }).click()
+
+  await expect(page.locator('#app')).toHaveAttribute(
+    'data-state',
+    'renderer-ready',
+  )
+  await expect
+    .poll(async () => {
+      const snapshot = await readSnapshot(page)
+      return snapshot === null
+        ? null
+        : {
+            gameMode: snapshot.gameMode,
+            explorationActive: snapshot.audio.explorationActive,
+            bgmPlaying: snapshot.audio.bgmPlaying,
+            bgmPlayFailures: snapshot.audio.bgmPlayFailures,
+          }
+    })
+    .toEqual({
+      gameMode: 'explore',
+      explorationActive: true,
+      bgmPlaying: true,
+      bgmPlayFailures: 0,
+    })
+  const positionAfterRecovery =
+    (await readSnapshot(page))?.audio.bgmPositionSeconds ?? 0
+  expect(positionAfterRecovery).toBeGreaterThanOrEqual(positionBeforeLoss - 0.05)
+  expect(positionAfterRecovery).toBeLessThan(positionBeforeLoss + 2)
 })

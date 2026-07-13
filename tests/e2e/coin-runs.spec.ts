@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 const REGIONS = ['festival-hub', 'wind-canyon', 'cloud-ruins'] as const
+const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
 
 test('shows the ten-coin course and compact HUD in every required viewport', async ({
   page,
@@ -47,7 +48,7 @@ test('shows the ten-coin course and compact HUD in every required viewport', asy
   }
 
   await page.screenshot({
-    path: `artifacts/browser-qa/rc6/${testInfo.project.name}-coins.png`,
+    path: `artifacts/browser-qa/${QA_SCOPE}/${testInfo.project.name}-coins.png`,
   })
   expect(errors).toEqual([])
 })
@@ -100,7 +101,7 @@ test('freezes the run under the map and persists all three regional bests', asyn
     return raw === null ? null : JSON.parse(raw)
   })
   expect(saved).toMatchObject({
-    version: 5,
+    version: 6,
     coinBestTimesMs: {
       'festival-hub': expect.any(Number),
       'wind-canyon': expect.any(Number),

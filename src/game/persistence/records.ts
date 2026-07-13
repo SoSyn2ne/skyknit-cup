@@ -30,6 +30,7 @@ export interface ExplorationProgress {
 export interface GameSettings {
   readonly bestTimeMs: number | null
   readonly muted: boolean
+  readonly musicVolume: number
   readonly quality: QualityPreference
   readonly missionGrades: Readonly<MissionGrades>
   readonly coinBestTimesMs: Readonly<CoinBestTimes>
@@ -37,7 +38,7 @@ export interface GameSettings {
 }
 
 interface StoredSettings extends GameSettings {
-  readonly version: 5
+  readonly version: 6
 }
 
 interface LegacyStoredRecord {
@@ -51,6 +52,7 @@ const LEGACY_RECORD_KEY = 'skyknit-cup:best-time'
 export const DEFAULT_SETTINGS: GameSettings = {
   bestTimeMs: null,
   muted: false,
+  musicVolume: 0.35,
   quality: 'auto',
   missionGrades: {},
   coinBestTimesMs: {},
@@ -84,6 +86,15 @@ function isValidBestTime(value: unknown): value is number {
 
 function isQualityPreference(value: unknown): value is QualityPreference {
   return value === 'auto' || value === 'low' || value === 'high'
+}
+
+function isMusicVolume(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+  )
 }
 
 function parseMissionGrades(value: unknown): MissionGrades {
@@ -176,7 +187,8 @@ function parseSettings(
     (parsed.version !== 2 &&
       parsed.version !== 3 &&
       parsed.version !== 4 &&
-      parsed.version !== 5)
+      parsed.version !== 5 &&
+      parsed.version !== 6)
   ) {
     return null
   }
@@ -189,6 +201,12 @@ function parseSettings(
     'muted' in parsed && typeof parsed.muted === 'boolean'
       ? parsed.muted
       : false
+  const musicVolume =
+    parsed.version === 6 &&
+    'musicVolume' in parsed &&
+    isMusicVolume(parsed.musicVolume)
+      ? parsed.musicVolume
+      : DEFAULT_SETTINGS.musicVolume
   const quality =
     'quality' in parsed && isQualityPreference(parsed.quality)
       ? parsed.quality
@@ -203,7 +221,7 @@ function parseSettings(
       ? parseExploration(parsed.exploration)
       : freshDefaults().exploration
   const coinBestTimesMs =
-    parsed.version === 5 && 'coinBestTimesMs' in parsed
+    parsed.version >= 5 && 'coinBestTimesMs' in parsed
       ? parseCoinBestTimes(parsed.coinBestTimesMs)
       : {}
 
@@ -211,12 +229,13 @@ function parseSettings(
     settings: {
       bestTimeMs,
       muted,
+      musicVolume,
       quality,
       missionGrades,
       coinBestTimesMs,
       exploration,
     },
-    shouldMigrate: parsed.version !== 5,
+    shouldMigrate: parsed.version !== 6,
   }
 }
 
@@ -239,6 +258,7 @@ function isValidSettings(settings: GameSettings): boolean {
   return (
     (settings.bestTimeMs === null || isValidBestTime(settings.bestTimeMs)) &&
     typeof settings.muted === 'boolean' &&
+    isMusicVolume(settings.musicVolume) &&
     isQualityPreference(settings.quality) &&
     typeof settings.missionGrades === 'object' &&
     settings.missionGrades !== null &&
@@ -296,7 +316,7 @@ export function saveSettings(
   if (!isValidSettings(settings)) return false
 
   const stored: StoredSettings = {
-    version: 5,
+    version: 6,
     ...settings,
     missionGrades: { ...settings.missionGrades },
     coinBestTimesMs: { ...settings.coinBestTimesMs },

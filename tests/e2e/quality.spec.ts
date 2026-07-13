@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { FlightDebugSnapshot } from '../../src/game/createRenderer'
 
+const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
+
 async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
   return page.evaluate(() => {
     const testWindow = window as unknown as {
@@ -33,7 +35,14 @@ test('applies the automatic render budget for the device class', async ({
             tier: snapshot.render.qualityTier,
             pixelRatio: snapshot.render.pixelRatio,
             cloudCount: snapshot.camera.world.cloudCount,
+            cloudWispCount: snapshot.camera.world.cloudWispCount,
+            cloudDeckCount: snapshot.camera.world.cloudDeckCount,
             boostRingCount: snapshot.camera.boostRingCount,
+            speedStreakCount: snapshot.camera.speedStreakCount,
+            worldShadows: snapshot.camera.world.shadowsEnabled,
+            dragonShadows: snapshot.camera.dragon.shadowsEnabled,
+            rendererShadows: snapshot.render.shadows,
+            shadowMapSize: snapshot.render.shadowMapSize,
           }
     })
     .toEqual({
@@ -41,12 +50,19 @@ test('applies the automatic render budget for the device class', async ({
       tier: touch ? 'low' : 'high',
       pixelRatio: touch ? 1 : 1,
       cloudCount: touch ? 24 : 32,
+      cloudWispCount: touch ? 12 : 16,
+      cloudDeckCount: touch ? 0 : 8,
       boostRingCount: touch ? 1 : 3,
+      speedStreakCount: touch ? 0 : 18,
+      worldShadows: !touch,
+      dragonShadows: !touch,
+      rendererShadows: !touch,
+      shadowMapSize: touch ? 0 : 1_024,
     })
 
   if (testInfo.project.name === 'desktop' || testInfo.project.name === 'touch-minimum') {
     await page.screenshot({
-      path: `artifacts/browser-qa/m5/${testInfo.project.name}-auto-${touch ? 'low' : 'high'}.png`,
+      path: `artifacts/browser-qa/${QA_SCOPE}/${testInfo.project.name}-auto-${touch ? 'low' : 'high'}.png`,
     })
   }
 })
@@ -87,7 +103,13 @@ test('changes and saves quality without resetting race progress', async ({
             preference: snapshot.render.qualityPreference,
             tier: snapshot.render.qualityTier,
             cloudCount: snapshot.camera.world.cloudCount,
+            cloudWispCount: snapshot.camera.world.cloudWispCount,
+            cloudDeckCount: snapshot.camera.world.cloudDeckCount,
             boostRingCount: snapshot.camera.boostRingCount,
+            speedStreakCount: snapshot.camera.speedStreakCount,
+            worldShadows: snapshot.camera.world.shadowsEnabled,
+            dragonShadows: snapshot.camera.dragon.shadowsEnabled,
+            rendererShadows: snapshot.render.shadows,
           }
     })
     .toEqual({
@@ -97,13 +119,19 @@ test('changes and saves quality without resetting race progress', async ({
       preference: 'low',
       tier: 'low',
       cloudCount: 24,
+      cloudWispCount: 12,
+      cloudDeckCount: 0,
       boostRingCount: 1,
+      speedStreakCount: 0,
+      worldShadows: false,
+      dragonShadows: false,
+      rendererShadows: false,
     })
 
   const storedAfterQuality = await page.evaluate(() =>
     JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? 'null'),
   )
-  expect(storedAfterQuality).toMatchObject({ version: 5, quality: 'low' })
+  expect(storedAfterQuality).toMatchObject({ version: 6, quality: 'low' })
 
   const mute = page.getByRole('button', { name: '소리 끄기' })
   await expect(mute).toHaveAttribute('title', '소리 끄기')
@@ -119,7 +147,7 @@ test('changes and saves quality without resetting race progress', async ({
     .toBe(true)
 
   await page.screenshot({
-    path: 'artifacts/browser-qa/m5/desktop-paused-settings.png',
+    path: `artifacts/browser-qa/${QA_SCOPE}/desktop-paused-settings.png`,
   })
 
   await page.reload()
@@ -176,6 +204,6 @@ test('fits settings and pause actions at the minimum viewport', async ({
   await expect(page.getByLabel('화질')).toBeVisible()
   await expect(page.getByRole('button', { name: '소리 끄기' })).toBeVisible()
   await page.screenshot({
-    path: 'artifacts/browser-qa/m5/touch-minimum-paused-settings.png',
+    path: `artifacts/browser-qa/${QA_SCOPE}/touch-minimum-paused-settings.png`,
   })
 })

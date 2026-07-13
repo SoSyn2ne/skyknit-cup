@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatMissionGrade,
   formatMissionProgress,
+  formatMusicVolumePercent,
   formatRaceTime,
 } from './RaceHud'
 
@@ -48,5 +49,13 @@ describe('mission HUD formatting', () => {
     ['golden-knot', '1:31.250 · 충돌 1 · 리스폰 2 · 돌풍 3'],
   ] as const)('formats %s progress', (missionId, label) => {
     expect(formatMissionProgress(missionId, attempt, 12)).toBe(label)
+  })
+})
+
+describe('audio setting formatting', () => {
+  it('formats a clamped BGM volume percentage', () => {
+    expect(formatMusicVolumePercent(0.35)).toBe('35%')
+    expect(formatMusicVolumePercent(1.4)).toBe('100%')
+    expect(formatMusicVolumePercent(Number.NaN)).toBe('35%')
   })
 })

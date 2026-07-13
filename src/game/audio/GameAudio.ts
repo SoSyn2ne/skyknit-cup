@@ -2,6 +2,14 @@ export interface GameAudioDebugSnapshot {
   readonly contextCreated: boolean
   readonly unlocked: boolean
   readonly muted: boolean
+  readonly musicVolume: number
+  readonly explorationActive: boolean
+  readonly pageVisible: boolean
+  readonly bgmCreated: boolean
+  readonly bgmPlaying: boolean
+  readonly bgmPositionSeconds: number
+  readonly bgmPlayAttempts: number
+  readonly bgmPlayFailures: number
   readonly gateCues: number
   readonly boostCues: number
   readonly finishCues: number
@@ -10,6 +18,11 @@ export interface GameAudioDebugSnapshot {
 export interface GameAudio {
   unlock(): Promise<void>
   setMuted(muted: boolean): void
+  setMusicVolume(volume: number): void
+  setMusicPositionSeconds(positionSeconds: number): void
+  getMusicPositionSeconds(): number
+  setExplorationActive(active: boolean): void
+  setPageVisible(visible: boolean): void
   playGate(): void
   setBoosting(boosting: boolean): void
   playFinish(): void
@@ -18,9 +31,20 @@ export interface GameAudio {
 }
 
 export type AudioContextFactory = () => AudioContext
+export type MusicElementFactory = () => HTMLAudioElement
 
 function defaultContextFactory(): AudioContext {
   return new AudioContext()
+}
+
+function defaultMusicElementFactory(): HTMLAudioElement {
+  return new Audio()
+}
+
+const MUSIC_FILE_BASENAME = 'sovereign-of-the-sunrise-skies-loop'
+
+function musicAssetUrl(extension: 'ogg' | 'm4a'): string {
+  return `${import.meta.env.BASE_URL}assets/audio/${MUSIC_FILE_BASENAME}.${extension}`
 }
 
 interface Tone {
@@ -34,16 +58,142 @@ interface Tone {
 export function createGameAudio(
   contextFactory: AudioContextFactory = defaultContextFactory,
   initiallyMuted = false,
+  initialMusicVolume = 0.35,
+  musicElementFactory: MusicElementFactory = defaultMusicElementFactory,
 ): GameAudio {
   let context: AudioContext | null = null
   let unlocked = false
   let muted = initiallyMuted
+  let musicVolume =
+    Number.isFinite(initialMusicVolume) && initialMusicVolume >= 0 && initialMusicVolume <= 1
+      ? initialMusicVolume
+      : 0.35
+  let explorationActive = false
+  let pageVisible = true
+  let gestureUnlocked = false
+  let musicElement: HTMLAudioElement | null = null
+  let musicPositionSeconds = 0
+  let bgmPlaying = false
+  let musicPlayPending = false
+  let bgmPlayAttempts = 0
+  let bgmPlayFailures = 0
+  let musicPlaybackToken = 0
   let boosting = false
   let disposed = false
   let gateCues = 0
   let boostCues = 0
   let finishCues = 0
   const activeOscillators = new Set<OscillatorNode>()
+
+  const shouldPlayMusic = (): boolean =>
+    !disposed &&
+    gestureUnlocked &&
+    explorationActive &&
+    pageVisible &&
+    !muted &&
+    musicVolume > 0
+
+  const getMusicElement = (): HTMLAudioElement | null => {
+    if (musicElement !== null) return musicElement
+
+    try {
+      const element = musicElementFactory()
+      const supportsOgg = element.canPlayType('audio/ogg; codecs="vorbis"') !== ''
+      element.src = musicAssetUrl(supportsOgg ? 'ogg' : 'm4a')
+      element.preload = 'metadata'
+      element.loop = true
+      element.volume = musicVolume
+      if (musicPositionSeconds > 0) {
+        try {
+          element.currentTime = musicPositionSeconds
+        } catch {
+          element.addEventListener(
+            'loadedmetadata',
+            () => {
+              try {
+                element.currentTime = musicPositionSeconds
+              } catch {
+                // An invalid seek must not block starting from the beginning.
+              }
+            },
+            { once: true },
+          )
+        }
+      }
+      musicElement = element
+      return element
+    } catch {
+      return null
+    }
+  }
+
+  const pauseMusic = (): void => {
+    musicPlaybackToken += 1
+    bgmPlaying = false
+    musicPlayPending = false
+    try {
+      musicElement?.pause()
+    } catch {
+      // Media shutdown is best-effort and must never interrupt gameplay.
+    }
+  }
+
+  const getMusicPositionSeconds = (): number => {
+    const position = musicElement?.currentTime ?? musicPositionSeconds
+    return Number.isFinite(position) && position >= 0
+      ? position
+      : musicPositionSeconds
+  }
+
+  const syncMusicPlayback = (): void => {
+    if (!shouldPlayMusic()) {
+      pauseMusic()
+      return
+    }
+
+    const element = getMusicElement()
+    if (element === null) return
+    element.volume = musicVolume
+    if (!element.paused || musicPlayPending) return
+
+    const token = ++musicPlaybackToken
+    bgmPlayAttempts += 1
+    musicPlayPending = true
+    try {
+      void Promise.resolve(element.play()).then(
+        () => {
+          if (
+            token !== musicPlaybackToken ||
+            element !== musicElement ||
+            !shouldPlayMusic()
+          ) {
+            if (element !== musicElement || !shouldPlayMusic()) {
+              try {
+                element.pause()
+              } catch {
+                // A stale play completion is already logically stopped.
+              }
+            }
+            return
+          }
+          musicPlayPending = false
+          bgmPlaying = true
+        },
+        () => {
+          if (token !== musicPlaybackToken) return
+          musicPlayPending = false
+          bgmPlaying = false
+          bgmPlayFailures += 1
+        },
+      )
+    } catch {
+      if (token === musicPlaybackToken) {
+        musicPlayPending = false
+        bgmPlaying = false
+        bgmPlayFailures += 1
+      }
+    }
+  }
 
   const stopActiveOscillators = (): void => {
     for (const oscillator of [...activeOscillators]) {
@@ -106,9 +256,14 @@ export function createGameAudio(
 
   return {
     unlock: async () => {
-      if (disposed || unlocked) {
+      if (disposed) {
         return
       }
+
+      gestureUnlocked = true
+      const attemptsBeforeUnlock = bgmPlayAttempts
+      syncMusicPlayback()
+      if (unlocked) return
 
       try {
         context ??= contextFactory()
@@ -119,12 +274,42 @@ export function createGameAudio(
       } catch {
         unlocked = false
       }
+      if (bgmPlayAttempts === attemptsBeforeUnlock) {
+        syncMusicPlayback()
+      }
     },
     setMuted: (nextMuted) => {
       muted = nextMuted
       if (muted) {
         stopActiveOscillators()
       }
+      syncMusicPlayback()
+    },
+    setMusicVolume: (nextVolume) => {
+      if (!Number.isFinite(nextVolume)) return
+      musicVolume = Math.min(1, Math.max(0, nextVolume))
+      if (musicElement !== null) musicElement.volume = musicVolume
+      syncMusicPlayback()
+    },
+    setMusicPositionSeconds: (positionSeconds) => {
+      if (!Number.isFinite(positionSeconds) || positionSeconds < 0) return
+      musicPositionSeconds = positionSeconds
+      if (musicElement !== null) {
+        try {
+          musicElement.currentTime = positionSeconds
+        } catch {
+          // A later metadata event or normal playback can recover the seek.
+        }
+      }
+    },
+    getMusicPositionSeconds,
+    setExplorationActive: (active) => {
+      explorationActive = active
+      syncMusicPlayback()
+    },
+    setPageVisible: (visible) => {
+      pageVisible = visible
+      syncMusicPlayback()
     },
     playGate: () => {
       if (
@@ -176,6 +361,14 @@ export function createGameAudio(
       contextCreated: context !== null,
       unlocked,
       muted,
+      musicVolume,
+      explorationActive,
+      pageVisible,
+      bgmCreated: musicElement !== null,
+      bgmPlaying,
+      bgmPositionSeconds: getMusicPositionSeconds(),
+      bgmPlayAttempts,
+      bgmPlayFailures,
       gateCues,
       boostCues,
       finishCues,
@@ -186,6 +379,17 @@ export function createGameAudio(
       }
       disposed = true
       stopActiveOscillators()
+      pauseMusic()
+      if (musicElement !== null) {
+        musicPositionSeconds = getMusicPositionSeconds()
+        try {
+          musicElement.removeAttribute('src')
+          musicElement.load()
+        } catch {
+          // Releasing a media resource is best-effort during teardown.
+        }
+        musicElement = null
+      }
       if (context !== null && context.state !== 'closed') {
         void context.close().catch(() => undefined)
       }

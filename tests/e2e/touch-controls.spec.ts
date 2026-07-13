@@ -13,29 +13,32 @@ test.describe('touch controls', () => {
   test('keeps every visible control at least 44px and inside the viewport', async ({
     page,
   }, testInfo) => {
-    const controls = page.locator('[data-touch-control]')
-    await expect(controls).toHaveCount(4)
+    await expect(page.locator('[data-touch-control]')).toHaveCount(4)
+    await expect(page.locator('[data-touch-control]:visible')).toHaveCount(0)
+    await page.getByRole('button', { name: '비행 시작' }).tap()
+    await expect(page.locator('.race-hud')).toHaveAttribute(
+      'data-phase',
+      'racing',
+      { timeout: 4_000 },
+    )
+    const controls = page.locator('[data-touch-control]:visible')
+    await expect(controls).toHaveCount(3)
 
     const viewport = page.viewportSize()
     expect(viewport).not.toBeNull()
     const boxes = await controls.evaluateAll((elements) =>
-      elements
-        .filter((element) => {
-          const style = getComputedStyle(element)
-          return style.display !== 'none' && style.visibility !== 'hidden'
-        })
-        .map((element) => {
-          const box = element.getBoundingClientRect()
-          return {
-            width: box.width,
-            height: box.height,
-            left: box.left,
-            top: box.top,
-            right: box.right,
-            bottom: box.bottom,
-            name: element.getAttribute('aria-label'),
-          }
-        }),
+      elements.map((element) => {
+        const box = element.getBoundingClientRect()
+        return {
+          width: box.width,
+          height: box.height,
+          left: box.left,
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+          name: element.getAttribute('aria-label'),
+        }
+      }),
     )
 
     expect(boxes.length).toBeGreaterThanOrEqual(2)
@@ -50,15 +53,19 @@ test.describe('touch controls', () => {
     }
 
     await page.screenshot({
-      path: `artifacts/browser-qa/m4/${testInfo.project.name}-ready.png`,
+      path: `artifacts/browser-qa/rc7/${testInfo.project.name}-flight-controls.png`,
     })
   })
 
-  test('starts countdown from a joystick touch', async ({ page }) => {
+  test('starts countdown from the explicit touch launch action', async ({
+    page,
+  }) => {
     const joystick = page.locator('[data-touch-role="joystick"]')
-    await expect(joystick).toBeVisible()
+    await expect(joystick).toBeHidden()
+    const start = page.getByRole('button', { name: '비행 시작' })
+    await expect(start).toBeVisible()
 
-    await joystick.tap({ position: { x: 56, y: 30 } })
+    await start.tap()
 
     await expect
       .poll(async () => {
@@ -66,6 +73,7 @@ test.describe('touch controls', () => {
         return raw === null ? null : JSON.parse(raw).race.phase
       })
       .toBe('countdown')
+    await expect(joystick).toBeVisible()
   })
 })
 

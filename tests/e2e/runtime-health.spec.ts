@@ -44,9 +44,7 @@ test('has no console, rejection, or network failures during flight', async ({
     'renderer-ready',
   )
   if (testInfo.project.name.startsWith('touch')) {
-    await page.locator('[data-touch-role="joystick"]').tap({
-      position: { x: 56, y: 30 },
-    })
+    await page.getByRole('button', { name: '비행 시작' }).tap()
   } else {
     await page.keyboard.press('ArrowUp')
   }

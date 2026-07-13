@@ -38,6 +38,7 @@ export interface CreateOpenWorldOptions {
 export interface OpenWorldVisual {
   update(position: Vec3Value, simulationSeconds: number): void
   setQuality(tier: RenderQualityTier): void
+  clear(): void
   debugSnapshot(): OpenWorldDebugSnapshot
   dispose(): void
 }
@@ -61,7 +62,7 @@ function assetUrl(
   regionId: OpenWorldRegionId,
   tier: RenderQualityTier,
 ): string {
-  return `/assets/models/world/${regionId}-${tier}.glb`
+  return `${import.meta.env.BASE_URL}assets/models/world/${regionId}-${tier}.glb`
 }
 
 function createDefaultLoader(): OpenWorldAssetLoader {
@@ -118,6 +119,19 @@ function createFallback(region: OpenWorldRegion): THREE.Group {
   return group
 }
 
+function applyShadowPolicy(
+  root: THREE.Object3D,
+  tier: RenderQualityTier,
+): void {
+  const enabled = tier === 'high'
+  root.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      object.castShadow = enabled
+      object.receiveShadow = enabled
+    }
+  })
+}
+
 function disposeMaterial(
   material: THREE.Material,
   disposedTextures: Set<THREE.Texture>,
@@ -169,6 +183,15 @@ export function createOpenWorld(
   let lastPosition: Vec3Value | null = null
   let disposed = false
 
+  const clearLoadedRegions = (): void => {
+    for (const entry of loaded.values()) {
+      entry.requestVersion += 1
+      disposeObject(entry.container)
+    }
+    loaded.clear()
+    lastPosition = null
+  }
+
   const loadRegionAsset = (
     entry: LoadedRegion,
     requestedLod: RenderQualityTier,
@@ -189,6 +212,7 @@ export function createOpenWorld(
           return
         }
         removeCurrentAsset(entry)
+        applyShadowPolicy(asset, requestedLod)
         entry.asset = asset
         entry.container.add(asset)
         entry.status = 'loaded'
@@ -203,6 +227,7 @@ export function createOpenWorld(
         }
         removeCurrentAsset(entry)
         const fallback = createFallback(entry.region)
+        applyShadowPolicy(fallback, requestedLod)
         entry.asset = fallback
         entry.container.add(fallback)
         entry.status = 'fallback'
@@ -241,7 +266,7 @@ export function createOpenWorld(
       container,
       asset: null,
       requestVersion: 0,
-      lod: qualityTier,
+      lod: 'low',
       status: 'loading',
     }
     loaded.set(region.id, entry)
@@ -251,6 +276,7 @@ export function createOpenWorld(
 
   return {
     update: (position, simulationSeconds) => {
+      if (disposed) return
       lastPosition = { ...position }
       const nextIds = getLoadedRegionIds(position, [...loaded.keys()])
       const next = new Set(nextIds)
@@ -281,12 +307,17 @@ export function createOpenWorld(
       }
     },
     setQuality: (tier) => {
+      if (disposed) return
       if (tier === qualityTier) return
       qualityTier = tier
       if (lastPosition === null) return
       for (const entry of loaded.values()) {
         ensureRegionLod(entry, lastPosition)
       }
+    },
+    clear: () => {
+      if (disposed) return
+      clearLoadedRegions()
     },
     debugSnapshot: () => ({
       loadedRegionIds: [...loaded.keys()],
@@ -306,12 +337,9 @@ export function createOpenWorld(
       })),
     }),
     dispose: () => {
+      if (disposed) return
       disposed = true
-      for (const entry of loaded.values()) {
-        entry.requestVersion += 1
-        disposeObject(entry.container)
-      }
-      loaded.clear()
+      clearLoadedRegions()
     },
   }
 }

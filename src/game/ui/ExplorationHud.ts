@@ -3,7 +3,7 @@ import type { CoinRunState } from '../collectibles/coinRun'
 import type { CoinBestTimes } from '../persistence/records'
 import type { DestinationGuidance, OpenWorldRegionId } from '../world/openWorldRegions'
 import { OPEN_WORLD_REGIONS } from '../world/openWorldRegions'
-import { formatRaceTime } from './RaceHud'
+import { formatMusicVolumePercent, formatRaceTime } from './RaceHud'
 
 export interface ExplorationHudView {
   readonly regionName: string
@@ -15,6 +15,8 @@ export interface ExplorationHudView {
   readonly atChallenge: boolean
   readonly mapOpen: boolean
   readonly paused: boolean
+  readonly muted: boolean
+  readonly musicVolume: number
   readonly coinRun: CoinRunState
   readonly coinBestTimesMs: Readonly<CoinBestTimes>
   readonly coinRunIsNewBest: boolean
@@ -25,6 +27,8 @@ export interface ExplorationHudActions {
   readonly toggleMap: () => void
   readonly selectDestination: (id: OpenWorldRegionId | null) => void
   readonly pause: () => void
+  readonly toggleMute: () => void
+  readonly setMusicVolume: (volume: number) => void
   readonly returnToMissions: () => void
 }
 
@@ -99,13 +103,43 @@ export function createExplorationHud(
 
   const controls = document.createElement('div')
   controls.className = 'exploration-hud__controls'
+  const createAudioSettings = (
+    compact: boolean,
+  ): {
+    readonly element: HTMLDivElement
+    readonly mute: HTMLButtonElement
+    readonly volume: HTMLInputElement
+    readonly output: HTMLOutputElement
+  } => {
+    const element = document.createElement('div')
+    element.className = 'exploration-hud__audio'
+    const mute = button('🔊', 'exploration-hud__mute', actions.toggleMute)
+    const label = document.createElement('label')
+    const labelText = document.createElement('span')
+    labelText.textContent = 'BGM'
+    const volume = document.createElement('input')
+    volume.type = 'range'
+    volume.min = '0'
+    volume.max = '100'
+    volume.step = '5'
+    volume.setAttribute('aria-label', '배경 음악 음량')
+    if (compact) volume.dataset.exploreMusicVolume = 'true'
+    const output = document.createElement('output')
+    volume.addEventListener('input', () => {
+      actions.setMusicVolume(volume.valueAsNumber / 100)
+    })
+    label.append(labelText, volume, output)
+    element.append(mute, label)
+    return { element, mute, volume, output }
+  }
+  const audioSettings = createAudioSettings(true)
   const mapButton = button('지도', 'exploration-hud__map-button', actions.toggleMap)
   mapButton.setAttribute('aria-label', '군도 지도 열기')
   mapButton.title = '군도 지도 (M)'
   const pauseButton = button('Ⅱ', 'exploration-hud__pause', actions.pause)
   pauseButton.setAttribute('aria-label', '일시정지')
   pauseButton.title = '일시정지 (Esc)'
-  controls.append(mapButton, pauseButton)
+  controls.append(audioSettings.element, mapButton, pauseButton)
 
   const context = button('', 'exploration-hud__context', actions.interact)
   context.dataset.exploreContext = 'true'
@@ -142,8 +176,14 @@ export function createExplorationHud(
   paused.setAttribute('aria-modal', 'true')
   const pausedTitle = document.createElement('h2')
   pausedTitle.textContent = '탐험 일시정지'
+  const pausedAudioSettings = createAudioSettings(false)
   const resume = button('계속 탐험', 'exploration-hud__resume', actions.pause)
-  paused.append(pausedTitle, resume, returnButton.cloneNode(true))
+  paused.append(
+    pausedTitle,
+    pausedAudioSettings.element,
+    resume,
+    returnButton.cloneNode(true),
+  )
   const pausedReturn = paused.lastElementChild as HTMLButtonElement
   pausedReturn.addEventListener('click', actions.returnToMissions)
 
@@ -161,6 +201,15 @@ export function createExplorationHud(
       coinRun.dataset.phase = view.coinRun.phase
       coinRun.dataset.newBest = String(view.coinRunIsNewBest)
       coinRun.title = view.coinRunIsNewBest ? '지역 최고 기록' : '하늘동전 기록 도전'
+      for (const settings of [audioSettings, pausedAudioSettings]) {
+        settings.mute.textContent = view.muted ? '🔇' : '🔊'
+        const muteAction = view.muted ? '소리 켜기' : '소리 끄기'
+        settings.mute.setAttribute('aria-label', muteAction)
+        settings.mute.setAttribute('aria-pressed', String(view.muted))
+        settings.mute.title = muteAction
+        settings.volume.value = String(Math.round(view.musicVolume * 100))
+        settings.output.textContent = formatMusicVolumePercent(view.musicVolume)
+      }
       const guidance = view.destinationGuidance
       destination.hidden = guidance === null
       if (guidance !== null) {

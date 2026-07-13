@@ -25,6 +25,7 @@ export interface RaceHudView {
   readonly gateIndicator: GateIndicatorState
   readonly inputDevice: InputDevice
   readonly muted: boolean
+  readonly musicVolume: number
   readonly quality: RaceQuality
   readonly resolvedQuality: RenderQualityTier
   readonly mission: MissionSessionState
@@ -41,6 +42,7 @@ export interface RaceHudActions {
   readonly respawn: () => void
   readonly retry: () => void
   readonly toggleMute: () => void
+  readonly setMusicVolume: (volume: number) => void
   readonly setQuality: (quality: RaceQuality) => void
 }
 
@@ -62,6 +64,13 @@ export function formatRaceTime(milliseconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}.${String(
     millis,
   ).padStart(3, '0')}`
+}
+
+export function formatMusicVolumePercent(volume: number): string {
+  const safeVolume = Number.isFinite(volume)
+    ? Math.min(1, Math.max(0, volume))
+    : 0.35
+  return `${Math.round(safeVolume * 100)}%`
 }
 
 export function formatMissionGrade(
@@ -212,6 +221,26 @@ export function createRaceHud(
   settings.setAttribute('aria-label', '게임 설정')
   const mute = createButton('🔊', actions.toggleMute)
   mute.className = 'race-hud__mute'
+  const musicVolumeLabel = document.createElement('label')
+  musicVolumeLabel.className = 'race-hud__music-volume'
+  const musicVolumeText = document.createElement('span')
+  musicVolumeText.textContent = 'BGM'
+  const musicVolume = document.createElement('input')
+  musicVolume.type = 'range'
+  musicVolume.min = '0'
+  musicVolume.max = '100'
+  musicVolume.step = '5'
+  musicVolume.setAttribute('aria-label', '배경 음악 음량')
+  musicVolume.dataset.raceMusicVolume = 'true'
+  const musicVolumeOutput = document.createElement('output')
+  musicVolume.addEventListener('input', () => {
+    actions.setMusicVolume(musicVolume.valueAsNumber / 100)
+  })
+  musicVolumeLabel.append(
+    musicVolumeText,
+    musicVolume,
+    musicVolumeOutput,
+  )
   const qualityLabel = document.createElement('label')
   qualityLabel.className = 'race-hud__quality'
   const qualityLabelText = document.createElement('span')
@@ -235,7 +264,7 @@ export function createRaceHud(
   const qualityStatus = document.createElement('small')
   qualityStatus.setAttribute('aria-live', 'polite')
   qualityLabel.append(qualityLabelText, quality, qualityStatus)
-  settings.append(mute, qualityLabel)
+  settings.append(mute, musicVolumeLabel, qualityLabel)
   const actionsRow = document.createElement('div')
   actionsRow.className = 'race-hud__actions'
 
@@ -352,7 +381,6 @@ export function createRaceHud(
       gateGuide.style.transform = `translate(-50%, -50%) rotate(${view.gateIndicator.angleRadians}rad)`
       panel.hidden = view.phase === 'countdown' || view.phase === 'racing'
       result.hidden = view.phase !== 'finished'
-      settings.hidden = view.phase === 'ready'
       missionPicker.hidden = view.phase !== 'ready'
       missionSelect.value = view.mission.selectedMissionId
       missionObjective.textContent = missionDefinition?.objective ?? ''
@@ -365,6 +393,10 @@ export function createRaceHud(
       mute.setAttribute('aria-label', muteAction)
       mute.setAttribute('aria-pressed', String(view.muted))
       mute.title = muteAction
+      musicVolume.value = String(Math.round(view.musicVolume * 100))
+      musicVolumeOutput.textContent = formatMusicVolumePercent(
+        view.musicVolume,
+      )
       quality.value = view.quality
       qualityStatus.textContent = `현재 ${
         view.resolvedQuality === 'low' ? '낮음' : '높음'

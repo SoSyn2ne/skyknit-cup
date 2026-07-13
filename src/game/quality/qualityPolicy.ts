@@ -17,18 +17,33 @@ export interface RenderQualityBudget {
   readonly pixelRatio: number
   readonly cloudCount: number
   readonly boostRingCount: number
+  readonly shadows: boolean
+  readonly shadowMapSize: number
+  readonly cloudWispCount: number
+  readonly cloudDeckCount: number
+  readonly speedStreakCount: number
 }
 
 const LOW_BUDGET = {
   dprCap: 1.25,
   cloudCount: 24,
   boostRingCount: 1,
+  shadows: false,
+  shadowMapSize: 0,
+  cloudWispCount: 12,
+  cloudDeckCount: 0,
+  speedStreakCount: 0,
 } as const
 
 const HIGH_BUDGET = {
   dprCap: 1.75,
   cloudCount: 32,
   boostRingCount: 3,
+  shadows: true,
+  shadowMapSize: 1_024,
+  cloudWispCount: 16,
+  cloudDeckCount: 8,
+  speedStreakCount: 18,
 } as const
 
 function autoTier(signals: QualitySignals): RenderQualityTier {
@@ -65,5 +80,10 @@ export function resolveRenderQuality(
     pixelRatio: Math.min(devicePixelRatio, dprCap),
     cloudCount: budget.cloudCount,
     boostRingCount: budget.boostRingCount,
+    shadows: budget.shadows,
+    shadowMapSize: budget.shadowMapSize,
+    cloudWispCount: budget.cloudWispCount,
+    cloudDeckCount: budget.cloudDeckCount,
+    speedStreakCount: budget.speedStreakCount,
   }
 }

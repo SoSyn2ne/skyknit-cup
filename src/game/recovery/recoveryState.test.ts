@@ -40,6 +40,7 @@ function makeState(phase: RacePhase): RaceState {
     persistent: {
       bestTimeMs: 40_000,
       muted: true,
+      musicVolume: 0.35,
       quality: 'low',
       missionGrades: { 'first-skyknot': 'silver' },
       coinBestTimesMs: { 'festival-hub': 18_250 },
