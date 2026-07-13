@@ -1,6 +1,6 @@
 # 하늘매듭배 구현 계획
 
-> 상태: **승인됨 / 구현 진행**
+> 상태: **승인됨 / RC7 구현 진행**
 >
 > 선행 문서: `docs/PRODUCT_GOAL.md`
 
@@ -498,6 +498,74 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 - desktop high 55/50fps, mobile low 30fps, high 120 draw calls, gzip 10MiB 미만을 유지한다.
 - 최종 상태를 `RC6 / 하늘동전 기록 도전 자동 검증 완료 / 실기기·사람 플레이테스트 대기`로 둔다.
 
+### Milestone 26: RC7 계약과 기준선
+
+**상태: 완료 (2026-07-13)**
+
+**결과물**
+- `.omx/plans/prd-rc7-visual-audio-remaster.md`
+- `.omx/plans/test-spec-rc7-visual-audio-remaster.md`
+- RC6 스크린샷, GLB 검사, BGM 메타데이터와 30초 성능 기준선
+- `docs/MILESTONE_26_RC7_BASELINE.md`
+
+**완료 조건**
+- BGM 코덱·길이·크기·루프 경계와 프로젝트 사용 출처가 기록된다.
+- unit, typecheck, lint, build와 기존 성능 검증이 수정 전 통과한다.
+- 대표 RC6 5뷰포트와 세 지역 화면을 RC7 전후 비교 기준으로 고정한다.
+
+### Milestone 27: 탐험 BGM과 오디오 설정
+
+**결과물**
+- 배포용 탐험 BGM과 출처 문서
+- BGM 반복, 탐험/레이스/가시성/복구 수명주기와 실패 fallback
+- 기존 효과음과 공유하는 음소거·BGM 전용 볼륨
+- v6 저장 마이그레이션과 접근 가능한 볼륨 UI
+
+**완료 조건**
+- 사용자 동작 전에는 재생하지 않고 탐험에서만 시작·재개한다.
+- 레이스, 탭 숨김, 복구와 dispose에서 멈추며 지도·착륙·동전 중에는 유지한다.
+- 재생·디코딩 실패가 게임을 막지 않고 관련 unit/E2E가 통과한다.
+- v5 이하 저장의 기존 기록을 보존하고 기본 `musicVolume=0.35`로 v6에 마이그레이션한다.
+
+### Milestone 28: RC7 Blender 에셋 리마스터
+
+**결과물**
+- RC7 드래곤 GLB와 재현 가능한 Blender 원본/스크립트
+- 축제 중심섬, 바람 협곡, 구름 유적지 high/low GLB 6개
+- 갱신된 GLB 검사 리포트
+
+**완료 조건**
+- 기존 드래곤/지역 필수 노드와 좌표 원점을 보존한다.
+- 얼굴·날개·다리·꼬리와 지역별 랜드마크의 큰 형태가 게임 카메라에서 구분된다.
+- project-authored 재질, vertex color, 유효 normal과 변환을 가지며 모든 GLB 예산 검사가 통과한다.
+- low는 paired high보다 작고 지역당 high 60k/low 25k triangles, 12 primitives, 8 materials 이하를 지킨다.
+
+### Milestone 29: Three.js 조명·대기·VFX와 성능
+
+**결과물**
+- 해뜰녘 주광, 하늘/안개 색, 구름 깊이, 제한된 그림자
+- 탐험 속도와 랜드마크 깊이를 강화하는 저비용 VFX
+- 기존 품질 tier와 220/260 거리 LOD에 맞춘 high/low 시각 차등
+
+**완료 조건**
+- high는 시각 깊이를 늘리고 low는 코스 가독성을 유지하면서 불필요한 비용을 제거한다.
+- active gate, 두 바람실과 current coin이 새 구조물·안개·VFX에 가려지지 않는다.
+- reduced-motion과 context recovery가 유지되고 자원 교체·해제 후 메모리 카운터가 증가하지 않는다.
+- desktop/high 55/50fps, mobile/low 30fps, high 120 draw calls와 gzip 10MiB 예산을 지킨다.
+
+### Milestone 30: RC7 통합 QA와 인계
+
+**결과물**
+- 세 지역 × 필수 5뷰포트 비주얼·오디오·회귀 증거
+- `docs/MILESTONE_30_RC7_AUTOMATED_QA_REPORT.md`
+- `docs/RC7_VISUAL_AUDIO_PLAYTEST_HANDOFF.md`
+
+**완료 조건**
+- test, typecheck, lint, build, E2E, performance, production, GLB 검사와 보안 감사가 통과한다.
+- canvas nonblank/시간 변화, console/page/unhandled/network 오류 0, `visual-verdict` 90점 이상이다.
+- 탐험 BGM, mute, volume, reload, 레이스 전환과 실패 fallback을 키보드·터치에서 확인한다.
+- 최종 상태를 `RC7 / 비주얼·오디오 리마스터 자동 검증 완료 / 실기기·사람 플레이테스트 대기`로 둔다.
+
 ## 테스트 매트릭스
 
 | 레벨 | 검증 대상 | 핵심 시나리오 |
@@ -509,6 +577,8 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 | 성능 | 30초 플레이 샘플 | fps 중앙값, DPR, 드로우콜/인스턴싱, 전송량 |
 | 미션 | 순수 규칙과 레이스 이벤트 연결 | 성공/실패/등급, 통계, 일시정지/재시도/복구, v3 마이그레이션 |
 | 탐험 | 순수 비행/착륙/지역/저장 | 호버, 착륙 전이, 스트리밍 히스테리시스, 발견, v4 마이그레이션 |
+| 오디오 | 순수 수명주기/저장/실브라우저 | unlock, 탐험/레이스 전환, mute, volume, 가시성, v6 마이그레이션 |
+| RC7 시각 | Blender GLB/Three.js/5뷰포트 | 노드·예산, 실루엣, 재질, 조명, LOD, 픽셀 변화, visual-verdict |
 
 ## 주요 위험과 대응
 
@@ -525,6 +595,9 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 | 미션 HUD가 관문/터치 입력을 가림 | 준비/비행/결과 정보 밀도를 분리하고 5뷰포트 시각 QA 반복 |
 | 탐험이 기존 레이스를 깨뜨림 | 비행 모델과 HUD를 모드별로 분리하고 비콘 진입에서만 기존 레이스 상태로 전환 |
 | 지역 경계에서 로드가 떨림 | 420/500 units 로드/언로드 히스테리시스와 순수 선택 테스트 |
+| AAC 반복 경계에서 공백이나 클릭이 들림 | 원본에서 tail/head crossfade 스트리밍 마스터를 재현하고 자동 상태 테스트와 실제 청취 인계로 검증 |
+| 시각 리마스터가 모바일 GPU를 초과함 | RC6 기준선을 먼저 기록하고 high/low GLB·그림자·VFX를 각 수직 슬라이스마다 다시 측정 |
+| BGM 자동재생 정책으로 오류가 남음 | 사용자 동작 이후 unlock하고 모든 play/decode rejection을 비차단 처리 |
 
 ## 구현 시작 시 첫 작업
 

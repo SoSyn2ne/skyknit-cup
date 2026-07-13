@@ -1,0 +1,20 @@
+{
+  "scope": "rc7-visual-audio-remaster",
+  "active": true,
+  "iteration": 0,
+  "phase": "baseline",
+  "baseline": {
+    "source": ".omx/state/rc6/ralph-progress.json",
+    "score": 93,
+    "verdict": "pass",
+    "screenshots": [
+      "artifacts/browser-qa/rc6/desktop-coins.png",
+      "artifacts/browser-qa/rc6/desktop-compact-coins.png",
+      "artifacts/browser-qa/rc6/touch-landscape-coins.png",
+      "artifacts/browser-qa/rc6/touch-portrait-coins.png",
+      "artifacts/browser-qa/rc6/touch-minimum-coins.png"
+    ]
+  },
+  "latest": null,
+  "nextGate": "Run fresh five-viewport visual verdict after the first RC7 visual slice"
+}
