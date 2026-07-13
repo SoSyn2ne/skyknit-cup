@@ -75,6 +75,14 @@ const WING_FLAP_BURST: NoiseBurst = {
   filterQ: 0.85,
   volume: 0.055,
 }
+const BOOST_WHOOSH_BURST: NoiseBurst = {
+  durationSeconds: 0.78,
+  attackSeconds: 0.018,
+  filterStartHz: 2_100,
+  filterEndHz: 260,
+  filterQ: 0.68,
+  volume: 0.12,
+}
 
 export function createGameAudio(
   contextFactory: AudioContextFactory = defaultContextFactory,
@@ -438,15 +446,7 @@ export function createGameAudio(
     setBoosting: (nextBoosting) => {
       const risingEdge = nextBoosting && !boosting
       boosting = nextBoosting
-      if (
-        risingEdge &&
-        playTone({
-          frequency: 180,
-          durationSeconds: 0.22,
-          type: 'sawtooth',
-          volume: 0.045,
-        })
-      ) {
+      if (risingEdge && playNoiseBurst(BOOST_WHOOSH_BURST, boostCues + 101)) {
         boostCues += 1
       }
     },

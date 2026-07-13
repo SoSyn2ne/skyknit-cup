@@ -3,8 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { createGameAudio } from './GameAudio'
 
 class FakeAudioParam {
-  setValueAtTime(): void {}
-  exponentialRampToValueAtTime(): void {}
+  readonly setValues: Array<{ readonly value: number; readonly time: number }> = []
+  readonly ramps: Array<{ readonly value: number; readonly time: number }> = []
+
+  setValueAtTime(value: number, time: number): void {
+    this.setValues.push({ value, time })
+  }
+
+  exponentialRampToValueAtTime(value: number, time: number): void {
+    this.ramps.push({ value, time })
+  }
 }
 
 class FakeOscillator {
@@ -57,17 +65,21 @@ class FakeBufferSource {
   onended: (() => void) | null = null
   starts = 0
   stops = 0
+  readonly startTimes: number[] = []
+  readonly stopTimes: number[] = []
 
   connect(): void {}
 
   disconnect(): void {}
 
-  start(): void {
+  start(when = 0): void {
     this.starts += 1
+    this.startTimes.push(when)
   }
 
-  stop(): void {
+  stop(when = 0): void {
     this.stops += 1
+    this.stopTimes.push(when)
   }
 }
 
@@ -260,7 +272,30 @@ describe('generated game audio', () => {
       boostCues: 2,
       finishCues: 1,
     })
-    expect(context.oscillators).toHaveLength(6)
+    expect(context.oscillators).toHaveLength(4)
+    expect(context.bufferSources).toHaveLength(2)
+  })
+
+  it('uses a long descending filtered-air burst for boost instead of a chirp', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+    await audio.unlock()
+
+    audio.setBoosting(true)
+
+    expect(context.oscillators).toHaveLength(0)
+    expect(context.bufferSources).toHaveLength(1)
+    const source = context.bufferSources[0]
+    const filter = context.filters[0]
+    expect(source).toBeDefined()
+    expect(filter?.type).toBe('bandpass')
+    const durationSeconds =
+      (source?.stopTimes[0] ?? 0) - (source?.startTimes[0] ?? 0)
+    expect(durationSeconds).toBeGreaterThanOrEqual(0.5)
+    expect(filter?.frequency.setValues[0]?.value).toBeGreaterThan(1_000)
+    expect(filter?.frequency.ramps.at(-1)?.value).toBeLessThan(400)
   })
 
   it('plays a short filtered air pulse for each requested wing downstroke', async () => {
@@ -288,14 +323,19 @@ describe('generated game audio', () => {
     )
     await audio.unlock()
     audio.playGate()
+    audio.playWingFlap()
     const createdBeforeMute = context.oscillators.length
+    const airBurstsBeforeMute = context.bufferSources.length
 
     audio.setMuted(true)
     audio.playGate()
+    audio.playWingFlap()
     audio.setBoosting(true)
     audio.playFinish()
 
     expect(context.oscillators).toHaveLength(createdBeforeMute)
+    expect(context.bufferSources).toHaveLength(airBurstsBeforeMute)
+    expect(context.bufferSources.every((node) => node.stops >= 2)).toBe(true)
     expect(context.oscillators.every((node) => node.stops > 0)).toBe(true)
     expect(audio.debugSnapshot().muted).toBe(true)
   })
