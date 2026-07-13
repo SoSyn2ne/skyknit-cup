@@ -1,8 +1,9 @@
 {
   "scope": "rc7-visual-audio-remaster",
-  "active": true,
-  "iteration": 0,
-  "phase": "baseline",
+  "active": false,
+  "iteration": 12,
+  "phase": "rc7-complete",
+  "completed_at": "2026-07-14T08:08:25.6197573+09:00",
   "baseline": {
     "source": ".omx/state/rc6/ralph-progress.json",
     "score": 93,
@@ -15,6 +16,554 @@
       "artifacts/browser-qa/rc6/touch-minimum-coins.png"
     ]
   },
-  "latest": null,
-  "nextGate": "Run fresh five-viewport visual verdict after the first RC7 visual slice"
+  "latest": {
+    "scope": "rc7-final-integrated-visual",
+    "score": 91,
+    "verdict": "pass",
+    "threshold": 90,
+    "passed": true
+  },
+  "dragonAssetIteration": {
+    "score": 92,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "The RC7 body remains rounder and smoother than the faceted turnaround reference.",
+      "The revised trailing wing scallops are shallower than the reference silhouette.",
+      "Four articulated legs read clearly at three-quarter view but remain dense from the front."
+    ],
+    "suggestions": [
+      "Preserve the new elbow, wrist, knee, hock, face, and S-tail landmarks through GLB merging.",
+      "Verify the smoother scale material does not flatten color separation in the live game camera.",
+      "Use the runtime visual pass to tune framing instead of adding small geometry beyond the triangle budget."
+    ],
+    "reasoning": "Compared with the v3 turntable, RC7 has a materially stronger face, shoulder transition, wing-bone hierarchy, leg articulation, tail rhythm, and controlled sunrise membrane gradient while preserving the flight-athlete identity.",
+    "next_actions": [
+      "Export RC7 GLB and validate pivots, materials, normals, transforms, and budgets.",
+      "Run the live game-camera visual gate during Milestone 29."
+    ]
+  },
+  "dragonTurntableReview": {
+    "score": 78,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "Repeated spherical joints and capsule limbs still read as assembled primitives rather than continuous anatomy.",
+      "The round chest, narrow hips, and clustered front legs weaken the flight-athlete silhouette from front and side views.",
+      "The snout and brow use stacked blocks with limited cheek, jawline, nostril, and eye-socket definition.",
+      "Wing membranes remain broad flat triangles with shallow trailing-edge rhythm and little structural depth.",
+      "Uniform glossy red surfaces flatten scale, membrane, underside, and armor separation."
+    ],
+    "suggestions": [
+      "Merge or overlap joint masses into tapered anatomical transitions and reduce bead-like rings.",
+      "Reshape chest, shoulder, flank, and hip volumes into a continuous athletic torso with clearer leg spacing.",
+      "Add restrained brow, cheek, jaw, nostril, and eye-socket planes without increasing the primitive budget.",
+      "Deepen the wing trailing scallops and membrane color or roughness gradient while preserving pivots.",
+      "Use the existing three materials and vertex colors for matte scale, softer membrane, and darker joint hierarchy."
+    ],
+    "reasoning": "Articulation and export quality improved substantially, but the turntable still exposes a procedural toy construction that falls short of the requested detailed RC7 character finish.",
+    "next_actions": [
+      "Refine the Blender generator at the largest silhouette and joint transitions.",
+      "Regenerate and rerun inspector, deterministic hash, turntable, and live game-camera checks."
+    ]
+  },
+  "dragonTurntableReview2": {
+    "score": 88,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "The torso and neck now read more coherently, but visible procedural volume seams still interrupt the continuous anatomy.",
+      "Feet and toes remain broad and flat in profile instead of tapering into a lighter racing silhouette.",
+      "The three-material and eighteen-primitive ceilings leave muscle separation dependent on topology and vertex-color value design."
+    ],
+    "suggestions": [
+      "Replace capsule chains with welded or lofted anatomical surfaces inside the existing rig boundaries.",
+      "Narrow and articulate feet without adding primitives, and use vertex-color AO to separate muscle planes.",
+      "Preserve the runtime pivot contract, deterministic export, and current triangle ceiling while targeting a strict score of at least 90."
+    ],
+    "reasoning": "The second dragon pass is a clear improvement over the 78-point draft, especially in the face, wings, and joint transitions, but it still falls short of a production-quality single-sculpt impression.",
+    "next_actions": [
+      "Run one topology-focused Blender generator pass without adding materials or primitives.",
+      "Regenerate, inspect, hash twice, render a new turntable, and run the live game-camera visual gate."
+    ]
+  },
+  "dragonTurntableReview3": {
+    "score": 91,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "The feet and claws remain deliberately compact for the gameplay camera instead of becoming a close-up sculpt detail.",
+      "Wing membranes retain a stylized planar construction, but the deeper scallops and spar hierarchy now read as intentional character design.",
+      "Tail section boundaries remain visible at close range while following one tapered silhouette."
+    ],
+    "suggestions": [
+      "Preserve this continuous neck, torso, shoulder, hip, and limb topology during export and runtime animation.",
+      "Use the live-game camera, shadow, and material pass for final separation instead of adding primitives or small geometry."
+    ],
+    "reasoning": "The final topology pass replaces the assembled capsule-chain impression with a coherent flight-athlete body, slimmer articulated feet, clearer front-view leg spacing, and a readable face and wing silhouette while staying within the browser asset budget.",
+    "evidence": [
+      "artifacts/dragon-v07/turntable/angle-000-front.png",
+      "artifacts/dragon-v07/turntable/angle-045-front-right.png",
+      "artifacts/dragon-v07/turntable/angle-090-right.png",
+      "artifacts/dragon-v07/turntable/angle-135-rear-right.png"
+    ],
+    "next_actions": [
+      "Confirm deterministic export, inspector budgets, named pivots, and live-game animation.",
+      "Include the final dragon in the five-viewport RC7 visual verdict."
+    ]
+  },
+  "independentDragonReview": {
+    "score": 86,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "Compared with the approved turnaround reference, the head and torso still read as smooth tubes instead of layered facial armor and muscular shoulder and hip planes.",
+      "Large circular cheeks and a small muzzle create a toy-like expression with weak brow, jaw, and neck-armor hierarchy.",
+      "Wrists, ankles, feet, and claws are slender and flat, and tail section seams remain visible at close range.",
+      "Gold belly plates still read as attached pieces rather than a surface hierarchy integrated by shading and overlap."
+    ],
+    "suggestions": [
+      "Reallocate hidden faces inside the 20,500-triangle and 18-primitive ceilings to brow, muzzle, cheek, shoulder, and hip transitions.",
+      "Strengthen wrist, ankle, foot, and claw silhouettes without adding primitives.",
+      "Smooth tail radii and integrate belly plates through overlap and vertex-color value structure."
+    ],
+    "reasoning": "All technical asset gates pass and the silhouette is much improved, but an independent reference-based review does not yet accept the requested detailed character finish.",
+    "next_actions": [
+      "Run a reference-focused face, anatomy, foot, tail, and belly integration pass using triangle reallocation only.",
+      "Regenerate deterministically and obtain a new independent visual verdict of at least 90."
+    ]
+  },
+  "dragonReferenceRedistributionReview": {
+    "recorded_at": "2026-07-13T23:15:00+09:00",
+    "score": 86,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "The angular cranium and broader shoulder and hip planes remove the previous capsule-chain construction, but the neck and head project too far forward in profile.",
+      "The six gold belly plates still end before the sternum and read as a suspended throat chain at three-quarter view.",
+      "Feet remain long and flat, while tail section tangent changes remain visible at several joints."
+    ],
+    "suggestions": [
+      "Pull the neck and head toward the torso, shorten the muzzle, and seat smaller eyes beneath the angular brow.",
+      "Redistribute the existing six belly plates down the sternum without adding parts.",
+      "Shorten and widen the existing feet and align tail section tangents."
+    ],
+    "reasoning": "Reference comparison confirms a large topology improvement, but the neck, belly armor, and foot proportions remain below the strict character-match gate.",
+    "evidence": [
+      "assets/source/dragon/reference/skyknit-dragon-turnaround-v01.png",
+      "artifacts/dragon-v07/turntable/angle-000-front.png",
+      "artifacts/dragon-v07/turntable/angle-045-front-right.png",
+      "artifacts/dragon-v07/turntable/angle-090-right.png",
+      "artifacts/dragon-v07/turntable/angle-135-rear-right.png",
+      "artifacts/dragon-v07/turntable/angle-180-rear.png",
+      "artifacts/dragon-v07/turntable/angle-225-rear-left.png",
+      "artifacts/dragon-v07/turntable/angle-270-left.png",
+      "artifacts/dragon-v07/turntable/angle-315-front-left.png"
+    ]
+  },
+  "dragonReferenceRedistributionReview2": {
+    "recorded_at": "2026-07-13T23:19:00+09:00",
+    "score": 88,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "The heavier chest, hips, upper limbs, shortened feet, and thicker claws now carry the reference weight convincingly.",
+      "The side neck remains too long and nearly horizontal, and the eyes sit outside the brow planes.",
+      "Lower belly plates remain partially buried before forming a continuous sternum line."
+    ],
+    "suggestions": [
+      "Pull the final neck rings and complete head assembly farther toward the torso.",
+      "Inset the eye geometry beneath the brow and expose more teal through a narrower opening.",
+      "Move the lower existing plates onto the ventral surface and confirm their full chain in front and three-quarter views."
+    ],
+    "reasoning": "The mass and foot corrections materially improve the match, but the remaining neck, eye, and belly discontinuities block an honest 90-point pass.",
+    "evidence": [
+      "assets/source/dragon/reference/skyknit-dragon-turnaround-v01.png",
+      "artifacts/dragon-v07/turntable/angle-000-front.png",
+      "artifacts/dragon-v07/turntable/angle-045-front-right.png",
+      "artifacts/dragon-v07/turntable/angle-090-right.png",
+      "artifacts/dragon-v07/turntable/angle-135-rear-right.png",
+      "artifacts/dragon-v07/turntable/angle-180-rear.png",
+      "artifacts/dragon-v07/turntable/angle-225-rear-left.png",
+      "artifacts/dragon-v07/turntable/angle-270-left.png",
+      "artifacts/dragon-v07/turntable/angle-315-front-left.png"
+    ]
+  },
+  "dragonReferenceRedistributionReview3": {
+    "recorded_at": "2026-07-13T23:29:00+09:00",
+    "score": 89,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "The pulled-back head, shorter neck, widened chest, weighted limbs, shortened feet, continuous sternum armor, and aligned tail now match the reference silhouette closely.",
+      "The eye planes were inset too far and the teal irises disappear behind the front cranium surface in frontal and three-quarter views."
+    ],
+    "suggestions": [
+      "Move only the existing flat eye plates forward to the cranium surface while keeping them tucked below the angular brow.",
+      "Do not change the accepted body, wing, foot, belly, or tail geometry."
+    ],
+    "reasoning": "The remaining blocker is localized to eye readability; the larger anatomy and armor mismatches are resolved without new parts or primitives.",
+    "evidence": [
+      "assets/source/dragon/reference/skyknit-dragon-turnaround-v01.png",
+      "artifacts/dragon-v07/turntable/angle-000-front.png",
+      "artifacts/dragon-v07/turntable/angle-045-front-right.png",
+      "artifacts/dragon-v07/turntable/angle-090-right.png",
+      "artifacts/dragon-v07/turntable/angle-135-rear-right.png",
+      "artifacts/dragon-v07/turntable/angle-180-rear.png",
+      "artifacts/dragon-v07/turntable/angle-225-rear-left.png",
+      "artifacts/dragon-v07/turntable/angle-270-left.png",
+      "artifacts/dragon-v07/turntable/angle-315-front-left.png"
+    ]
+  },
+  "dragonReferenceRedistributionReview4": {
+    "recorded_at": "2026-07-13T23:34:00+09:00",
+    "score": 89,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "The teal eye plates are readable again, but remain brighter and more decorative than the narrow inset reference eyes.",
+      "The existing sternum plates are continuous in front view but their constant-depth planes still hang away from the curved neck in profile.",
+      "The three toes share one reach and overlap as a flat sled in side view."
+    ],
+    "suggestions": [
+      "Narrow and darken the existing teal eye slits and shorten the muzzle slightly.",
+      "Tilt the existing six plate surfaces to follow the neck and chest tangent without adding parts.",
+      "Stagger and splay the existing three toe and claw endpoints."
+    ],
+    "reasoning": "The reference silhouette is one localized surface-direction pass from the strict gate; no additional meshes, materials, or primitives are needed.",
+    "evidence": [
+      "assets/source/dragon/reference/skyknit-dragon-turnaround-v01.png",
+      "artifacts/dragon-v07/turntable/angle-000-front.png",
+      "artifacts/dragon-v07/turntable/angle-045-front-right.png",
+      "artifacts/dragon-v07/turntable/angle-090-right.png",
+      "artifacts/dragon-v07/turntable/angle-135-rear-right.png",
+      "artifacts/dragon-v07/turntable/angle-180-rear.png",
+      "artifacts/dragon-v07/turntable/angle-225-rear-left.png",
+      "artifacts/dragon-v07/turntable/angle-270-left.png",
+      "artifacts/dragon-v07/turntable/angle-315-front-left.png"
+    ]
+  },
+  "dragonReferenceRedistributionFinalReview": {
+    "recorded_at": "2026-07-13T23:26:00+09:00",
+    "reviewer": "independent-dragon-visual-critic",
+    "score": 91,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "Side-view belly plates and feet remain simpler than the close-up turnaround sculpt.",
+      "Tail ring transitions and the wing-root plane retain minor procedural low-poly seams."
+    ],
+    "suggestions": [
+      "Freeze the accepted geometry and preserve the current head, chest, hip, limb, foot, belly, wing, and tail proportions through export.",
+      "Treat any remaining belly, foot, tail-ring, or wing-root work as non-blocking future polish."
+    ],
+    "reasoning": "The final reference-focused redistribution now reads as the approved angular dragon character across all eight angles: the wedge head and visible teal eyes, shorter neck, muscular chest and hips, weighted limbs and claws, sternum armor, and continuous tail clear the strict production gate without new parts or primitives.",
+    "technical_evidence": {
+      "source_mesh_objects": 104,
+      "source_vertices": 8990,
+      "source_triangles": 17564,
+      "glb_bytes": 1574828,
+      "runtime_triangles": 19628,
+      "runtime_meshes": 12,
+      "runtime_primitives": 18,
+      "runtime_materials": 3,
+      "inspector_errors": [],
+      "sha256": "f98a9a82927e64475c9db19a741abec478ce5b4752de8f541e6368fb94f39bd5",
+      "deterministic_double_export": true,
+      "unit_tests": "313 passed",
+      "desktop_e2e": "4 passed",
+      "typecheck": "passed",
+      "lint": "passed",
+      "build": "passed"
+    },
+    "evidence": [
+      "assets/source/dragon/reference/skyknit-dragon-turnaround-v01.png",
+      "artifacts/dragon-v07/turntable/angle-000-front.png",
+      "artifacts/dragon-v07/turntable/angle-045-front-right.png",
+      "artifacts/dragon-v07/turntable/angle-090-right.png",
+      "artifacts/dragon-v07/turntable/angle-135-rear-right.png",
+      "artifacts/dragon-v07/turntable/angle-180-rear.png",
+      "artifacts/dragon-v07/turntable/angle-225-rear-left.png",
+      "artifacts/dragon-v07/turntable/angle-270-left.png",
+      "artifacts/dragon-v07/turntable/angle-315-front-left.png"
+    ],
+    "live_evidence": [
+      "artifacts/browser-qa/rc7/desktop-ready-character.png",
+      "artifacts/browser-qa/rc7/desktop-racing.png",
+      "artifacts/browser-qa/rc7/desktop-boost-expression.png",
+      "artifacts/browser-qa/rc7/desktop-hit-expression.png"
+    ],
+    "next_actions": [
+      "Export the frozen BLEND to GLB twice and verify identical SHA-256 hashes.",
+      "Run inspector, live desktop expression states, and the full technical verification set."
+    ]
+  },
+  "worldRuntimeReview": {
+    "score": 84,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "The canyon arch fills most of the camera and its shadowed interior collapses into a near-black flat mass.",
+      "Festival and ruins landmarks clip the frame at the landing camera, reducing the sense of an open sky world.",
+      "Large roof, stair, and platform surfaces remain broad single-color planes despite the richer silhouettes.",
+      "Flags and distant islands still expose simple rectangular or cone-like construction.",
+      "The flat sun disk and pale turquoise sky compete with the landmarks instead of creating sunrise depth."
+    ],
+    "suggestions": [
+      "Reduce or move the closest landmark masses away from the landing camera while preserving semantic origins and gameplay coordinates.",
+      "Open and brighten the canyon arch interior and use layered ribs or rim contrast instead of a single black tunnel silhouette.",
+      "Add restrained bevel, inset, vertex-color, and material-value breaks to the largest visible surfaces within existing budgets.",
+      "Deepen flag waves and replace the remaining cone-like distant profiles with layered asymmetric silhouettes.",
+      "Retune runtime sunrise, haze, and sun disk after geometry framing is corrected."
+    ],
+    "reasoning": "The new Blender assets are clearly more authored and region-specific, but camera clipping, crushed canyon shadows, and broad flat surfaces keep the live scene below the RC7 production target.",
+    "next_actions": [
+      "Refine the three landing-camera compositions in the world generator.",
+      "Regenerate six GLBs and rerun five-viewport screenshots, inspectors, hashes, and visual verdict."
+    ]
+  },
+  "worldRuntimeReview2": {
+    "score": 91,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "The festival foreground remains intentionally sparse, but the full tower silhouette now stays readable with open sky around it.",
+      "The canyon wind rims remain assertive, though the aperture is open and no longer crushed to black.",
+      "The ruins stair rhythm remains strong, now balanced by uneven widths, value breaks, and a clear portal destination."
+    ],
+    "suggestions": [
+      "Use atmosphere and fog for any final depth softening instead of adding more geometry.",
+      "Preserve the current landing-camera negative space and landmark offsets."
+    ],
+    "reasoning": "The second pass produces three distinct, authored open-world compositions while keeping the dragon, landing action, sky, and route readable at the gameplay camera.",
+    "next_actions": [
+      "Lock the deterministic world GLBs and inspect all five viewports.",
+      "Include the region screenshots in final RC7 comparison evidence."
+    ]
+  },
+  "audioTouchMinimumReview": {
+    "score": 91,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "The 320-pixel layout uses two compact control rows, so the BGM label and percentage are intentionally omitted while the slider remains understandable through its speaker icon and accessible name.",
+      "The coin timer is separated from the audio and map controls, with a small but sufficient gap to the pause button."
+    ],
+    "suggestions": [
+      "Preserve the two-row safe-area layout and 44-pixel targets during the final five-viewport capture.",
+      "Recheck the same geometry after the final dragon asset lands because the full screenshot set must be regenerated."
+    ],
+    "reasoning": "The fresh touch-minimum screenshot keeps region, audio, map, coin progress, pause, dragon, and flight controls readable without overlap or horizontal overflow.",
+    "evidence": [
+      "artifacts/browser-qa/rc7/audio-touch-minimum.png"
+    ]
+  },
+  "readyAudioSettingsReview": {
+    "score": 86,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "The ready-screen BGM control is now accessible, but the 320x568 panel extends into the joystick and boost control zone.",
+      "Showing both BGM and quality rows at the minimum viewport creates unnecessary vertical density before flight."
+    ],
+    "suggestions": [
+      "Keep the BGM row visible in ready state but leave quality selection in the pause dialog at the minimum viewport.",
+      "Reduce ready-state settings spacing and add a geometry regression proving separation from touch controls."
+    ],
+    "reasoning": "The desktop composition is clear, but the minimum touch viewport fails the no-overlap contract even though the document itself does not overflow.",
+    "evidence": [
+      "artifacts/browser-qa/rc7/desktop-ready-audio.png",
+      "artifacts/browser-qa/rc7/touch-minimum-ready-audio.png"
+    ]
+  },
+  "readyAudioSettingsReview2": {
+    "score": 92,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "The minimum portrait ready screen intentionally hides quality selection until pause while keeping BGM mute and volume immediately available.",
+      "Flight controls are hidden before flight, leaving a clear lower canvas instead of competing with mission setup."
+    ],
+    "suggestions": [
+      "Preserve ready-state flight-control hiding and verify controls appear on countdown and exploration.",
+      "Keep the BGM row within the compact panel in the final five-viewport capture."
+    ],
+    "reasoning": "The 320x568 ready screen now exposes the promised BGM controls, stays inside the viewport, and has no overlap with inactive touch controls.",
+    "evidence": [
+      "artifacts/browser-qa/rc7/touch-minimum-ready-audio.png"
+    ]
+  },
+  "touchContextReview": {
+    "score": 84,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "Moving the landing action above the touch controls removes geometric overlap but places a large gold bar directly across the dragon and wings.",
+      "The minimum-width top layout still has an unused left slot beside the centered coin timer."
+    ],
+    "suggestions": [
+      "Place the compact context action in the second-row left slot at <=420px, with the coin timer centered and pause at right.",
+      "Keep the gameplay center clear and retain a 44-pixel touch target with a readable challenge label."
+    ],
+    "reasoning": "The automated non-overlap check passes, but the fresh festival and canyon screenshots fail composition because the action covers the primary character.",
+    "evidence": [
+      "artifacts/browser-qa/rc7/touch-minimum-festival-hub.png",
+      "artifacts/browser-qa/rc7/touch-minimum-wind-canyon.png"
+    ]
+  },
+  "touchContextReview2": {
+    "score": 92,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "At <=420px the landing action uses the second-row left slot while the coin timer and pause control retain their own columns.",
+      "The compact 96-pixel action remains text-based so landing, takeoff, and race-challenge states stay explicit."
+    ],
+    "suggestions": [
+      "Extend the narrow coin-timer override through 360px to avoid a small untested 341-360px collision band.",
+      "Preserve the now-clear dragon and flight-control center during final captures."
+    ],
+    "reasoning": "Fresh festival and canyon screenshots show the context action no longer covering the dragon or any touch control, and all three required touch viewports pass bounding-box assertions.",
+    "evidence": [
+      "artifacts/browser-qa/rc7/touch-minimum-festival-hub.png",
+      "artifacts/browser-qa/rc7/touch-minimum-wind-canyon.png"
+    ]
+  },
+  "integratedRaceReview1": {
+    "recorded_at": "2026-07-14T00:40:00+09:00",
+    "reviewer": "independent-race-visual-critic",
+    "score": 82,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "Race-course islands still read as dark placeholder cones with flat caps and limited material response.",
+      "Wind guidance is too thin and low-contrast against the sunrise sky.",
+      "Portrait and minimum ready framing crops the dragon, while touch landscape hides ready-screen audio access.",
+      "The live rear camera suppresses some accepted dragon silhouette and color detail."
+    ],
+    "suggestions": [
+      "Replace the race-course cone profile with layered asymmetric authored silhouettes and stronger side-value separation.",
+      "Thicken and brighten the cyan-gold wind route while keeping the active gate dominant.",
+      "Add breakpoint-specific ready framing and compact touch-landscape audio access.",
+      "Tune the gameplay dragon camera and lighting before changing the accepted GLB geometry."
+    ],
+    "reasoning": "The HUD and controls are strong, but first-frame course geometry, route contrast, and narrow-screen staging remain below the strict RC7 production bar.",
+    "evidence": [
+      "artifacts/browser-qa/rc7/desktop-ready-character.png",
+      "artifacts/browser-qa/rc7/desktop-racing.png",
+      "artifacts/browser-qa/rc7/touch-landscape-ready-character.png",
+      "artifacts/browser-qa/rc7/touch-portrait-ready-character.png",
+      "artifacts/browser-qa/rc7/touch-minimum-ready-character.png"
+    ]
+  },
+  "integratedRaceReview2": {
+    "recorded_at": "2026-07-14T00:53:00+09:00",
+    "reviewer": "independent-race-visual-critic-v2",
+    "score": 92,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "category_scores": {
+      "dragon_reference_readability": 92,
+      "race_island_silhouette_and_depth": 90,
+      "route_and_gate_hierarchy": 94,
+      "hud_and_bgm_controls": 94,
+      "touch_and_responsive_consistency": 93,
+      "production_polish": 90
+    },
+    "differences": [
+      "Distant islands intentionally reuse a recognizable faceted lathe vocabulary.",
+      "The rear gameplay camera prioritizes flight silhouette over face, eye, and belly close-up detail.",
+      "Portrait layouts remain dense around the upper objective and gate stack while keeping controls unobstructed."
+    ],
+    "reasoning": "The previous 82-point blockers are resolved: islands have layered authored silhouettes and readable sides, the cyan-gold route is prominent, all five ready layouts preserve the dragon, and touch landscape exposes BGM controls.",
+    "evidence": [
+      "artifacts/browser-qa/rc7/desktop-ready-character.png",
+      "artifacts/browser-qa/rc7/desktop-racing.png",
+      "artifacts/browser-qa/rc7/touch-landscape-racing.png",
+      "artifacts/browser-qa/rc7/touch-portrait-racing.png",
+      "artifacts/browser-qa/rc7/touch-minimum-racing.png",
+      "artifacts/browser-qa/rc7/touch-landscape-ready-audio.png"
+    ]
+  },
+  "finalWorldReview": {
+    "recorded_at": "2026-07-14T00:53:00+09:00",
+    "reviewer": "independent-world-visual-critic-v2",
+    "score": 91,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "Canyon shadows retain some heavy stylized value blocks.",
+      "Major landmark materials favor broad low-poly values over fine surface variation.",
+      "Portrait framing crops parts of large landmarks while preserving region and action readability."
+    ],
+    "reasoning": "All three regions remain distinct and authored, with readable dragon, touch controls, sunrise atmosphere, and landing actions across five viewports.",
+    "evidence": [
+      "artifacts/browser-qa/rc7/desktop-festival-hub.png",
+      "artifacts/browser-qa/rc7/desktop-wind-canyon.png",
+      "artifacts/browser-qa/rc7/desktop-cloud-ruins.png",
+      "artifacts/browser-qa/rc7/touch-minimum-festival-hub.png",
+      "artifacts/browser-qa/rc7/touch-minimum-wind-canyon.png",
+      "artifacts/browser-qa/rc7/touch-minimum-cloud-ruins.png"
+    ]
+  },
+  "finalTechnicalGate": {
+    "recorded_at": "2026-07-14T08:08:25.6197573+09:00",
+    "unit": "33 files, 317 tests passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "build": "passed",
+    "e2e": "123 passed, 82 intentional device-specific skips, 0 failed",
+    "performance": {
+      "race_desktop_high": "60/60 fps, 61 draw calls, 67616 triangles",
+      "race_mobile_low": "60/60 fps, 36 draw calls, 36716 triangles",
+      "explore_desktop_high": "60/60 fps, 65 draw calls, 73608 triangles, BGM playing",
+      "explore_mobile_low": "60/59 fps, 40 draw calls, 40068 triangles, BGM playing"
+    },
+    "production": "5/5 viewports passed with console, page, unhandled, and required-network errors at zero",
+    "assets": "dragon and six world GLBs passed Blender inspection with errors empty",
+    "security": "npm audit reported zero vulnerabilities and production QA-hook scan found zero matches",
+    "distribution": "14 files, 11583944 raw bytes, 6078221 gzip-9 bytes",
+    "code_review": "approved with zero findings"
+  },
+  "nextGate": "Physical Android and iOS playtest, Safari AAC fallback, human loop listening, and BGM ownership/license signoff"
 }

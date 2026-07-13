@@ -72,11 +72,11 @@ RC6의 게임 규칙과 성능은 안정적이지만, 현재 화면은 회색 �
 - `artifacts/browser-qa/rc6/touch-portrait-coins.png` — 390x844
 - `artifacts/browser-qa/rc6/touch-minimum-coins.png` — 320x568
 
-지역별 비교군은 RC6가 그대로 상속한 RC5 GLB 화면을 사용한다:
+지역별 비교군은 기준 커밋 `ba6467f`의 RC6 런타임을 별도 worktree에서 재생성해 사용한다:
 
-- `artifacts/browser-qa/rc5/desktop-festival-hub.png`
-- `artifacts/browser-qa/rc5/desktop-wind-canyon.png`
-- `artifacts/browser-qa/rc5/desktop-cloud-ruins.png`
+- `artifacts/browser-qa/rc7-baseline/desktop-festival-hub.png`
+- `artifacts/browser-qa/rc7-baseline/desktop-wind-canyon.png`
+- `artifacts/browser-qa/rc7-baseline/desktop-cloud-ruins.png`
 
 기준 판정은 `.omx/state/rc6/ralph-progress.json`의 93/100 pass다. 이 점수는 회귀 기준일 뿐 RC7 품질 완료 판정으로 재사용하지 않는다. 관찰된 핵심 결함은 기본 도형이 드러나는 구조물, 평면적인 섬과 하늘, 약한 contact shadow, 단조로운 재질, 장난감 같은 드래곤 관절이다.
 
