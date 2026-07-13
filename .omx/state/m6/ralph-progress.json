@@ -1,0 +1,22 @@
+{
+  "iteration": 3,
+  "generated_screenshot": "artifacts/browser-qa/m6/production-touch-minimum.png",
+  "score": 96,
+  "threshold": 90,
+  "threshold_passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "The production bundle matches the verified development composition while all QA and forced-failure query parameters are inert.",
+    "The minimum production touch view remains full-bleed and unframed with clear separation between the active gate, dragon, joystick, boost, pause, timer, and checkpoint card."
+  ],
+  "suggestions": [
+    "Use the five production screenshots as the RC1 visual baseline for human playtests.",
+    "Keep future polish subordinate to gate readability and touch reach."
+  ],
+  "reasoning": "The production minimum viewport preserves the full visual hierarchy with no QA leakage, clipping, scroll, or focus frame, making it a clean RC1 baseline.",
+  "next_actions": [
+    "Record compressed transfer size and final hook scan.",
+    "Write the automated QA report and human playtest handoff."
+  ]
+}

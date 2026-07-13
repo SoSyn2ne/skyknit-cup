@@ -1,0 +1,21 @@
+{
+  "scope": "m13-final-character-and-race",
+  "score": 95,
+  "threshold": 90,
+  "passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "최종 복부/골반/어깨 면 밀도는 v3 초기안보다 낮지만 얼굴, 날개 손가락, 발과 꼬리 실루엣은 동일하다."
+  ],
+  "suggestions": [
+    "현재 19,748-triangle v3와 12메시 표현 피벗 구조를 유지한다.",
+    "최종 5뷰포트 시각/픽셀과 프로덕션 검증을 완료한다."
+  ],
+  "reasoning": "최종 턴테이블은 RC3 얼굴·날개·발·꼬리 디자인을 유지하고 성능은 desktop 60/54fps, mobile 60fps로 목표를 통과해 시각과 실행 예산을 함께 충족한다.",
+  "next_actions": [
+    "5뷰포트 최종 E2E 재검증",
+    "전송량과 보안 감사",
+    "RC3 자동 QA 보고서와 플레이테스트 인계"
+  ]
+}

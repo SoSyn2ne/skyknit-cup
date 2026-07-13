@@ -1,0 +1,32 @@
+{
+  "scope": "m8",
+  "threshold": 90,
+  "iteration": 2,
+  "score": 94,
+  "passed": true,
+  "verdict": {
+    "score": 94,
+    "verdict": "pass",
+    "category_match": true,
+    "differences": [
+      "준비 화면은 미션 이름, 목표, 최고 등급, 시작 행동을 320px에서도 한 화면에 보여 준다.",
+      "비행 목표 HUD는 상단 상태 블록 사이에 들어가며 다음 관문과 바람실을 가리지 않는다.",
+      "성공/실패 결과에서 이번 등급, 최고 등급, 기록, 재도전, 미션 선택이 최소 모바일 한 화면에 들어온다."
+    ],
+    "suggestions": [
+      "전체 E2E와 프로덕션 5뷰포트에서 동일한 레이아웃을 회귀 검증한다.",
+      "실패 조건 문구는 미션 규칙 상수와 함께 유지해 UI에 별도 임계값을 복제하지 않는다."
+    ],
+    "reasoning": "설정 행을 결과에서 제거해 최소 모바일에서도 결과와 두 다음 행동이 완결됐다. 5개 뷰포트의 선택/진행/실패/재시도/성공 자동 흐름이 통과해 M8 UI 시각 작업을 닫을 수 있다."
+  },
+  "evidence": {
+    "desktopSelect": "artifacts/browser-qa/m8/iteration2/desktop-mission-select.png",
+    "desktopProgress": "artifacts/browser-qa/m8/iteration2/desktop-mission-progress.png",
+    "touchMinimumFailure": "artifacts/browser-qa/m8/iteration2/touch-minimum-mission-failure.png",
+    "canvasPixels": "all five viewports luma range > 40 and hashes changed"
+  },
+  "next_actions": [
+    "run full M8 regression and production gates",
+    "write M8 report with v3 migration and mission evidence"
+  ]
+}

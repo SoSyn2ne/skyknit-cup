@@ -1,0 +1,37 @@
+{
+  "scope": "m9",
+  "threshold": 90,
+  "iteration": 1,
+  "score": 96,
+  "passed": true,
+  "verdict": {
+    "score": 96,
+    "verdict": "pass",
+    "category_match": true,
+    "differences": [
+      "RC1보다 드래곤의 근거리 형상과 날개 실루엣이 풍부하고 섬 유적·다층 구름이 공간 깊이를 만든다.",
+      "미션 선택, 진행 목표, 성공/실패, 재도전이 기존 HUD 문법과 같은 청록/금빛 계층으로 통합됐다.",
+      "5개 뷰포트에서 금빛 관문, 두 바람실, 주홍 드래곤이 미션 UI보다 계속 우선해 읽힌다."
+    ],
+    "suggestions": [
+      "실기기와 사람 플레이테스트에서 미션 시간/횟수 임계값만 조정한다.",
+      "후속 조정은 중앙 미션 규칙 상수와 기존 인스턴스/드로우콜 예산을 유지한다."
+    ],
+    "reasoning": "RC2는 3D 리마스터와 미션 UI를 추가하면서도 full-bleed 비행로, 접근성, 터치 조작, 최소 모바일 결과 흐름을 보존했다. 최종 5뷰포트 기능/픽셀/오류/프로덕션 검사가 모두 통과했다."
+  },
+  "evidence": {
+    "beforeDesktop": "artifacts/browser-qa/m6/desktop-racing.png",
+    "afterDesktop": "artifacts/browser-qa/m9/desktop-mission-progress.png",
+    "desktopSelect": "artifacts/browser-qa/m9/desktop-mission-select.png",
+    "touchMinimumFailure": "artifacts/browser-qa/m9/touch-minimum-mission-failure.png",
+    "touchMinimumSuccess": "artifacts/browser-qa/m9/touch-minimum-mission-success.png",
+    "production": "artifacts/browser-qa/m9/production-touch-minimum.png",
+    "canvasPixels": "all five viewports luma range > 40 and hashes changed",
+    "runtimeHealth": "five viewports console/page/unhandled/network errors 0"
+  },
+  "next_actions": [
+    "write M9 automated QA report",
+    "write RC2 playtest handoff",
+    "final no-hook, no-commit, no-deploy audit"
+  ]
+}

@@ -1,0 +1,186 @@
+import * as THREE from 'three'
+import { describe, expect, it, vi } from 'vitest'
+
+import {
+  createOpenWorld,
+  type OpenWorldAssetLoader,
+} from './createOpenWorld'
+
+interface Deferred<T> {
+  readonly promise: Promise<T>
+  resolve(value: T): void
+  reject(reason: unknown): void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve
+    reject = onReject
+  })
+  return { promise, resolve, reject }
+}
+
+function createAsset(name: string): THREE.Group {
+  const asset = new THREE.Group()
+  asset.name = name
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial(),
+  )
+  mesh.name = `${name}_Mesh`
+  asset.add(mesh)
+  return asset
+}
+
+async function settleLoads(): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
+describe('open-world region GLB streaming', () => {
+  it('loads, retains, and removes the current quality asset by distance', async () => {
+    const scene = new THREE.Scene()
+    const load = vi.fn((url: string) =>
+      Promise.resolve(createAsset(`Asset_${url}`)),
+    )
+    const world = createOpenWorld(scene, {
+      qualityTier: 'high',
+      assetLoader: { load },
+    })
+
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    expect(world.debugSnapshot()).toMatchObject({
+      loadedRegionIds: ['festival-hub'],
+      regionGroupCount: 1,
+      qualityTier: 'high',
+      regionAssets: [
+        { id: 'festival-hub', lod: 'high', status: 'loading' },
+      ],
+    })
+    expect(load).toHaveBeenCalledWith(
+      '/assets/models/world/festival-hub-high.glb',
+    )
+
+    await settleLoads()
+    expect(scene.getObjectByName('RC5_Region_festival-hub')).toBeDefined()
+    expect(world.debugSnapshot().regionAssets).toEqual([
+      { id: 'festival-hub', lod: 'high', status: 'loaded' },
+    ])
+
+    world.update({ x: 0, y: 8, z: 440 }, 1)
+    expect(world.debugSnapshot().loadedRegionIds).toEqual(['festival-hub'])
+
+    world.update({ x: 500, y: 24, z: -680 }, 2)
+    await settleLoads()
+    expect(world.debugSnapshot().loadedRegionIds).toEqual(['wind-canyon'])
+    expect(scene.getObjectByName('RC5_Region_festival-hub')).toBeUndefined()
+    expect(scene.getObjectByName('RC5_Region_wind-canyon')).toBeDefined()
+
+    world.dispose()
+    expect(world.debugSnapshot().regionGroupCount).toBe(0)
+  })
+
+  it('replaces loaded region art when the quality tier changes', async () => {
+    const scene = new THREE.Scene()
+    const assets: THREE.Group[] = []
+    const loader: OpenWorldAssetLoader = {
+      load: async (url) => {
+        const asset = createAsset(url)
+        assets.push(asset)
+        return asset
+      },
+    }
+    const world = createOpenWorld(scene, {
+      qualityTier: 'high',
+      assetLoader: loader,
+    })
+
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    await settleLoads()
+    const highMesh = assets[0].getObjectByName(
+      '/assets/models/world/festival-hub-high.glb_Mesh',
+    ) as THREE.Mesh
+    const disposeHigh = vi.spyOn(highMesh.geometry, 'dispose')
+
+    world.setQuality('low')
+    await settleLoads()
+
+    expect(disposeHigh).toHaveBeenCalledOnce()
+    expect(world.debugSnapshot()).toMatchObject({
+      qualityTier: 'low',
+      regionAssets: [
+        { id: 'festival-hub', lod: 'low', status: 'loaded' },
+      ],
+    })
+    expect(scene.getObjectByName(
+      '/assets/models/world/festival-hub-low.glb',
+    )).toBeDefined()
+  })
+
+  it('uses low art for distant regions and restores high art when close', async () => {
+    const load = vi.fn(async (url: string) => createAsset(url))
+    const world = createOpenWorld(new THREE.Scene(), {
+      qualityTier: 'high',
+      assetLoader: { load },
+    })
+
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    await settleLoads()
+    expect(load).toHaveBeenLastCalledWith(
+      '/assets/models/world/festival-hub-high.glb',
+    )
+
+    world.update({ x: 0, y: 8, z: 400 }, 1)
+    expect(world.debugSnapshot().regionAssets).toEqual([
+      { id: 'festival-hub', lod: 'low', status: 'loading' },
+    ])
+    await settleLoads()
+    expect(load).toHaveBeenLastCalledWith(
+      '/assets/models/world/festival-hub-low.glb',
+    )
+
+    world.update({ x: 0, y: 8, z: -40 }, 2)
+    await settleLoads()
+    expect(load).toHaveBeenLastCalledWith(
+      '/assets/models/world/festival-hub-high.glb',
+    )
+  })
+
+  it('disposes a stale asset that resolves after its region unloaded', async () => {
+    const pending = deferred<THREE.Group>()
+    const staleAsset = createAsset('StaleFestivalAsset')
+    const staleMesh = staleAsset.getObjectByName(
+      'StaleFestivalAsset_Mesh',
+    ) as THREE.Mesh
+    const disposeGeometry = vi.spyOn(staleMesh.geometry, 'dispose')
+    const world = createOpenWorld(new THREE.Scene(), {
+      assetLoader: { load: () => pending.promise },
+    })
+
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    world.update({ x: 500, y: 24, z: -680 }, 1)
+    pending.resolve(staleAsset)
+    await settleLoads()
+
+    expect(disposeGeometry).toHaveBeenCalledOnce()
+    expect(world.debugSnapshot().loadedRegionIds).toEqual(['wind-canyon'])
+  })
+
+  it('installs a minimal landing-pad fallback when a GLB fails', async () => {
+    const world = createOpenWorld(new THREE.Scene(), {
+      assetLoader: { load: () => Promise.reject(new Error('offline')) },
+    })
+
+    world.update({ x: 430, y: 28, z: 190 }, 0)
+    await settleLoads()
+
+    expect(world.debugSnapshot()).toMatchObject({
+      loadedRegionIds: ['cloud-ruins'],
+      regionAssets: [
+        { id: 'cloud-ruins', lod: 'high', status: 'fallback' },
+      ],
+    })
+  })
+})

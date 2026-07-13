@@ -1,0 +1,22 @@
+{
+  "iteration": 16,
+  "generated_screenshot": "artifacts/browser-qa/m3/responsive-320x568.png",
+  "score": 94,
+  "threshold": 90,
+  "threshold_passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "The 320px viewport leaves intentionally narrow horizontal space between the two status blocks.",
+    "The forced small-gate guide sits in the reserved top-center gap without covering either metric."
+  ],
+  "suggestions": [
+    "Keep the top-center guide at the current 32px edge margin.",
+    "Preserve compact metric padding for the minimum supported width."
+  ],
+  "reasoning": "All required viewports keep the timer, checkpoint count, gate guide, dragon, wind threads, and active gate readable without clipping or overlap; the 320px minimum remains especially clean.",
+  "next_actions": [
+    "Run the desktop performance sample and production-asset inspection.",
+    "Confirm console and network cleanliness, then write the milestone report."
+  ]
+}

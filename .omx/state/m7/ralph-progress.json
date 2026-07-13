@@ -1,0 +1,33 @@
+{
+  "scope": "m7",
+  "threshold": 90,
+  "iteration": 4,
+  "score": 95,
+  "passed": true,
+  "verdict": {
+    "score": 95,
+    "verdict": "pass",
+    "category_match": true,
+    "differences": [
+      "날개막 외곽이 더 넓고 유려해져 게임 카메라에서도 드래곤 실루엣 변화가 분명하다.",
+      "뿔·목·다리·발톱·꼬리 단면을 늘리고 눈과 주둥이 비율을 조정해 근거리 turntable의 해부학 구분이 좋아졌다.",
+      "확장된 날개가 바람실 시작점이나 금빛 관문을 가리지 않는다."
+    ],
+    "suggestions": [
+      "최종 30초 high/low 성능과 draw-call 예산을 재측정한다.",
+      "M7 보고서에 v1과 v2의 triangles, meshes, primitives, 전송량을 비교한다."
+    ],
+    "reasoning": "마지막 해부학/날개 비율 조정이 근거리 품질과 게임 실루엣을 모두 개선했고 코스 가독성은 유지됐다. 데스크톱과 최소 모바일 픽셀/가시성 검사가 통과해 M7 시각 작업을 닫을 수 있다."
+  },
+  "evidence": {
+    "reference": "artifacts/browser-qa/m6/desktop-racing.png",
+    "generated": "artifacts/browser-qa/m7/final4/desktop-racing.png",
+    "desktop": "artifacts/browser-qa/m7/final4/desktop-racing.png",
+    "touchMinimum": "artifacts/browser-qa/m7/final4/touch-minimum-racing.png",
+    "canvasPixels": "desktop luma 0-225; touch minimum luma 0-222; both frame hashes changed",
+    "asset": "17660 triangles, 9 render meshes, 12 primitives, 2 materials, vertex colors on all meshes"
+  },
+  "next_actions": [
+    "M7 full performance and five-viewport gates"
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dragon Sky Race"
+  short_description: "Plan, build, and verify the dragon sky racing game"
+  default_prompt: "Use $build-dragon-sky-race to plan, build, or verify the next game milestone."

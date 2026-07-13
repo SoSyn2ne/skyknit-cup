@@ -1,0 +1,31 @@
+{
+  "scope": "rc6-coin-runs",
+  "iteration": 3,
+  "score": 93,
+  "threshold": 90,
+  "threshold_passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "활성 동전은 구조물의 세밀한 금속 재질보다 단순한 저폴리 금빛 실루엣을 우선한다.",
+    "320px 화면에서는 지역명, 동전 기록, 지도 버튼이 한 줄에 촘촘하게 배치되지만 서로 겹치지 않는다."
+  ],
+  "suggestions": [
+    "실기기 플레이테스트에서 첫 동전 발견성과 10개 동선의 난이도를 확인한다.",
+    "후속 아트 패스는 현재 1드로콜 인스턴스 예산을 유지하면서 금화 문양만 보강한다."
+  ],
+  "reasoning": "5개 필수 뷰포트에서 다음 동전이 중앙 비행로에 읽히고 수집 수와 시간이 지역명, 지도, 터치 조작을 가리지 않는다. 3개 지역의 30개 동전은 한 인스턴스 메시로 유지되어 시각 가독성과 성능 예산을 함께 충족한다.",
+  "evidence": {
+    "desktop": "artifacts/browser-qa/rc6/desktop-coins.png",
+    "desktopCompact": "artifacts/browser-qa/rc6/desktop-compact-coins.png",
+    "touchLandscape": "artifacts/browser-qa/rc6/touch-landscape-coins.png",
+    "touchPortrait": "artifacts/browser-qa/rc6/touch-portrait-coins.png",
+    "touchMinimum": "artifacts/browser-qa/rc6/touch-minimum-coins.png",
+    "canvasPixels": "all five viewports luma range greater than 40 and frame hashes changed",
+    "performance": "desktop and mobile race/explore median and minimum 60fps; explore 35-36 draw calls"
+  },
+  "next_actions": [
+    "RC6 자동 QA 보고서 작성",
+    "실기기 및 사람 플레이테스트 인수인계"
+  ]
+}

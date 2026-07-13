@@ -1,0 +1,22 @@
+{
+  "iteration": 3,
+  "generated_screenshot": "artifacts/browser-qa/m5/desktop-dragon-fallback.png",
+  "score": 90,
+  "threshold": 90,
+  "threshold_passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "The fallback dragon is intentionally much simpler than the GLB rig but retains a red body and gold wing silhouette.",
+    "A compact top-center status explains the degraded asset without covering the timer, checkpoint card, active gate, or flight corridor."
+  ],
+  "suggestions": [
+    "Keep the fallback notice non-modal so a resource failure never blocks racing.",
+    "Preserve the active gate and wind threads as stronger navigation signals than fallback model detail."
+  ],
+  "reasoning": "The degraded state is honest, readable, and playable. The model fidelity loss is expected, while the essential color silhouette and course navigation remain intact.",
+  "next_actions": [
+    "Run the complete M5 unit and browser regression gate.",
+    "Verify development failure hooks are absent from the production bundle."
+  ]
+}

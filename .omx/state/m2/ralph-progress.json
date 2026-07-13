@@ -1,0 +1,22 @@
+{
+  "iteration": 8,
+  "generated_screenshot": "artifacts/browser-qa/m2/finished-1280x720.png",
+  "score": 91,
+  "threshold": 90,
+  "threshold_passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "The centered finish panel intentionally covers the dragon torso after movement has ended.",
+    "The red QA control is visible only on the development verification query and is absent from production JavaScript."
+  ],
+  "suggestions": [
+    "Keep the current result order: current time, best time, delta, retry.",
+    "Do not include the QA control in production or normal development screenshots."
+  ],
+  "reasoning": "The finish hierarchy is clear, all required record values are visible, and the retry action is prominent without introducing extra product controls.",
+  "next_actions": [
+    "Verify retry resets transient progress while preserving the stored best time.",
+    "Proceed to console, failure-path, and final quality verification."
+  ]
+}

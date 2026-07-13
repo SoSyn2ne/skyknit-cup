@@ -1,0 +1,22 @@
+{
+  "iteration": 5,
+  "generated_screenshot": "artifacts/browser-qa/m4/touch-minimum-responsive.png",
+  "score": 91,
+  "threshold": 90,
+  "threshold_passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "At 320 by 568 the ready panel uses the full safe width and a reduced title scale.",
+    "The dragon silhouette overlaps the gap between the two bottom controls without covering either target."
+  ],
+  "suggestions": [
+    "Preserve the top-aligned compact ready panel at the minimum viewport.",
+    "Keep the joystick and boost control edges inside the viewport during later settings work."
+  ],
+  "reasoning": "The minimum supported viewport remains fully usable: the next gate is visible, the compact instruction panel is readable, and both flight controls are separated, unclipped, and comfortably above 44px.",
+  "next_actions": [
+    "Complete reduced-motion verification.",
+    "Run the full keyboard flow and M4 aggregate gate."
+  ]
+}

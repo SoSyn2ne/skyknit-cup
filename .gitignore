@@ -1,0 +1,25 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+artifacts/
+__pycache__/
+*.pyc
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
+Thumbs.db
+
+# Local Codex/OMX runtime state. Keep plans and milestone verdicts versioned.
+.omx/logs/
+.omx/metrics.json
+.omx/state/*.json
+
+# Blender's automatic previous-save copies are reproducible from .blend sources.
+*.blend1
