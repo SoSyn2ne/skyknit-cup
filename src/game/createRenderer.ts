@@ -1178,7 +1178,7 @@ export function createRenderer(
           visualSimulationSeconds += FIXED_STEP_SECONDS
         }
 
-        sandbox.step(
+        const sandboxStep = sandbox.step(
           flightState,
           visualSimulationSeconds,
           gameMode === 'explore'
@@ -1201,6 +1201,13 @@ export function createRenderer(
               ? 'countdown'
               : 'race',
         )
+        const wingAudioActive =
+          gameMode === 'explore'
+            ? !explorationPaused && explorationState.movement !== 'landed'
+            : phaseAtStepStart === 'racing'
+        if (sandboxStep.wingDownstrokeStarted && wingAudioActive) {
+          gameAudio.playWingFlap()
+        }
       }
 
       gameAudio.setBoosting(

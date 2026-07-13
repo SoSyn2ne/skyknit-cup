@@ -11,6 +11,7 @@ export interface DragonPoseState {
   readonly bodyBankRadians: number
   readonly headPitchRadians: number
   readonly wingFoldRadians: number
+  readonly wingFlapRadians: number
   readonly tailYawRadians: readonly number[]
   readonly recoilRadians: number
   readonly breathScale: number
@@ -22,6 +23,18 @@ const TAIL_FOLLOW_RATES = [7, 5.5, 4, 3, 2] as const
 
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? value : 0
+}
+
+export function didWingDownstrokeStart(
+  previousWingFlapRadians: number,
+  currentWingFlapRadians: number,
+): boolean {
+  return (
+    Number.isFinite(previousWingFlapRadians) &&
+    Number.isFinite(currentWingFlapRadians) &&
+    previousWingFlapRadians <= 0 &&
+    currentWingFlapRadians > 0
+  )
 }
 
 function follow(
@@ -39,6 +52,7 @@ export function createDragonPoseState(): DragonPoseState {
     bodyBankRadians: 0,
     headPitchRadians: 0,
     wingFoldRadians: 0,
+    wingFlapRadians: 0,
     tailYawRadians: TAIL_FOLLOW_RATES.map(() => 0),
     recoilRadians: 0,
     breathScale: 1,
@@ -96,6 +110,10 @@ export function stepDragonPose(
     dt,
   )
   const animationSeconds = Math.max(0, finiteOrZero(input.animationSeconds))
+  const flapFrequency = input.isBoosting ? 3.4 : 2.2
+  const flapAmplitude = input.isBoosting ? 0.12 : 0.28
+  const wingFlapRadians =
+    Math.sin(animationSeconds * Math.PI * 2 * flapFrequency) * flapAmplitude
   const breathScale =
     1 + Math.sin(animationSeconds * Math.PI * 2 * 0.55) * 0.008
   const blinkPhase = animationSeconds % 4.6
@@ -121,6 +139,7 @@ export function stepDragonPose(
     bodyBankRadians,
     headPitchRadians,
     wingFoldRadians,
+    wingFlapRadians,
     tailYawRadians,
     recoilRadians,
     breathScale,

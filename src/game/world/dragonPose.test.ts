@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createDragonPoseState,
+  didWingDownstrokeStart,
   stepDragonPose,
 } from './dragonPose'
 
@@ -54,6 +55,46 @@ describe('procedural dragon pose', () => {
     expect(boosting.wingFoldRadians).toBeGreaterThan(
       normal.wingFoldRadians,
     )
+  })
+
+  it('reports one downstroke when the rendered wing crosses downward', () => {
+    const before = stepDragonPose(
+      createDragonPoseState(),
+      {
+        bankRadians: 0,
+        pitchRadians: 0,
+        isBoosting: false,
+        collisionFeedbackSeconds: 0,
+        animationSeconds: 0.44,
+      },
+      1 / 60,
+    )
+    const after = stepDragonPose(
+      before,
+      {
+        bankRadians: 0,
+        pitchRadians: 0,
+        isBoosting: false,
+        collisionFeedbackSeconds: 0,
+        animationSeconds: 0.46,
+      },
+      1 / 60,
+    )
+
+    expect(before.wingFlapRadians).toBeLessThanOrEqual(0)
+    expect(after.wingFlapRadians).toBeGreaterThan(0)
+    expect(
+      didWingDownstrokeStart(
+        before.wingFlapRadians,
+        after.wingFlapRadians,
+      ),
+    ).toBe(true)
+    expect(
+      didWingDownstrokeStart(
+        after.wingFlapRadians,
+        after.wingFlapRadians,
+      ),
+    ).toBe(false)
   })
 
   it('adds a short recoil posture while collision feedback is active', () => {

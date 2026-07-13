@@ -31,7 +31,6 @@ export interface DragonVisual {
   update(
     flight: FlightState,
     pose: DragonPoseState,
-    simulationSeconds: number,
   ): void
   setShadows(enabled: boolean): void
   debugSnapshot(): DragonDebugSnapshot
@@ -293,7 +292,7 @@ export function createDragon(palette: DragonPalette): DragonVisual {
   return {
     movementRoot,
     ready,
-    update: (flight, pose, simulationSeconds) => {
+    update: (flight, pose) => {
       breathScale = pose.breathScale
       blinkAmount = pose.blinkAmount
       jawOpenRadians = pose.jawOpenRadians
@@ -316,13 +315,8 @@ export function createDragon(palette: DragonPalette): DragonVisual {
         eye.scale.y = Math.max(0.08, 1 - pose.blinkAmount * 0.92)
       }
 
-      const flapFrequency = flight.isBoosting ? 3.4 : 2.2
-      const flapAmplitude = flight.isBoosting ? 0.12 : 0.28
-      const flap =
-        Math.sin(simulationSeconds * Math.PI * 2 * flapFrequency) *
-        flapAmplitude
-      rig.leftWing.rotation.z = flap + pose.wingFoldRadians
-      rig.rightWing.rotation.z = -flap - pose.wingFoldRadians
+      rig.leftWing.rotation.z = pose.wingFlapRadians + pose.wingFoldRadians
+      rig.rightWing.rotation.z = -pose.wingFlapRadians - pose.wingFoldRadians
 
       for (const [index, tail] of rig.tail.entries()) {
         tail.rotation.y = pose.tailYawRadians[index] ?? 0

@@ -40,9 +40,53 @@ class FakeGain {
   disconnect(): void {}
 }
 
+class FakeAudioBuffer {
+  private readonly samples: Float32Array
+
+  constructor(length: number) {
+    this.samples = new Float32Array(length)
+  }
+
+  getChannelData(): Float32Array {
+    return this.samples
+  }
+}
+
+class FakeBufferSource {
+  buffer: AudioBuffer | null = null
+  onended: (() => void) | null = null
+  starts = 0
+  stops = 0
+
+  connect(): void {}
+
+  disconnect(): void {}
+
+  start(): void {
+    this.starts += 1
+  }
+
+  stop(): void {
+    this.stops += 1
+  }
+}
+
+class FakeBiquadFilter {
+  readonly frequency = new FakeAudioParam()
+  readonly Q = new FakeAudioParam()
+  type: BiquadFilterType = 'lowpass'
+
+  connect(): void {}
+
+  disconnect(): void {}
+}
+
 class FakeAudioContext {
   readonly destination = {} as AudioDestinationNode
   readonly oscillators: FakeOscillator[] = []
+  readonly bufferSources: FakeBufferSource[] = []
+  readonly filters: FakeBiquadFilter[] = []
+  readonly sampleRate = 48_000
   currentTime = 10
   state: AudioContextState = 'suspended'
   resumes = 0
@@ -71,6 +115,22 @@ class FakeAudioContext {
 
   createGain(): GainNode {
     return new FakeGain() as unknown as GainNode
+  }
+
+  createBuffer(_channels: number, length: number): AudioBuffer {
+    return new FakeAudioBuffer(length) as unknown as AudioBuffer
+  }
+
+  createBufferSource(): AudioBufferSourceNode {
+    const source = new FakeBufferSource()
+    this.bufferSources.push(source)
+    return source as unknown as AudioBufferSourceNode
+  }
+
+  createBiquadFilter(): BiquadFilterNode {
+    const filter = new FakeBiquadFilter()
+    this.filters.push(filter)
+    return filter as unknown as BiquadFilterNode
   }
 
   async close(): Promise<void> {
@@ -159,6 +219,7 @@ describe('generated game audio', () => {
       bgmPlayAttempts: 0,
       bgmPlayFailures: 0,
       gateCues: 0,
+      wingFlapCues: 0,
       boostCues: 0,
       finishCues: 0,
     })
@@ -200,6 +261,24 @@ describe('generated game audio', () => {
       finishCues: 1,
     })
     expect(context.oscillators).toHaveLength(6)
+  })
+
+  it('plays a short filtered air pulse for each requested wing downstroke', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+    await audio.unlock()
+
+    audio.playWingFlap()
+    audio.playWingFlap()
+
+    expect(audio.debugSnapshot().wingFlapCues).toBe(2)
+    expect(context.bufferSources).toHaveLength(2)
+    expect(context.filters.map((filter) => filter.type)).toEqual([
+      'bandpass',
+      'bandpass',
+    ])
   })
 
   it('blocks new cues and stops active nodes while muted', async () => {

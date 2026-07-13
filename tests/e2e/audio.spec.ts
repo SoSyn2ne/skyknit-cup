@@ -15,6 +15,7 @@ interface AudioSnapshot {
   readonly bgmPlayAttempts: number
   readonly bgmPlayFailures: number
   readonly gateCues: number
+  readonly wingFlapCues: number
   readonly boostCues: number
   readonly finishCues: number
 }
@@ -63,6 +64,7 @@ test('gates generated audio behind gesture, edges, and mute', async ({
     bgmPlayAttempts: 0,
     bgmPlayFailures: 0,
     gateCues: 0,
+    wingFlapCues: 0,
     boostCues: 0,
     finishCues: 0,
   })
@@ -76,6 +78,20 @@ test('gates generated audio behind gesture, edges, and mute', async ({
     musicActive: true,
     bgmPlaying: true,
   })
+  await expect
+    .poll(async () => (await readAudio(page))?.wingFlapCues)
+    .toBeGreaterThan(0)
+
+  await page.keyboard.press('Escape')
+  await expect.poll(() => readPhase(page)).toBe('paused')
+  const pausedWingFlapCues = (await readAudio(page))?.wingFlapCues ?? 0
+  await page.waitForTimeout(600)
+  expect((await readAudio(page))?.wingFlapCues).toBe(pausedWingFlapCues)
+  await page.getByRole('button', { name: '계속 날기' }).click()
+  await expect.poll(() => readPhase(page)).toBe('racing')
+  await expect
+    .poll(async () => (await readAudio(page))?.wingFlapCues)
+    .toBeGreaterThan(pausedWingFlapCues)
 
   await page.keyboard.down('Space')
   await expect
@@ -113,8 +129,11 @@ test('gates generated audio behind gesture, edges, and mute', async ({
   await expect
     .poll(async () => (await readAudio(page))?.muted)
     .toBe(true)
+  const mutedWingFlapCues = (await readAudio(page))?.wingFlapCues ?? 0
   await page.getByRole('button', { name: '다시 달리기' }).click()
   await expect.poll(() => readPhase(page), { timeout: 6_000 }).toBe('racing')
+  await page.waitForTimeout(600)
+  expect((await readAudio(page))?.wingFlapCues).toBe(mutedWingFlapCues)
   await page.keyboard.press('Space')
   await page.waitForTimeout(150)
   expect((await readAudio(page))?.boostCues).toBe(2)

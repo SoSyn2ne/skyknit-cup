@@ -11,6 +11,7 @@ export interface GameAudioDebugSnapshot {
   readonly bgmPlayAttempts: number
   readonly bgmPlayFailures: number
   readonly gateCues: number
+  readonly wingFlapCues: number
   readonly boostCues: number
   readonly finishCues: number
 }
@@ -24,6 +25,7 @@ export interface GameAudio {
   setMusicActive(active: boolean): void
   setPageVisible(visible: boolean): void
   playGate(): void
+  playWingFlap(): void
   setBoosting(boosting: boolean): void
   playFinish(): void
   debugSnapshot(): GameAudioDebugSnapshot
@@ -55,6 +57,25 @@ interface Tone {
   readonly volume?: number
 }
 
+interface NoiseBurst {
+  readonly durationSeconds: number
+  readonly attackSeconds: number
+  readonly filterStartHz: number
+  readonly filterEndHz: number
+  readonly filterQ: number
+  readonly volume: number
+}
+
+const NOISE_BUFFER_SECONDS = 2
+const WING_FLAP_BURST: NoiseBurst = {
+  durationSeconds: 0.18,
+  attackSeconds: 0.012,
+  filterStartHz: 720,
+  filterEndHz: 220,
+  filterQ: 0.85,
+  volume: 0.055,
+}
+
 export function createGameAudio(
   contextFactory: AudioContextFactory = defaultContextFactory,
   initiallyMuted = false,
@@ -81,9 +102,11 @@ export function createGameAudio(
   let boosting = false
   let disposed = false
   let gateCues = 0
+  let wingFlapCues = 0
   let boostCues = 0
   let finishCues = 0
-  const activeOscillators = new Set<OscillatorNode>()
+  let noiseBuffer: AudioBuffer | null = null
+  const activeSources = new Set<AudioScheduledSourceNode>()
 
   const shouldPlayMusic = (): boolean =>
     !disposed &&
@@ -195,12 +218,12 @@ export function createGameAudio(
     }
   }
 
-  const stopActiveOscillators = (): void => {
-    for (const oscillator of [...activeOscillators]) {
+  const stopActiveSources = (): void => {
+    for (const source of [...activeSources]) {
       try {
-        oscillator.stop()
+        source.stop()
       } catch {
-        activeOscillators.delete(oscillator)
+        activeSources.delete(source)
       }
     }
   }
@@ -224,7 +247,7 @@ export function createGameAudio(
       oscillator.connect(gain)
       gain.connect(context.destination)
       oscillator.onended = () => {
-        activeOscillators.delete(oscillator as OscillatorNode)
+        activeSources.delete(oscillator as OscillatorNode)
         try {
           oscillator?.disconnect()
           gain?.disconnect()
@@ -232,13 +255,13 @@ export function createGameAudio(
           // A disconnected optional audio node needs no further recovery.
         }
       }
-      activeOscillators.add(oscillator)
+      activeSources.add(oscillator)
       oscillator.start(startAt)
       oscillator.stop(stopAt)
       return true
     } catch {
       if (oscillator !== null) {
-        activeOscillators.delete(oscillator)
+        activeSources.delete(oscillator)
         try {
           oscillator.disconnect()
         } catch {
@@ -249,6 +272,90 @@ export function createGameAudio(
         gain?.disconnect()
       } catch {
         // Creation/start failure is intentionally non-blocking.
+      }
+      return false
+    }
+  }
+
+  const getNoiseBuffer = (): AudioBuffer | null => {
+    if (noiseBuffer !== null) return noiseBuffer
+    if (context === null) return null
+
+    try {
+      const sampleCount = Math.ceil(context.sampleRate * NOISE_BUFFER_SECONDS)
+      const buffer = context.createBuffer(1, sampleCount, context.sampleRate)
+      const samples = buffer.getChannelData(0)
+      for (let index = 0; index < samples.length; index += 1) {
+        samples[index] = Math.random() * 2 - 1
+      }
+      noiseBuffer = buffer
+      return buffer
+    } catch {
+      return null
+    }
+  }
+
+  const playNoiseBurst = (burst: NoiseBurst, variationIndex: number): boolean => {
+    if (disposed || muted || !unlocked || context === null) return false
+
+    const buffer = getNoiseBuffer()
+    if (buffer === null) return false
+
+    let source: AudioBufferSourceNode | null = null
+    let filter: BiquadFilterNode | null = null
+    let gain: GainNode | null = null
+    try {
+      source = context.createBufferSource()
+      filter = context.createBiquadFilter()
+      gain = context.createGain()
+      const startAt = context.currentTime
+      const attackAt = startAt + burst.attackSeconds
+      const stopAt = startAt + burst.durationSeconds
+      const availableOffset = Math.max(
+        0,
+        NOISE_BUFFER_SECONDS - burst.durationSeconds,
+      )
+      const offsetSeconds =
+        availableOffset === 0
+          ? 0
+          : (variationIndex * 0.173) % availableOffset
+
+      source.buffer = buffer
+      filter.type = 'bandpass'
+      filter.frequency.setValueAtTime(burst.filterStartHz, startAt)
+      filter.frequency.exponentialRampToValueAtTime(
+        burst.filterEndHz,
+        stopAt,
+      )
+      filter.Q.setValueAtTime(burst.filterQ, startAt)
+      gain.gain.setValueAtTime(0.0001, startAt)
+      gain.gain.exponentialRampToValueAtTime(burst.volume, attackAt)
+      gain.gain.exponentialRampToValueAtTime(0.0001, stopAt)
+      source.connect(filter)
+      filter.connect(gain)
+      gain.connect(context.destination)
+      source.onended = () => {
+        activeSources.delete(source as AudioBufferSourceNode)
+        try {
+          source?.disconnect()
+          filter?.disconnect()
+          gain?.disconnect()
+        } catch {
+          // A completed air burst has no remaining resources to recover.
+        }
+      }
+      activeSources.add(source)
+      source.start(startAt, offsetSeconds)
+      source.stop(stopAt)
+      return true
+    } catch {
+      if (source !== null) activeSources.delete(source)
+      try {
+        source?.disconnect()
+        filter?.disconnect()
+        gain?.disconnect()
+      } catch {
+        // Optional flight audio must never interrupt gameplay.
       }
       return false
     }
@@ -281,7 +388,7 @@ export function createGameAudio(
     setMuted: (nextMuted) => {
       muted = nextMuted
       if (muted) {
-        stopActiveOscillators()
+        stopActiveSources()
       }
       syncMusicPlayback()
     },
@@ -321,6 +428,11 @@ export function createGameAudio(
         })
       ) {
         gateCues += 1
+      }
+    },
+    playWingFlap: () => {
+      if (playNoiseBurst(WING_FLAP_BURST, wingFlapCues)) {
+        wingFlapCues += 1
       }
     },
     setBoosting: (nextBoosting) => {
@@ -370,6 +482,7 @@ export function createGameAudio(
       bgmPlayAttempts,
       bgmPlayFailures,
       gateCues,
+      wingFlapCues,
       boostCues,
       finishCues,
     }),
@@ -378,7 +491,7 @@ export function createGameAudio(
         return
       }
       disposed = true
-      stopActiveOscillators()
+      stopActiveSources()
       pauseMusic()
       if (musicElement !== null) {
         musicPositionSeconds = getMusicPositionSeconds()
@@ -394,6 +507,7 @@ export function createGameAudio(
         void context.close().catch(() => undefined)
       }
       context = null
+      noiseBuffer = null
       unlocked = false
     },
   }

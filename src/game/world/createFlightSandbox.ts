@@ -13,7 +13,11 @@ import { createWorld, type WorldDebugSnapshot } from './createWorld'
 import { getCollisionCameraOffset } from './cameraFeedback'
 import type { CourseCheckpoint } from './course'
 import { SKYKNOT_COURSE } from './course'
-import { createDragonPoseState, stepDragonPose } from './dragonPose'
+import {
+  createDragonPoseState,
+  didWingDownstrokeStart,
+  stepDragonPose,
+} from './dragonPose'
 import type { RenderQualityBudget } from '../quality/qualityPolicy'
 
 export interface FlightSandboxPalette extends DragonPalette {
@@ -75,7 +79,7 @@ export interface FlightSandbox {
     activeGateIndex?: number,
     collisionFeedbackSeconds?: number,
     presentation?: 'ready' | 'countdown' | 'race' | 'explore',
-  ) => void
+  ) => FlightSandboxStepResult
   triggerGatePass: (checkpointIndex: number) => void
   gateProjection: (viewportHeight: number) => {
     readonly point: ProjectedPoint | null
@@ -85,6 +89,10 @@ export interface FlightSandbox {
   setQuality: (quality: RenderQualityBudget) => void
   dispose: () => void
   debugSnapshot?: (flight: FlightState) => FlightSandboxDebugSnapshot
+}
+
+export interface FlightSandboxStepResult {
+  readonly wingDownstrokeStarted: boolean
 }
 
 interface WindThread {
@@ -777,7 +785,8 @@ export function createFlightSandbox(
     flight: FlightState,
     fixedDt: number,
     collisionFeedbackSeconds: number,
-  ): void => {
+  ): boolean => {
+    const previousWingFlapRadians = dragonPose.wingFlapRadians
     if (fixedDt > 0) {
       characterAnimationSeconds += fixedDt
       dragonPose = stepDragonPose(
@@ -792,7 +801,11 @@ export function createFlightSandbox(
         fixedDt,
       )
     }
-    dragon.update(flight, dragonPose, characterAnimationSeconds)
+    dragon.update(flight, dragonPose)
+    return didWingDownstrokeStart(
+      previousWingFlapRadians,
+      dragonPose.wingFlapRadians,
+    )
   }
 
   const updateCamera = (
@@ -903,7 +916,7 @@ export function createFlightSandbox(
       collisionFeedbackSeconds = 0,
       presentation = 'race',
     ) => {
-      updateDragon(
+      const wingDownstrokeStarted = updateDragon(
         flight,
         fixedDt,
         collisionFeedbackSeconds,
@@ -919,6 +932,7 @@ export function createFlightSandbox(
         presentation,
       )
       world.update(simulationSeconds)
+      return { wingDownstrokeStarted }
     },
     triggerGatePass: (checkpointIndex) => {
       const passedGate = gates[checkpointIndex]
