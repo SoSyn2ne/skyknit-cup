@@ -7,7 +7,7 @@ interface AudioSnapshot {
   readonly unlocked: boolean
   readonly muted: boolean
   readonly musicVolume: number
-  readonly explorationActive: boolean
+  readonly musicActive: boolean
   readonly pageVisible: boolean
   readonly bgmCreated: boolean
   readonly bgmPlaying: boolean
@@ -55,7 +55,7 @@ test('gates generated audio behind gesture, edges, and mute', async ({
     unlocked: false,
     muted: false,
     musicVolume: 0.35,
-    explorationActive: false,
+    musicActive: false,
     pageVisible: true,
     bgmCreated: false,
     bgmPlaying: false,
@@ -72,6 +72,10 @@ test('gates generated audio behind gesture, edges, and mute', async ({
     .poll(async () => (await readAudio(page))?.unlocked)
     .toBe(true)
   await expect.poll(() => readPhase(page), { timeout: 6_000 }).toBe('racing')
+  await expect.poll(async () => readAudio(page)).toMatchObject({
+    musicActive: true,
+    bgmPlaying: true,
+  })
 
   await page.keyboard.down('Space')
   await expect
@@ -224,7 +228,7 @@ test('exposes BGM settings on the ready screen without starting playback', async
   })
 })
 
-test('streams, controls, persists, and stops exploration BGM', async ({
+test('streams, controls, persists, and keeps game BGM across modes', async ({
   page,
 }, testInfo) => {
   test.skip(
@@ -251,7 +255,7 @@ test('streams, controls, persists, and stops exploration BGM', async ({
     .poll(async () => (await readAudio(page))?.bgmPlaying)
     .toBe(true)
   await expect.poll(async () => readAudio(page)).toMatchObject({
-    explorationActive: true,
+    musicActive: true,
     musicVolume: 0.35,
     bgmCreated: true,
     bgmPlayFailures: 0,
@@ -310,17 +314,20 @@ test('streams, controls, persists, and stops exploration BGM', async ({
   await page.getByRole('button', { name: '일시정지' }).click()
   await page.getByRole('button', { name: '미션 선택으로' }).click()
   await expect.poll(async () => readAudio(page)).toMatchObject({
-    explorationActive: false,
-    bgmPlaying: false,
+    musicActive: true,
+    bgmPlaying: true,
   })
   expect(failedAudioResponses).toEqual([])
 
   await page.reload()
-  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await page.getByRole('button', { name: '비행 시작' }).click()
   await expect(page.locator('[data-explore-music-volume="true"]')).toHaveValue(
     '60',
   )
   await expect
     .poll(async () => (await readAudio(page))?.musicVolume)
     .toBe(0.6)
+  await expect
+    .poll(async () => (await readAudio(page))?.bgmPlaying)
+    .toBe(true)
 })

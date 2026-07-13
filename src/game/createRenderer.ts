@@ -434,8 +434,8 @@ export function createRenderer(
     if (gameMode === 'explore') {
       flightState = explorationState.flight
     }
-    gameAudio.setExplorationActive(gameMode === 'explore')
-    if (recovery?.gameMode === 'explore') {
+    gameAudio.setMusicActive(recovery !== undefined)
+    if (recovery !== undefined) {
       void gameAudio.unlock()
     }
     let outOfBoundsTracker: OutOfBoundsTracker = {
@@ -634,7 +634,7 @@ export function createRenderer(
     const startRaceFromExplore = (): void => {
       syncExplorationPersistence()
       gameMode = 'race'
-      gameAudio.setExplorationActive(false)
+      gameAudio.setMusicActive(true)
       coinRunState = createCoinRunState()
       coinRunIsNewBest = false
       explorationPaused = false
@@ -725,7 +725,8 @@ export function createRenderer(
     const raceHud = createRaceHud(host, {
       start: () => {
         gameMode = 'race'
-        gameAudio.setExplorationActive(false)
+        gameAudio.setMusicActive(true)
+        void gameAudio.unlock()
         previousBestTimeMs = raceState.persistent.bestTimeMs
         raceState = transitionRace(raceState, {
           type: 'START',
@@ -733,7 +734,7 @@ export function createRenderer(
         })
       },
       startExplore: () => {
-        gameAudio.setExplorationActive(true)
+        gameAudio.setMusicActive(true)
         void gameAudio.unlock()
         gameMode = 'explore'
         explorationPaused = false
@@ -802,7 +803,7 @@ export function createRenderer(
       returnToMissions: () => {
         syncExplorationPersistence()
         gameMode = 'race'
-        gameAudio.setExplorationActive(false)
+        gameAudio.setMusicActive(true)
         coinRunState = createCoinRunState()
         coinRunIsNewBest = false
         explorationPaused = false
@@ -938,7 +939,7 @@ export function createRenderer(
     const handleContextLost = (event: Event): void => {
       event.preventDefault()
       renderer.setAnimationLoop(null)
-      gameAudio.setExplorationActive(false)
+      gameAudio.setMusicActive(false)
       if (gameMode === 'explore') syncExplorationPersistence(false)
       onContextLost({
         raceState: prepareRaceForRecovery(raceState),
@@ -984,6 +985,8 @@ export function createRenderer(
         )
 
         if (actions.start && raceState.phase === 'ready') {
+          gameAudio.setMusicActive(true)
+          void gameAudio.unlock()
           previousBestTimeMs = raceState.persistent.bestTimeMs
           raceState = transitionRace(raceState, {
             type: 'START',
@@ -1397,7 +1400,7 @@ export function createRenderer(
           qaExploreRegion: (regionId: OpenWorldRegionId): void => {
             const region = getRegionById(regionId)
             gameMode = 'explore'
-            gameAudio.setExplorationActive(true)
+            gameAudio.setMusicActive(true)
             explorationPaused = false
             mapOpen = false
             coinRunState = createCoinRunState()
@@ -1432,7 +1435,7 @@ export function createRenderer(
           qaExploreChallenge: (): void => {
             const hub = getRegionById('festival-hub')
             gameMode = 'explore'
-            gameAudio.setExplorationActive(true)
+            gameAudio.setMusicActive(true)
             explorationPaused = false
             coinRunState = createCoinRunState()
             coinRunIsNewBest = false
@@ -1463,7 +1466,7 @@ export function createRenderer(
             const coin = course.coins[index]
             if (coin === undefined) return
             gameMode = 'explore'
-            gameAudio.setExplorationActive(true)
+            gameAudio.setMusicActive(true)
             explorationPaused = false
             mapOpen = false
             if (index === 0) {

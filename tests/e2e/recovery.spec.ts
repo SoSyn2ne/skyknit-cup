@@ -154,7 +154,7 @@ test('uses a visible non-blocking fallback when the GLB resource fails', async (
   })
 })
 
-test('restores exploration BGM from the context-loss retry gesture', async ({
+test('restores game BGM from the context-loss retry gesture', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
@@ -186,14 +186,14 @@ test('restores exploration BGM from the context-loss retry gesture', async ({
         ? null
         : {
             gameMode: snapshot.gameMode,
-            explorationActive: snapshot.audio.explorationActive,
+            musicActive: snapshot.audio.musicActive,
             bgmPlaying: snapshot.audio.bgmPlaying,
             bgmPlayFailures: snapshot.audio.bgmPlayFailures,
           }
     })
     .toEqual({
       gameMode: 'explore',
-      explorationActive: true,
+      musicActive: true,
       bgmPlaying: true,
       bgmPlayFailures: 0,
     })

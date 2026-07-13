@@ -151,7 +151,7 @@ describe('generated game audio', () => {
       unlocked: false,
       muted: false,
       musicVolume: 0.35,
-      explorationActive: false,
+      musicActive: false,
       pageVisible: true,
       bgmCreated: false,
       bgmPlaying: false,
@@ -257,7 +257,7 @@ describe('generated game audio', () => {
     expect(context.closes).toBe(1)
   })
 
-  it('streams the looping exploration master only after a user gesture', async () => {
+  it('streams the looping game master only after flight start and a user gesture', async () => {
     const context = new FakeAudioContext()
     const music = new FakeMusicElement()
     const audio = createGameAudio(
@@ -267,7 +267,7 @@ describe('generated game audio', () => {
       () => music as unknown as HTMLAudioElement,
     )
 
-    audio.setExplorationActive(true)
+    audio.setMusicActive(true)
     expect(music.plays).toBe(0)
 
     await audio.unlock()
@@ -279,7 +279,7 @@ describe('generated game audio', () => {
     expect(music.volume).toBe(0.35)
     expect(music.plays).toBe(1)
     expect(audio.debugSnapshot()).toMatchObject({
-      explorationActive: true,
+      musicActive: true,
       musicVolume: 0.35,
       bgmCreated: true,
       bgmPlaying: true,
@@ -298,7 +298,7 @@ describe('generated game audio', () => {
       () => music as unknown as HTMLAudioElement,
     )
 
-    audio.setExplorationActive(true)
+    audio.setMusicActive(true)
     await audio.unlock()
 
     expect(music.src).toMatch(/sovereign-of-the-sunrise-skies-loop\.m4a$/)
@@ -316,7 +316,7 @@ describe('generated game audio', () => {
 
     audio.setMusicPositionSeconds(47.25)
     audio.setMusicPositionSeconds(Number.NaN)
-    audio.setExplorationActive(true)
+    audio.setMusicActive(true)
     await audio.unlock()
 
     expect(music.currentTime).toBe(47.25)
@@ -332,7 +332,7 @@ describe('generated game audio', () => {
       0.35,
       () => music as unknown as HTMLAudioElement,
     )
-    audio.setExplorationActive(true)
+    audio.setMusicActive(true)
     await audio.unlock()
     await Promise.resolve()
 
@@ -352,7 +352,7 @@ describe('generated game audio', () => {
     expect(music.volume).toBe(0.62)
   })
 
-  it('pauses BGM while hidden or outside exploration and resumes safely', async () => {
+  it('keeps BGM through mode changes but pauses while hidden or inactive', async () => {
     const context = new FakeAudioContext()
     const music = new FakeMusicElement()
     const audio = createGameAudio(
@@ -361,7 +361,7 @@ describe('generated game audio', () => {
       0.35,
       () => music as unknown as HTMLAudioElement,
     )
-    audio.setExplorationActive(true)
+    audio.setMusicActive(true)
     await audio.unlock()
     await Promise.resolve()
 
@@ -371,7 +371,11 @@ describe('generated game audio', () => {
     await Promise.resolve()
     expect(music.plays).toBe(2)
 
-    audio.setExplorationActive(false)
+    audio.setMusicActive(true)
+    expect(music.plays).toBe(2)
+    expect(music.paused).toBe(false)
+
+    audio.setMusicActive(false)
     expect(music.paused).toBe(true)
     expect(audio.debugSnapshot().bgmPlaying).toBe(false)
   })
@@ -386,7 +390,7 @@ describe('generated game audio', () => {
       0.35,
       () => music as unknown as HTMLAudioElement,
     )
-    audio.setExplorationActive(true)
+    audio.setMusicActive(true)
 
     await expect(audio.unlock()).resolves.toBeUndefined()
     await Promise.resolve()
@@ -407,7 +411,7 @@ describe('generated game audio', () => {
       0.35,
       () => music as unknown as HTMLAudioElement,
     )
-    audio.setExplorationActive(true)
+    audio.setMusicActive(true)
     await audio.unlock()
 
     audio.setMuted(true)
@@ -433,7 +437,7 @@ describe('generated game audio', () => {
       0.35,
       () => music as unknown as HTMLAudioElement,
     )
-    audio.setExplorationActive(true)
+    audio.setMusicActive(true)
     await audio.unlock()
 
     audio.dispose()

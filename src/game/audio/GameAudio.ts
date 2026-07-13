@@ -3,7 +3,7 @@ export interface GameAudioDebugSnapshot {
   readonly unlocked: boolean
   readonly muted: boolean
   readonly musicVolume: number
-  readonly explorationActive: boolean
+  readonly musicActive: boolean
   readonly pageVisible: boolean
   readonly bgmCreated: boolean
   readonly bgmPlaying: boolean
@@ -21,7 +21,7 @@ export interface GameAudio {
   setMusicVolume(volume: number): void
   setMusicPositionSeconds(positionSeconds: number): void
   getMusicPositionSeconds(): number
-  setExplorationActive(active: boolean): void
+  setMusicActive(active: boolean): void
   setPageVisible(visible: boolean): void
   playGate(): void
   setBoosting(boosting: boolean): void
@@ -68,7 +68,7 @@ export function createGameAudio(
     Number.isFinite(initialMusicVolume) && initialMusicVolume >= 0 && initialMusicVolume <= 1
       ? initialMusicVolume
       : 0.35
-  let explorationActive = false
+  let musicActive = false
   let pageVisible = true
   let gestureUnlocked = false
   let musicElement: HTMLAudioElement | null = null
@@ -88,7 +88,7 @@ export function createGameAudio(
   const shouldPlayMusic = (): boolean =>
     !disposed &&
     gestureUnlocked &&
-    explorationActive &&
+    musicActive &&
     pageVisible &&
     !muted &&
     musicVolume > 0
@@ -303,8 +303,8 @@ export function createGameAudio(
       }
     },
     getMusicPositionSeconds,
-    setExplorationActive: (active) => {
-      explorationActive = active
+    setMusicActive: (active) => {
+      musicActive = active
       syncMusicPlayback()
     },
     setPageVisible: (visible) => {
@@ -362,7 +362,7 @@ export function createGameAudio(
       unlocked,
       muted,
       musicVolume,
-      explorationActive,
+      musicActive,
       pageVisible,
       bgmCreated: musicElement !== null,
       bgmPlaying,
