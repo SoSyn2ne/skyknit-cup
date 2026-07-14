@@ -40,6 +40,32 @@ async function settleLoads(): Promise<void> {
 }
 
 describe('open-world region GLB streaming', () => {
+  it('tints festival lanterns away from the collectible coin palette', async () => {
+    const sharedGold = new THREE.MeshStandardMaterial({ color: 0xffd96a })
+    const asset = new THREE.Group()
+    const accent = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), sharedGold)
+    accent.name = 'FestivalAccents__festival_hub_high_Mesh'
+    const lanterns = new THREE.Mesh(
+      new THREE.SphereGeometry(1),
+      sharedGold,
+    )
+    lanterns.name = 'FestivalLanterns__festival_hub_high_Mesh'
+    asset.add(accent, lanterns)
+    const world = createOpenWorld(new THREE.Scene(), {
+      assetLoader: { load: async () => asset },
+    })
+
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    await settleLoads()
+
+    expect(lanterns.material).not.toBe(sharedGold)
+    expect((lanterns.material as THREE.MeshStandardMaterial).color.getHex())
+      .toBe(0xd85a43)
+    expect(accent.material).toBe(sharedGold)
+
+    world.dispose()
+  })
+
   it('loads, retains, and removes the current quality asset by distance', async () => {
     const scene = new THREE.Scene()
     const load = vi.fn((url: string) =>

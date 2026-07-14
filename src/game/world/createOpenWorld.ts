@@ -57,6 +57,8 @@ const REGION_BY_ID = new Map(
 )
 const HIGH_LOD_ENTER_RADIUS = 220
 const HIGH_LOD_EXIT_RADIUS = 260
+const FESTIVAL_LANTERN_COLOR = 0xd85a43
+const FESTIVAL_LANTERN_EMISSIVE = 0x6b1d14
 
 function assetUrl(
   regionId: OpenWorldRegionId,
@@ -129,6 +131,38 @@ function applyShadowPolicy(
       object.castShadow = enabled
       object.receiveShadow = enabled
     }
+  })
+}
+
+function applyFestivalLanternStyle(
+  root: THREE.Object3D,
+  regionId: OpenWorldRegionId,
+): void {
+  if (regionId !== 'festival-hub') return
+
+  const styleMaterial = (material: THREE.Material): THREE.Material => {
+    const styled = material.clone()
+    styled.name = `${material.name || 'FestivalLantern'}_Red`
+    if (styled instanceof THREE.MeshStandardMaterial) {
+      styled.color.setHex(FESTIVAL_LANTERN_COLOR)
+      styled.emissive.setHex(FESTIVAL_LANTERN_EMISSIVE)
+      styled.emissiveIntensity = 0.32
+      styled.metalness = Math.min(styled.metalness, 0.08)
+      styled.roughness = Math.max(styled.roughness, 0.62)
+    }
+    return styled
+  }
+
+  root.traverse((object) => {
+    if (
+      !(object instanceof THREE.Mesh) ||
+      !object.name.includes('FestivalLanterns')
+    ) {
+      return
+    }
+    object.material = Array.isArray(object.material)
+      ? object.material.map(styleMaterial)
+      : styleMaterial(object.material)
   })
 }
 
@@ -212,6 +246,7 @@ export function createOpenWorld(
           return
         }
         removeCurrentAsset(entry)
+        applyFestivalLanternStyle(asset, entry.region.id)
         applyShadowPolicy(asset, requestedLod)
         entry.asset = asset
         entry.container.add(asset)

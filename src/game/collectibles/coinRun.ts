@@ -1,7 +1,11 @@
 import { findSweptSphereCollision } from '../collision/obstacleCollision'
 import type { Vec3Value } from '../flight/flightModel'
 import type { OpenWorldRegionId } from '../world/openWorldRegions'
-import { COIN_COURSES, getCoinCourse } from './coinCourses'
+import {
+  COIN_COURSES,
+  getCoinCourse,
+  type SkyCoinDefinition,
+} from './coinCourses'
 
 export type CoinRunPhase = 'idle' | 'running' | 'completed'
 
@@ -34,6 +38,20 @@ export function createCoinRunState(): CoinRunState {
     finalElapsedMs: null,
     retryRemainingMs: 0,
   }
+}
+
+export function getCoinRunTarget(
+  state: CoinRunState,
+  currentRegionId: OpenWorldRegionId | null,
+  loadedRegionIds: readonly OpenWorldRegionId[],
+): SkyCoinDefinition | null {
+  if (state.phase === 'completed') return null
+
+  const regionId = state.phase === 'running' ? state.regionId : currentRegionId
+  if (regionId === null || !loadedRegionIds.includes(regionId)) return null
+
+  const coinIndex = state.phase === 'running' ? state.collectedCount : 0
+  return getCoinCourse(regionId).coins[coinIndex] ?? null
 }
 
 function result(

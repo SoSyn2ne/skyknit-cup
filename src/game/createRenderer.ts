@@ -9,6 +9,7 @@ import { GAME_TITLE } from './config'
 import { getCoinCourse } from './collectibles/coinCourses'
 import {
   createCoinRunState,
+  getCoinRunTarget,
   stepCoinRun,
   type CoinRunState,
   type CoinRunStepResult,
@@ -52,6 +53,7 @@ import {
   requestTakeoff,
   stepExplorationFlight,
   type ExplorationFlightState,
+  type ExplorationMovement,
 } from './exploration/explorationFlight'
 import { resolveExplorationObstacleCollision } from './exploration/explorationCollision'
 import {
@@ -108,7 +110,10 @@ import {
   createTouchControls,
   type TouchControls,
 } from './ui/TouchControls'
-import { createGateIndicator } from './ui/gateIndicator'
+import {
+  createGateIndicator,
+  type ProjectedGatePoint,
+} from './ui/gateIndicator'
 import {
   SKYKNOT_COURSE,
   START_ANCHOR,
@@ -352,6 +357,13 @@ function disposeScene(scene: THREE.Scene): void {
   }
 }
 
+function isCoinCollectionActive(
+  simulationActive: boolean,
+  movement: ExplorationMovement,
+): boolean {
+  return simulationActive && movement === 'airborne'
+}
+
 export function createRenderer(
   host: HTMLElement,
   onContextLost: (recovery: RendererRecoveryState) => void,
@@ -407,6 +419,8 @@ export function createRenderer(
     scene.fog = new THREE.Fog(palette.skyZenith, 120, 680)
 
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1_800)
+    const projectedCoin = new THREE.Vector3()
+    const projectedCoinCameraSpace = new THREE.Vector3()
     let recordStorage: Storage | null = null
 
     try {
@@ -1549,18 +1563,19 @@ export function createRenderer(
           flightState = explorationState.flight
           if (
             movementBeforeStep === 'airborne' &&
-            explorationState.movement === 'airborne'
+            isCoinCollectionActive(
+              explorationSimulationActive,
+              explorationState.movement,
+            )
           ) {
-            if (!mapOpen) {
-              applyCoinRunStep(
-                stepCoinRun(
-                  coinRunState,
-                  previousExplorationPosition,
-                  explorationState.flight.position,
-                  FIXED_STEP_SECONDS * 1_000,
-                ),
-              )
-            }
+            applyCoinRunStep(
+              stepCoinRun(
+                coinRunState,
+                previousExplorationPosition,
+                explorationState.flight.position,
+                FIXED_STEP_SECONDS * 1_000,
+              ),
+            )
             const discovery = stepFestivalDiscovery(
               { discoveredLandmarkIds, traversedWindZoneIds },
               previousExplorationPosition,
@@ -1773,16 +1788,26 @@ export function createRenderer(
         )
       }
       const openWorldSnapshot = openWorld.debugSnapshot()
+      const currentRegion = getCurrentRegion(explorationState.flight.position)
       openWorldActivities.update(
         visualSimulationSeconds,
         openWorldSnapshot.loadedRegionIds,
         explorationSimulationActive,
       )
+      const coinCollectionActive = isCoinCollectionActive(
+        explorationSimulationActive,
+        explorationState.movement,
+      )
+      const coinTarget = coinCollectionActive
+        ? getCoinRunTarget(
+            coinRunState,
+            currentRegion?.id ?? null,
+            openWorldSnapshot.loadedRegionIds,
+          )
+        : null
       coinCourseVisual.update(
-        coinRunState,
-        openWorldSnapshot.loadedRegionIds,
+        coinTarget,
         visualSimulationSeconds,
-        gameMode === 'explore',
       )
       fixedStepClock = consumed.clock
       hostFrames += 1
@@ -1796,6 +1821,35 @@ export function createRenderer(
       const gateIndicator = createGateIndicator(
         projectedGate.point,
         projectedDiameterCss,
+        { width: host.clientWidth, height: host.clientHeight },
+      )
+      let projectedCoinPoint: ProjectedGatePoint | null = null
+      let projectedCoinDiameterCss = 0
+      if (coinTarget !== null) {
+        projectedCoin.set(
+          coinTarget.position.x,
+          coinTarget.position.y,
+          coinTarget.position.z,
+        )
+        const distance = Math.max(0.001, projectedCoin.distanceTo(camera.position))
+        projectedCoinCameraSpace
+          .copy(projectedCoin)
+          .applyMatrix4(camera.matrixWorldInverse)
+        projectedCoin.project(camera)
+        projectedCoinPoint = {
+          x: projectedCoin.x,
+          y: projectedCoin.y,
+          z: projectedCoin.z,
+          behindCamera: projectedCoinCameraSpace.z > 0,
+        }
+        projectedCoinDiameterCss =
+          coinTarget.radius *
+          host.clientHeight /
+          (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * distance)
+      }
+      const coinIndicator = createGateIndicator(
+        projectedCoinPoint,
+        projectedCoinDiameterCss,
         { width: host.clientWidth, height: host.clientHeight },
       )
       raceHud.update({
@@ -1820,9 +1874,6 @@ export function createRenderer(
         skyLeague: raceState.persistent.skyLeague,
       })
       if (explorationHud !== null) {
-        const currentRegion = getCurrentRegion(
-          explorationState.flight.position,
-        )
         const journey = currentFestivalJourney()
         explorationHud.update({
           regionName: currentRegion?.name ?? '군도 사이',
@@ -1849,6 +1900,7 @@ export function createRenderer(
           coinLeagueResult: coinRunLeagueResult,
           skyLeague: raceState.persistent.skyLeague,
           coinLiveDeltaMs,
+          coinIndicator,
           selectedMissionId: raceState.mission.selectedMissionId,
           journey: {
             ...journey,

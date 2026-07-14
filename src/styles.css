@@ -168,7 +168,8 @@ button {
   transform: translate(-50%, -50%);
 }
 
-.race-hud__gate-guide {
+.race-hud__gate-guide,
+.exploration-hud__coin-guide {
   position: absolute;
   display: grid;
   width: 44px;

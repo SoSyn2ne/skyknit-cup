@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 
-import { COIN_COURSES } from '../collectibles/coinCourses'
-import type { CoinRunState } from '../collectibles/coinRun'
-import type { OpenWorldRegionId } from './openWorldRegions'
+import {
+  COIN_COURSES,
+  type SkyCoinDefinition,
+} from '../collectibles/coinCourses'
 
 export interface CoinCourseVisualSnapshot {
   readonly totalCount: number
@@ -13,20 +14,15 @@ export interface CoinCourseVisualSnapshot {
 
 export interface CoinCourseVisual {
   update(
-    state: CoinRunState,
-    loadedRegionIds: readonly OpenWorldRegionId[],
+    activeCoin: SkyCoinDefinition | null,
     simulationSeconds: number,
-    visible: boolean,
   ): void
   debugSnapshot(): CoinCourseVisualSnapshot
   dispose(): void
 }
 
-const ALL_COINS = COIN_COURSES.flatMap((course) =>
-  course.coins.map((coin) => ({ course, coin })),
-)
+const ALL_COINS = COIN_COURSES.flatMap((course) => course.coins)
 const ACTIVE_COLOR = new THREE.Color(0xffd96a)
-const FUTURE_COLOR = new THREE.Color(0x8c713a)
 const HIDDEN_SCALE = new THREE.Vector3(0, 0, 0)
 
 export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
@@ -39,6 +35,10 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
     metalness: 0.55,
     roughness: 0.32,
     vertexColors: true,
+    transparent: true,
+    opacity: 0.96,
+    depthTest: false,
+    depthWrite: false,
   })
   const mesh = new THREE.InstancedMesh(
     geometry,
@@ -46,7 +46,7 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
     ALL_COINS.length,
   )
   mesh.name = 'RC6_SkyCoins'
-  mesh.castShadow = true
+  mesh.renderOrder = 20
   mesh.frustumCulled = false
   scene.add(mesh)
 
@@ -63,31 +63,16 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
   }
 
   return {
-    update: (state, loadedRegionIds, simulationSeconds, visible) => {
-      const loaded = new Set(loadedRegionIds)
+    update: (activeCoin, simulationSeconds) => {
       let visibleCount = 0
       let activeCoinId: string | null = null
 
-      ALL_COINS.forEach(({ course, coin }, instanceIndex) => {
-        const activeCourse = state.regionId === course.regionId
-        const collected =
-          activeCourse && coin.index < state.collectedCount
-        const completedCourse = activeCourse && state.phase === 'completed'
-        const show =
-          visible &&
-          loaded.has(course.regionId) &&
-          !collected &&
-          !completedCourse
-        const active =
-          show &&
-          ((state.phase === 'idle' && coin.index === 0) ||
-            (state.phase === 'running' &&
-              activeCourse &&
-              coin.index === state.collectedCount))
+      ALL_COINS.forEach((coin, instanceIndex) => {
+        const active = activeCoin !== null && coin.id === activeCoin.id
 
-        if (show) {
+        if (active) {
           visibleCount += 1
-          if (active && activeCoinId === null) activeCoinId = coin.id
+          if (activeCoinId === null) activeCoinId = coin.id
           position.set(
             coin.position.x,
             coin.position.y + Math.sin(simulationSeconds * 2.4 + coin.index) * 0.38,
@@ -99,14 +84,12 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
             0,
           )
           rotation.setFromEuler(euler)
-          const size = active ? 1 : 0.76
-          scale.set(size, size, size)
-          mesh.setColorAt(instanceIndex, active ? ACTIVE_COLOR : FUTURE_COLOR)
+          scale.set(1, 1, 1)
+          mesh.setColorAt(instanceIndex, ACTIVE_COLOR)
         } else {
           position.set(0, 0, 0)
           rotation.identity()
           scale.copy(HIDDEN_SCALE)
-          mesh.setColorAt(instanceIndex, FUTURE_COLOR)
         }
         matrix.compose(position, rotation, scale)
         mesh.setMatrixAt(instanceIndex, matrix)

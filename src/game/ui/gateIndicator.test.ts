@@ -40,6 +40,17 @@ describe('active gate edge indicator', () => {
     expect(indicator.top).toBeLessThan(viewport.height - 32)
   })
 
+  it('keeps a behind-right target on the right side of the viewport', () => {
+    const indicator = createGateIndicator(
+      { x: -0.2, y: 0, z: 1.02, behindCamera: true },
+      80,
+      viewport,
+    )
+
+    expect(indicator.show).toBe(true)
+    expect(indicator.left).toBe(viewport.width - 32)
+  })
+
   it('keeps the marker hidden when no active gate projection exists', () => {
     const indicator = createGateIndicator(null, 0, viewport)
 

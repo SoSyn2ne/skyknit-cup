@@ -1,0 +1,31 @@
+{
+  "scope": "coin-collection-fix",
+  "active": false,
+  "phase": "completed",
+  "completed_at": "2026-07-14T18:20:01.3288436+09:00",
+  "iteration": 5,
+  "threshold": 90,
+  "score": 96,
+  "passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "reasoning": "The currently collectible target is the single source for both the 3D mesh and edge guide, disappears whenever collection is disabled, and is no longer confused with decorative lanterns because the lantern palette is distinctly red.",
+  "differences": [
+    "Decorative festival lanterns now read as red festival props instead of gold course coins.",
+    "The edge guide communicates direction rather than distance, consistent with the existing race-gate visual language."
+  ],
+  "suggestions": [
+    "Preserve the shared target contract when adding future coin-run variants.",
+    "Preserve the red lantern and gold collectible palette separation in future world assets."
+  ],
+  "next_actions": [],
+  "automated_verification": {
+    "unit": "41 files, 432 tests passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "build": "passed with the existing Vite chunk-size warning",
+    "coin_e2e": "7 passed with 8 expected project skips across five required viewports",
+    "production_e2e": "5 required viewports passed",
+    "independent_verifier": "passed with no functional blockers"
+  }
+}

@@ -2,6 +2,7 @@ export interface ProjectedGatePoint {
   readonly x: number
   readonly y: number
   readonly z: number
+  readonly behindCamera?: boolean
 }
 
 export interface IndicatorViewport {
@@ -63,6 +64,11 @@ export function createGateIndicator(
 
   let directionX = projectedGate.x
   let directionY = -projectedGate.y
+
+  if (projectedGate.behindCamera === true) {
+    directionX *= -1
+    directionY *= -1
+  }
 
   if (Math.hypot(directionX, directionY) <= Number.EPSILON) {
     directionX = 0

@@ -4,6 +4,7 @@ import { COIN_COURSES } from './coinCourses'
 import {
   COIN_RETRY_DELAY_MS,
   createCoinRunState,
+  getCoinRunTarget,
   stepCoinRun,
 } from './coinRun'
 
@@ -26,6 +27,31 @@ function crossCoin(index: number, margin = 1) {
 }
 
 describe('sky-coin run rules', () => {
+  it('selects one current-region target when loaded regions overlap', () => {
+    expect(
+      getCoinRunTarget(
+        createCoinRunState(),
+        'cloud-ruins',
+        ['festival-hub', 'cloud-ruins'],
+      )?.id,
+    ).toBe('cloud-ruins-coin-1')
+
+    expect(
+      getCoinRunTarget(
+        {
+          phase: 'running',
+          regionId: 'festival-hub',
+          collectedCount: 1,
+          elapsedMs: 500,
+          finalElapsedMs: null,
+          retryRemainingMs: 0,
+        },
+        'cloud-ruins',
+        ['festival-hub', 'cloud-ruins'],
+      )?.id,
+    ).toBe('festival-hub-coin-2')
+  })
+
   it('starts at coin one with a zero timer and ignores a later coin', () => {
     const idle = createCoinRunState()
     const wrong = crossCoin(1)

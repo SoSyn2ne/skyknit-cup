@@ -22,6 +22,7 @@ import {
   formatRaceTime,
   updateCachedDom,
 } from './RaceHud'
+import type { GateIndicatorState } from './gateIndicator'
 
 export interface FestivalJourneyHudView extends FestivalJourney {
   readonly publicLandmarkCount: number
@@ -48,6 +49,7 @@ export interface ExplorationHudView {
   readonly coinLeagueResult: RaceLeaguePlacement | null
   readonly skyLeague: SkyLeagueRecords
   readonly coinLiveDeltaMs: number | null
+  readonly coinIndicator: GateIndicatorState
   readonly selectedMissionId: MissionId
   readonly journey: FestivalJourneyHudView
   readonly discoveryNotice: string | null
@@ -252,6 +254,12 @@ export function createExplorationHud(
     coinLeague,
   )
 
+  const coinGuide = document.createElement('div')
+  coinGuide.className = 'exploration-hud__coin-guide'
+  coinGuide.dataset.coinGuide = 'true'
+  coinGuide.setAttribute('aria-hidden', 'true')
+  coinGuide.textContent = '➤'
+
   const journey = document.createElement('div')
   journey.className = 'exploration-hud__journey'
   journey.dataset.exploreJourney = 'true'
@@ -366,6 +374,7 @@ export function createExplorationHud(
   root.append(
     region,
     coinRun,
+    coinGuide,
     journey,
     destination,
     controls,
@@ -442,6 +451,14 @@ export function createExplorationHud(
       coinRun.dataset.phase = view.coinRun.phase
       coinRun.dataset.newBest = String(view.coinRunIsNewBest)
       coinRun.title = view.coinRunIsNewBest ? '지역 최고 기록' : '하늘동전 기록 도전'
+      coinGuide.hidden =
+        view.paused ||
+        view.mapOpen ||
+        view.movement !== 'airborne' ||
+        !view.coinIndicator.show
+      coinGuide.style.left = `${view.coinIndicator.left}px`
+      coinGuide.style.top = `${view.coinIndicator.top}px`
+      coinGuide.style.transform = `translate(-50%, -50%) rotate(${view.coinIndicator.angleRadians}rad)`
       const completedPlacement =
         view.coinRun.phase === 'completed' ? view.coinLeagueResult : null
       const nextCoinResultSignature =
