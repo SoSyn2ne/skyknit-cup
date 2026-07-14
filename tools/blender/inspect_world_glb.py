@@ -10,12 +10,35 @@ import sys
 from pathlib import Path
 
 import bpy
+from mathutils import Vector
+from mathutils.bvhtree import BVHTree
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ASSET_ROOT = ROOT / "public" / "assets" / "models" / "world"
 ASSET_VERSION = "0.7"
 GEOMETRY_STYLE = "handcrafted-layered"
+FESTIVAL_ROUTE_CLEARANCE = 1.2
+FESTIVAL_ROUTE_SAMPLE_STEP = 0.25
+
+# Three.js local coordinates, before the festival region container offset.
+FESTIVAL_COIN_ROUTE = (
+    (0.0, 9.0, 26.0),
+    (16.0, 11.0, 18.0),
+    (28.0, 13.0, 4.0),
+    (34.0, 14.0, -10.0),
+    (22.0, 16.0, -28.0),
+    (2.0, 14.0, -36.0),
+    (-14.0, 16.0, -26.0),
+    (-20.0, 20.0, -14.0),
+    (-24.0, 15.0, 4.0),
+    (-28.0, 14.0, 16.0),
+)
+
+PBR_MATERIAL_CONTRACT = {
+    "M_World_Gold": (0.34, 0.14, 0.05),
+    "M_World_Rune": (0.30, 0.04, 0.15),
+}
 
 LANDING_PAD_ORIGINS = {
     "festival-hub": (0.0, 0.0, -3.15),
@@ -29,6 +52,10 @@ SEMANTIC_ORIGINS = {
         "FestivalTower": (-18.0, 14.0, 2.3),
         "FestivalFlags": (33.6673, 4.7445, 3.4),
         "RaceArch": (25.8, 10.0, 5.0),
+        "WindLoom": (16.0, -18.0, 16.0),
+        "SecretGrotto": (-42.0, -18.0, 0.0),
+        "TowerLandingPad": (-24.0, 22.0, 18.0),
+        "GrottoLandingPad": (-42.0, -28.0, -2.0),
     },
     "wind-canyon": {
         "CanyonCliffs": (-38.0, -68.0, -22.0),
@@ -49,6 +76,10 @@ REGION_NODES = {
         "FestivalTower",
         "FestivalFlags",
         "RaceArch",
+        "WindLoom",
+        "SecretGrotto",
+        "TowerLandingPad",
+        "GrottoLandingPad",
     ),
     "wind-canyon": (
         "CanyonCliffs",
@@ -62,6 +93,65 @@ REGION_NODES = {
         "FloatingSlabs",
     ),
 }
+
+SEMANTIC_NODE_TYPES = {
+    "festival-hub": {
+        "WindLoom": "MESH",
+        "SecretGrotto": "MESH",
+        "TowerLandingPad": "EMPTY",
+        "GrottoLandingPad": "EMPTY",
+        "FestivalAccents": "MESH",
+    },
+}
+
+EXPECTED_NODE_METADATA = {
+    "festival-hub": {
+        "FestivalAirfield": {
+            "collision_proxy": "layered-island-clear-runway",
+        },
+        "FestivalTower": {"collision_proxy": "spire-column"},
+        "RaceArch": {"collision_proxy": "twin-pylons-clear-center"},
+        "WindLoom": {"collision_proxy": "twin-pylons-clear-center"},
+        "SecretGrotto": {"collision_proxy": "curved-shell-clear-cavern"},
+        "LandingPad": {"landing_surfaces": "hub,tower,grotto"},
+        "FestivalAccents": {"accent_material_contract": "gold,rune"},
+    },
+}
+
+
+def gltf_to_blender(point: tuple[float, float, float]) -> Vector:
+    return Vector((point[0], -point[2], point[1]))
+
+
+def build_world_bvhs(meshes: list[bpy.types.Object]) -> list[BVHTree]:
+    trees: list[BVHTree] = []
+    for obj in meshes:
+        vertices = [obj.matrix_world @ vertex.co for vertex in obj.data.vertices]
+        polygons = [tuple(polygon.vertices) for polygon in obj.data.polygons]
+        trees.append(BVHTree.FromPolygons(vertices, polygons, all_triangles=False))
+    return trees
+
+
+def nearest_surface_distance(point: Vector, trees: list[BVHTree]) -> float:
+    distances = [
+        result[3]
+        for tree in trees
+        if (result := tree.find_nearest(point)) is not None
+    ]
+    return min(distances, default=math.inf)
+
+
+def route_segment_clearance(
+    start: Vector,
+    end: Vector,
+    trees: list[BVHTree],
+) -> float:
+    length = (end - start).length
+    sample_count = max(1, math.ceil(length / FESTIVAL_ROUTE_SAMPLE_STEP))
+    return min(
+        nearest_surface_distance(start.lerp(end, index / sample_count), trees)
+        for index in range(sample_count + 1)
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -121,18 +211,28 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
             non_finite_transform_nodes.append(obj.name)
 
     root = bpy.data.objects.get("RegionRoot")
-    required_nodes = ("RegionRoot", "LandingPad", *REGION_NODES[region_id])
+    extra_required_nodes = (
+        ("FestivalAccents",) if region_id == "festival-hub" else ()
+    )
+    required_nodes = (
+        "RegionRoot",
+        "LandingPad",
+        *REGION_NODES[region_id],
+        *extra_required_nodes,
+    )
     missing_nodes = [
         node for node in required_nodes if bpy.data.objects.get(node) is None
     ]
-    materials = sorted(
+    material_objects = sorted(
         {
-            material.name
+            material
             for obj in meshes
             for material in obj.data.materials
             if material is not None
-        }
+        },
+        key=lambda material: material.name,
     )
+    materials = [material.name for material in material_objects]
     errors: list[str] = []
     minimum_triangles = 12_000 if lod == "high" else 3_000
     maximum_triangles = 60_000 if lod == "high" else 25_000
@@ -159,6 +259,109 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
         )
     if missing_nodes:
         errors.append("missing nodes: " + ", ".join(missing_nodes))
+
+    semantic_types: dict[str, str] = {}
+    for node, expected_type in SEMANTIC_NODE_TYPES.get(region_id, {}).items():
+        obj = bpy.data.objects.get(node)
+        if obj is None:
+            continue
+        semantic_types[node] = obj.type
+        if obj.type != expected_type:
+            errors.append(
+                f"{node} type changed: {obj.type} (expected {expected_type})"
+            )
+
+    semantic_metadata: dict[str, dict[str, object]] = {}
+    for node, expected_values in EXPECTED_NODE_METADATA.get(region_id, {}).items():
+        obj = bpy.data.objects.get(node)
+        if obj is None:
+            continue
+        actual_values = {
+            key: obj.get(key)
+            for key in expected_values
+        }
+        semantic_metadata[node] = actual_values
+        for key, expected_value in expected_values.items():
+            if actual_values[key] != expected_value:
+                errors.append(
+                    f"{node} metadata changed: {key}={actual_values[key]!r}"
+                )
+
+    material_pbr: dict[str, dict[str, float]] = {}
+    accent_materials: list[str] = []
+    if region_id == "festival-hub":
+        accent_obj = bpy.data.objects.get("FestivalAccents")
+        if accent_obj is not None and accent_obj.type == "MESH":
+            accent_materials = sorted(
+                material.name.split(".", 1)[0]
+                for material in accent_obj.data.materials
+                if material is not None
+            )
+            if accent_materials != sorted(PBR_MATERIAL_CONTRACT):
+                errors.append(
+                    "FestivalAccents materials changed: "
+                    + ", ".join(accent_materials)
+                )
+
+        for base_name, (roughness, metallic, emission_minimum) in (
+            PBR_MATERIAL_CONTRACT.items()
+        ):
+            material = next(
+                (
+                    candidate
+                    for candidate in material_objects
+                    if candidate.name == base_name
+                    or candidate.name.startswith(base_name + ".")
+                ),
+                None,
+            )
+            if material is None:
+                errors.append(f"missing PBR accent material: {base_name}")
+                continue
+            shader = (
+                material.node_tree.nodes.get("Principled BSDF")
+                if material.use_nodes and material.node_tree is not None
+                else None
+            )
+            if shader is None:
+                errors.append(f"missing PBR shader: {base_name}")
+                continue
+            actual_roughness = float(shader.inputs["Roughness"].default_value)
+            actual_metallic = float(shader.inputs["Metallic"].default_value)
+            emission = shader.inputs["Emission Color"].default_value
+            emission_peak = max(float(channel) for channel in emission[:3])
+            material_pbr[base_name] = {
+                "roughness": round(actual_roughness, 4),
+                "metallic": round(actual_metallic, 4),
+                "emission_peak": round(emission_peak, 4),
+            }
+            if abs(actual_roughness - roughness) > 0.01:
+                errors.append(f"{base_name} roughness changed: {actual_roughness}")
+            if abs(actual_metallic - metallic) > 0.01:
+                errors.append(f"{base_name} metallic changed: {actual_metallic}")
+            if emission_peak < emission_minimum:
+                errors.append(f"{base_name} emission missing: {emission_peak}")
+
+    coin_mesh_clearance: list[float] = []
+    route_mesh_clearance: list[float] = []
+    if region_id == "festival-hub":
+        trees = build_world_bvhs(meshes)
+        route = [gltf_to_blender(point) for point in FESTIVAL_COIN_ROUTE]
+        for index, point in enumerate(route):
+            clearance = nearest_surface_distance(point, trees)
+            coin_mesh_clearance.append(round(clearance, 4))
+            if clearance < FESTIVAL_ROUTE_CLEARANCE:
+                errors.append(
+                    f"coin {index + 1} mesh clearance: {clearance:.4f}"
+                )
+        for index, (start, end) in enumerate(zip(route, route[1:])):
+            clearance = route_segment_clearance(start, end, trees)
+            route_mesh_clearance.append(round(clearance, 4))
+            if clearance < FESTIVAL_ROUTE_CLEARANCE:
+                errors.append(
+                    f"coin {index + 1}->{index + 2} route clearance: "
+                    f"{clearance:.4f}"
+                )
     if root is None:
         asset_version = None
         asset_license = None
@@ -249,6 +452,12 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
         "geometry_style": geometry_style,
         "landing_pad_origin": landing_pad_origin,
         "semantic_origins": semantic_origins,
+        "semantic_types": semantic_types,
+        "semantic_metadata": semantic_metadata,
+        "accent_materials": accent_materials,
+        "material_pbr": material_pbr,
+        "coin_mesh_clearance": coin_mesh_clearance,
+        "route_mesh_clearance": route_mesh_clearance,
         "errors": errors,
     }
 

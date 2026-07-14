@@ -100,6 +100,37 @@ describe('festival hub activity contract', () => {
     }
   })
 
+  it('blocks high-speed passes along both loom pylons but keeps the center open', () => {
+    for (const [side, x] of [
+      ['west', 3],
+      ['east', 29],
+    ] as const) {
+      for (let y = 12; y <= 35; y += 1) {
+        const pylonHit = findSweptSphereCollision(
+          { x, y, z: -38 },
+          { x, y, z: -6 },
+          1.2,
+          FESTIVAL_HUB_COLLIDERS,
+        )
+
+        expect(pylonHit?.obstacleId).toContain(
+          `festival-wind-loom-${side}`,
+        )
+      }
+    }
+
+    for (let y = 12; y <= 35; y += 1) {
+      expect(
+        findSweptSphereCollision(
+          { x: 16, y, z: -38 },
+          { x: 16, y, z: -6 },
+          1.2,
+          FESTIVAL_HUB_COLLIDERS,
+        ),
+      ).toBeNull()
+    }
+  })
+
   it('keeps vertical landing approaches and the challenge beacon clear', () => {
     for (const pad of FESTIVAL_HUB_LANDING_PADS) {
       expect(

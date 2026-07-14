@@ -6,9 +6,9 @@ blender --background --python tools/blender/build_world_art.py
 
 from __future__ import annotations
 
+import hashlib
 import math
 from pathlib import Path
-from uuid import uuid4
 
 import bpy
 from mathutils import Vector
@@ -477,6 +477,33 @@ def join_parts(
     return joined
 
 
+def collapse_neutral_material_slots(
+    obj: bpy.types.Object, material: bpy.types.Material
+) -> bpy.types.Object:
+    """Reduce rough neutral surfaces only; luminous accents keep their own PBR."""
+    for polygon in obj.data.polygons:
+        polygon.material_index = 0
+    obj.data.materials.clear()
+    obj.data.materials.append(material)
+    return obj
+
+
+def add_semantic_empty(
+    semantic_name: str,
+    tag: str,
+    location: tuple[float, float, float],
+    collection: bpy.types.Collection,
+    root: bpy.types.Object,
+) -> bpy.types.Object:
+    empty = bpy.data.objects.new(f"{semantic_name}__{tag}", None)
+    collection.objects.link(empty)
+    empty.location = location
+    empty.parent = root
+    empty["semantic"] = semantic_name
+    empty["geometry_style"] = GEOMETRY_STYLE
+    return empty
+
+
 def create_asset_root(
     region_id: str, lod: str, collection: bpy.types.Collection
 ) -> tuple[bpy.types.Object, str]:
@@ -500,50 +527,74 @@ def build_festival_hub(
     tag = f"festival_hub_{lod}"
     collection = make_collection(f"RC7_FESTIVAL_HUB_{lod.upper()}")
     root, tag = create_asset_root("festival-hub", lod, collection)
-    radial_count = 16 if high else 8
+    radial_count = 12 if high else 6
+    festival_accents: list[bpy.types.Object] = []
 
     airfield: list[bpy.types.Object] = []
     airfield.append(
         add_layered_form(
             f"AirfieldIsland_{tag}",
-            (0.0, 0.0, -12.0),
-            [
-                (-12.0, 8.0, 7.0),
-                (-8.0, 25.0, 23.0),
-                (-3.0, 48.0, 44.0),
-                (3.5, 59.0, 54.0),
-                (7.0, 56.0, 52.0),
-                (8.0, 51.0, 48.0),
-            ],
+             (0.0, 0.0, -12.0),
+             [
+                (-12.0, 9.0, 7.0),
+                (-8.0, 26.0, 22.0),
+                (-4.0, 44.0, 35.0),
+                (-1.2, 50.0, 39.0),
+                (5.2, 47.0, 36.0),
+                (8.0, 42.0, 32.0),
+             ],
             materials["festival_earth"],
             collection,
             root,
-            96 if high else 36,
+            80 if high else 32,
             2.7,
             irregularity=0.055,
         )
     )
-    for index in range(3):
+    deck_specs = (
+        ((0.0, -3.0, -3.72), (15.0, 35.0, 0.34), 0.0, "festival_earth"),
+        ((-23.0, 1.0, -3.85), (17.0, 23.0, 0.38), -0.18, "festival_stone"),
+        ((23.0, 1.0, -3.85), (17.0, 23.0, 0.38), 0.18, "festival_stone"),
+        ((0.0, -4.0, -3.18), (6.4, 31.0, 0.12), 0.0, "festival_stone"),
+    )
+    for index, (location, scale, rotation_z, material_key) in enumerate(deck_specs):
         airfield.append(
             add_handcut_slab(
-                f"AirfieldTerrace_{index}_{tag}",
-                (0.0, 0.0, -3.7 + index * 0.48),
-                (45.0 - index * 5.5, 42.0 - index * 5.0, 0.36),
-                materials["festival_earth"] if index == 1 else materials["festival_stone"],
+                f"AirfieldWingDeck_{index}_{tag}",
+                location,
+                scale,
+                materials[material_key],
                 collection,
                 root,
-                64 if high else 24,
+                52 if high else 20,
                 7.0 + index,
+                rotation=(0.0, 0.0, rotation_z),
+            )
+        )
+    marker_count = 9 if high else 5
+    for index in range(marker_count):
+        y = -28.0 + index * (56.0 / max(1, marker_count - 1))
+        airfield.append(
+            add_handcut_slab(
+                f"RunwayChevron_{index}_{tag}",
+                (0.0, y, -2.93),
+                (4.6 if index % 2 == 0 else 3.4, 0.55, 0.075),
+                materials["festival_earth"],
+                collection,
+                root,
+                12 if high else 8,
+                18.0 + index,
+                rotation=(0.0, 0.0, 0.08 if index % 2 == 0 else -0.08),
             )
         )
     for index in range(radial_count):
         angle = (index / radial_count) * TAU
-        radius = 48.0
+        radius = 42.0
         airfield.append(
             add_handcut_slab(
                 f"AirfieldDock_{index}_{tag}",
-                (math.cos(angle) * radius, math.sin(angle) * radius, -2.4),
-                (5.4, 2.2, 0.7),
+                (math.cos(angle) * radius, math.sin(angle) * radius, -3.0),
+                (4.5, 1.8, 0.5),
                 materials["festival_stone"],
                 collection,
                 root,
@@ -552,15 +603,15 @@ def build_festival_hub(
                 rotation=(0.0, 0.0, angle),
             )
         )
-    garden_count = 12 if high else 6
+    garden_count = 8 if high else 4
     for index in range(garden_count):
         angle = (index / garden_count) * TAU + 0.18
-        radius = 30.0 + (index % 2) * 5.0
+        radius = 31.0 + (index % 2) * 4.0
         airfield.append(
             add_handcut_slab(
                 f"AirfieldGarden_{index}_{tag}",
-                (math.cos(angle) * radius, math.sin(angle) * radius, -2.35),
-                (4.3, 2.6, 0.45),
+                (math.cos(angle) * radius, math.sin(angle) * radius, -2.95),
+                (3.8, 2.2, 0.34),
                 materials["festival_earth"],
                 collection,
                 root,
@@ -569,9 +620,11 @@ def build_festival_hub(
                 rotation=(0.0, 0.0, angle + 0.4),
             )
         )
-    join_parts(airfield, "FestivalAirfield", tag, root)
+    airfield_obj = join_parts(airfield, "FestivalAirfield", tag, root)
+    collapse_neutral_material_slots(airfield_obj, materials["festival_earth"])
+    airfield_obj["collision_proxy"] = "layered-island-clear-runway"
 
-    landing = [
+    landing: list[bpy.types.Object] = [
         add_handcut_slab(
             f"LandingPadBase_{tag}",
             (0.0, 0.0, -3.15),
@@ -582,6 +635,8 @@ def build_festival_hub(
             64 if high else 24,
             61.0,
         ),
+    ]
+    festival_accents.append(
         add_torus(
             f"LandingPadRune_{tag}",
             (0.0, 0.0, -2.75),
@@ -592,9 +647,41 @@ def build_festival_hub(
             root,
             64 if high else 24,
             8 if high else 4,
-        ),
-    ]
-    join_parts(landing, "LandingPad", tag, root)
+        )
+    )
+    for pad_index, (pad_name, center, pad_scale, rune_radius) in enumerate(
+        (
+            ("Tower", (-24.0, 22.0, 18.0), (5.0, 8.0), 3.6),
+            ("Grotto", (-42.0, -28.0, -2.0), (7.5, 7.5), 5.1),
+        )
+    ):
+        landing.append(
+            add_handcut_slab(
+                f"{pad_name}LandingPadBase_{tag}",
+                (center[0], center[1], center[2] - 0.35),
+                (pad_scale[0], pad_scale[1], 0.34),
+                materials["festival_stone"],
+                collection,
+                root,
+                40 if high else 18,
+                68.0 + pad_index,
+            )
+        )
+        festival_accents.append(
+            add_torus(
+                f"{pad_name}LandingPadRune_{tag}",
+                (center[0], center[1], center[2] + 0.04),
+                rune_radius,
+                0.32,
+                materials["gold"],
+                collection,
+                root,
+                40 if high else 18,
+                6 if high else 4,
+            )
+        )
+    landing_obj = join_parts(landing, "LandingPad", tag, root)
+    landing_obj["landing_surfaces"] = "hub,tower,grotto"
 
     tower: list[bpy.types.Object] = [
         add_layered_form(
@@ -609,65 +696,68 @@ def build_festival_hub(
             irregularity=0.0,
         )
     ]
-    tower_center = (-24.0, 42.0)
-    tower_levels = 4 if high else 3
-    level_specs = (
-        (2.3, 4.2, 5.3),
-        (7.0, 5.0, 4.6),
-        (12.4, 5.4, 3.9),
-        (18.2, 5.8, 3.3),
-    )
-    for level, (center_z, height, radius) in enumerate(level_specs[:tower_levels]):
-        tower.append(
-            add_flared_column(
-                f"TowerLevel_{level}_{tag}",
-                (*tower_center, center_z),
-                radius,
-                height,
-                materials["festival_stone"],
-                collection,
-                root,
-                20 if high else 10,
-                80.0 + level,
-                top_scale=0.78,
-            )
+    tower_center = (-24.0, 32.0)
+    tower.append(
+        add_layered_form(
+            f"TowerShaft_{tag}",
+            (*tower_center, 0.0),
+            [
+                (-2.0, 6.2, 5.6),
+                (0.2, 6.8, 6.0),
+                (4.0, 4.9, 4.5),
+                (8.5, 5.3, 4.8),
+                (13.0, 4.0, 3.6),
+                (17.5, 4.4, 3.8),
+                (22.0, 2.8, 2.4),
+                (25.0, 1.8, 1.5),
+            ],
+            materials["festival_stone"],
+            collection,
+            root,
+            32 if high else 14,
+            80.0,
+            irregularity=0.018,
+            lean=(1.1, -0.8),
         )
-        tower.append(
+    )
+    eave_specs = ((6.0, 5.9), (13.2, 4.8), (20.0, 3.8))
+    for level, (center_z, radius) in enumerate(eave_specs if high else eave_specs[::2]):
+        festival_accents.append(
             add_layered_form(
-                f"TowerRoof_{level}_{tag}",
-                (*tower_center, center_z + height * 0.5 + 1.0),
+                f"TowerEave_{level}_{tag}",
+                (*tower_center, center_z),
                 [
-                    (-1.0, radius * 1.24, radius * 1.14),
-                    (0.05, radius * 1.08, radius),
-                    (0.72, radius * 0.82, radius * 0.76),
-                    (1.28, radius * 0.46, radius * 0.42),
+                    (-0.65, radius * 0.92, radius * 0.84),
+                    (-0.18, radius * 1.28, radius * 1.12),
+                    (0.28, radius * 1.12, radius),
+                    (0.92, radius * 0.58, radius * 0.52),
                 ],
                 materials["gold"],
                 collection,
                 root,
-                20 if high else 10,
+                28 if high else 12,
                 90.0 + level,
-                irregularity=0.025,
+                irregularity=0.02,
             )
         )
-        tower.append(
+        festival_accents.append(
             add_torus(
                 f"TowerBalcony_{level}_{tag}",
-                (*tower_center, center_z + height * 0.42),
-                radius * 0.98,
-                0.28,
+                (*tower_center, center_z - 0.15),
+                radius * 0.88,
+                0.24,
                 materials["gold"],
                 collection,
                 root,
-                32 if high else 16,
+                28 if high else 14,
                 6 if high else 4,
             )
         )
-    tower.append(
+    festival_accents.append(
         add_flared_column(
             f"TowerSpire_{tag}",
-            (*tower_center, 27.0 if high else 23.0),
-            1.25,
+            (*tower_center, 29.0 if high else 27.5),
+            1.45,
             10.0 if high else 7.0,
             materials["gold"],
             collection,
@@ -677,7 +767,8 @@ def build_festival_hub(
             top_scale=0.26,
         )
     )
-    join_parts(tower, "FestivalTower", tag, root)
+    tower_obj = join_parts(tower, "FestivalTower", tag, root)
+    tower_obj["collision_proxy"] = "spire-column"
 
     flags: list[bpy.types.Object] = []
     flag_count = 16 if high else 8
@@ -729,7 +820,7 @@ def build_festival_hub(
                 top_scale=0.72,
             )
         )
-        race_arch.append(
+        festival_accents.append(
             add_layered_form(
                 f"RaceArchCap_{side}_{tag}",
                 (34.0 + side * 8.2, 10.0, 14.5),
@@ -755,7 +846,20 @@ def build_festival_hub(
             28 if high else 12,
         )
     )
-    race_arch.append(
+    festival_accents.append(
+        add_arch_band(
+            f"RaceArchHalo_{tag}",
+            (34.0, 10.0, 10.2),
+            14.2,
+            12.7,
+            2.0,
+            materials["gold"],
+            collection,
+            root,
+            36 if high else 16,
+        )
+    )
+    festival_accents.append(
         add_torus(
             f"RaceArchBeacon_{tag}",
             (34.0, 10.0, 12.0),
@@ -769,7 +873,7 @@ def build_festival_hub(
             rotation=(math.pi / 2, 0.0, 0.0),
         )
     )
-    race_arch.append(
+    festival_accents.append(
         add_ico(
             f"RaceArchCrest_{tag}",
             (34.0, 10.0, 23.0),
@@ -780,7 +884,204 @@ def build_festival_hub(
             2 if high else 1,
         )
     )
-    join_parts(race_arch, "RaceArch", tag, root)
+    race_arch_obj = join_parts(race_arch, "RaceArch", tag, root)
+    race_arch_obj["collision_proxy"] = "twin-pylons-clear-center"
+
+    wind_loom: list[bpy.types.Object] = [
+        add_layered_form(
+            f"WindLoomOriginAnchor_{tag}",
+            (16.0, -18.0, 16.0),
+            [(-0.08, 0.08, 0.08), (0.08, 0.06, 0.06)],
+            materials["festival_stone"],
+            collection,
+            root,
+            6,
+            140.0,
+            irregularity=0.0,
+        )
+    ]
+    for side in (-1.0, 1.0):
+        x = 16.0 + side * 13.0
+        wind_loom.append(
+            add_flared_column(
+                f"WindLoomPylon_{side}_{tag}",
+                (x, -18.0, 15.0),
+                2.3,
+                22.0,
+                materials["festival_stone"],
+                collection,
+                root,
+                18 if high else 9,
+                142.0 + side,
+                top_scale=0.58,
+            )
+        )
+        festival_accents.append(
+            add_layered_form(
+                f"WindLoomCap_{side}_{tag}",
+                (x, -18.0, 27.0),
+                [(-1.0, 3.2, 2.8), (0.0, 2.7, 2.3), (1.5, 0.9, 0.7)],
+                materials["gold"],
+                collection,
+                root,
+                18 if high else 9,
+                145.0 + side,
+                irregularity=0.015,
+            )
+        )
+    festival_accents.extend(
+        [
+            add_arch_band(
+                f"WindLoomCrown_{tag}",
+                (16.0, -18.0, 15.5),
+                15.4,
+                13.2,
+                1.2,
+                materials["gold"],
+                collection,
+                root,
+                30 if high else 14,
+            ),
+            add_torus(
+                f"WindLoomHeart_{tag}",
+                (16.0, -18.0, 20.0),
+                4.0,
+                0.4,
+                materials["teal"],
+                collection,
+                root,
+                48 if high else 20,
+                8 if high else 4,
+                rotation=(math.pi / 2, 0.0, 0.0),
+            ),
+        ]
+    )
+    strand_count = 5 if high else 3
+    for index in range(strand_count):
+        offset_y = -19.1 + index * (2.2 / max(1, strand_count - 1))
+        height = 21.0 + (index % 2) * 1.4
+        festival_accents.extend(
+            [
+                add_segment(
+                    f"WindLoomWeaveLeft_{index}_{tag}",
+                    (3.0, offset_y, height),
+                    (16.0, offset_y, 30.0 - index * 0.35),
+                    0.16,
+                    materials["teal" if index % 2 == 0 else "gold"],
+                    collection,
+                    root,
+                    8 if high else 6,
+                ),
+                add_segment(
+                    f"WindLoomWeaveRight_{index}_{tag}",
+                    (29.0, offset_y, height),
+                    (16.0, offset_y, 30.0 - index * 0.35),
+                    0.16,
+                    materials["gold" if index % 2 == 0 else "teal"],
+                    collection,
+                    root,
+                    8 if high else 6,
+                ),
+            ]
+        )
+    wind_loom_obj = join_parts(wind_loom, "WindLoom", tag, root)
+    wind_loom_obj["collision_proxy"] = "twin-pylons-clear-center"
+
+    secret_grotto: list[bpy.types.Object] = [
+        add_layered_form(
+            f"SecretGrottoOriginAnchor_{tag}",
+            (-42.0, -18.0, 0.0),
+            [(-0.08, 0.08, 0.08), (0.08, 0.06, 0.06)],
+            materials["festival_earth"],
+            collection,
+            root,
+            6,
+            160.0,
+            irregularity=0.0,
+        ),
+        add_arch_band(
+            f"SecretGrottoOuterShell_{tag}",
+            (-42.0, -18.0, -2.5),
+            14.5,
+            8.2,
+            4.8,
+            materials["festival_earth"],
+            collection,
+            root,
+            36 if high else 16,
+        ),
+        add_arch_band(
+            f"SecretGrottoInnerShell_{tag}",
+            (-42.0, -22.0, -2.2),
+            12.0,
+            7.3,
+            2.6,
+            materials["festival_stone"],
+            collection,
+            root,
+            28 if high else 12,
+        ),
+    ]
+    festival_accents.append(
+        add_torus(
+            f"SecretGrottoRune_{tag}",
+            (-42.0, -18.0, 4.0),
+            6.4,
+            0.42,
+            materials["teal"],
+            collection,
+            root,
+            40 if high else 18,
+            7 if high else 4,
+            rotation=(math.pi / 2, 0.0, 0.0),
+        )
+    )
+    for side in (-1.0, 1.0):
+        secret_grotto.append(
+            add_layered_form(
+                f"SecretGrottoButtress_{side}_{tag}",
+                (-42.0 + side * 12.0, -18.5, 1.0),
+                [
+                    (-5.0, 5.8, 5.0),
+                    (0.0, 5.0, 4.4),
+                    (7.0, 3.2, 2.8),
+                    (11.0, 0.8, 0.7),
+                ],
+                materials["festival_earth"],
+                collection,
+                root,
+                20 if high else 10,
+                166.0 + side,
+                irregularity=0.06,
+                lean=(-side * 1.6, 0.4),
+            )
+        )
+    secret_grotto_obj = join_parts(secret_grotto, "SecretGrotto", tag, root)
+    collapse_neutral_material_slots(secret_grotto_obj, materials["festival_earth"])
+    secret_grotto_obj["collision_proxy"] = "curved-shell-clear-cavern"
+
+    add_semantic_empty(
+        "TowerLandingPad",
+        tag,
+        (-24.0, 22.0, 18.0),
+        collection,
+        root,
+    )
+    add_semantic_empty(
+        "GrottoLandingPad",
+        tag,
+        (-42.0, -28.0, -2.0),
+        collection,
+        root,
+    )
+
+    festival_accents_obj = join_parts(
+        festival_accents,
+        "FestivalAccents",
+        tag,
+        root,
+    )
+    festival_accents_obj["accent_material_contract"] = "gold,rune"
 
     accents: list[bpy.types.Object] = []
     lantern_count = 24 if high else 8
@@ -1424,6 +1725,65 @@ def export_asset(
     return output
 
 
+def semantic_scene_fingerprint() -> str:
+    """Hash authored scene content independently from Blender file metadata."""
+    digest = hashlib.sha256()
+
+    def update(value: object) -> None:
+        if isinstance(value, float):
+            text = f"{value:.7f}"
+        elif hasattr(value, "to_list"):
+            text = repr(value.to_list())
+        else:
+            text = repr(value)
+        digest.update(text.encode("utf8"))
+        digest.update(b"\0")
+
+    for obj in sorted(bpy.data.objects, key=lambda item: item.name):
+        update((obj.name, obj.type, obj.parent.name if obj.parent else None))
+        for row in obj.matrix_local:
+            for value in row:
+                update(float(value))
+        for key in sorted(obj.keys()):
+            update((key, obj[key]))
+        if obj.type != "MESH":
+            continue
+        mesh = obj.data
+        for vertex in mesh.vertices:
+            update(tuple(float(value) for value in vertex.co))
+        for polygon in mesh.polygons:
+            update((tuple(polygon.vertices), polygon.material_index))
+        update(
+            tuple(
+                material.name if material is not None else None
+                for material in mesh.materials
+            )
+        )
+        for attribute in sorted(mesh.color_attributes, key=lambda item: item.name):
+            update((attribute.name, attribute.domain, attribute.data_type))
+            for item in attribute.data:
+                update(tuple(float(value) for value in item.color))
+
+    for material in sorted(bpy.data.materials, key=lambda item: item.name):
+        update((material.name, tuple(material.diffuse_color)))
+        for key in sorted(material.keys()):
+            update((key, material[key]))
+        shader = (
+            material.node_tree.nodes.get("Principled BSDF")
+            if material.use_nodes and material.node_tree is not None
+            else None
+        )
+        if shader is not None:
+            for input_name in (
+                "Roughness",
+                "Metallic",
+                "Emission Color",
+                "Emission Strength",
+            ):
+                update(shader.inputs[input_name].default_value)
+    return digest.hexdigest()
+
+
 def main() -> None:
     clear_file()
     materials = {
@@ -1477,13 +1837,22 @@ def main() -> None:
     for region_id, lod, asset_root in assets:
         export_asset(region_id, lod, asset_root)
 
+    fingerprint = semantic_scene_fingerprint()
+    bpy.context.scene["semantic_fingerprint"] = fingerprint
     BLEND_PATH.parent.mkdir(parents=True, exist_ok=True)
-    staging_path = BLEND_PATH.with_name(
-        f".{BLEND_PATH.stem}-{uuid4().hex}.blend"
-    )
+    staging_path = BLEND_PATH.with_name(f".{BLEND_PATH.stem}-staging.blend")
     try:
         bpy.ops.wm.save_as_mainfile(filepath=str(staging_path))
-        staging_path.replace(BLEND_PATH)
+        existing_fingerprint = None
+        if BLEND_PATH.exists():
+            bpy.ops.wm.open_mainfile(filepath=str(BLEND_PATH), load_ui=False)
+            existing_fingerprint = bpy.context.scene.get("semantic_fingerprint")
+        if existing_fingerprint == fingerprint:
+            staging_path.unlink(missing_ok=True)
+            print(f"WORLD_BLEND_UNCHANGED={BLEND_PATH}")
+        else:
+            staging_path.replace(BLEND_PATH)
+            print(f"WORLD_BLEND_UPDATED={BLEND_PATH}")
     finally:
         staging_path.unlink(missing_ok=True)
     print(f"WORLD_BLEND={BLEND_PATH}")

@@ -174,13 +174,43 @@ export const FESTIVAL_HUB_COLLIDERS: readonly SphereObstacle[] = [
   },
   {
     id: 'festival-wind-loom-west',
-    center: { x: 10, y: 12, z: -22 },
-    radius: 2.4,
+    center: { x: 3, y: 12, z: -22 },
+    radius: 3,
   },
   {
     id: 'festival-wind-loom-east',
-    center: { x: 22, y: 12, z: -22 },
-    radius: 2.4,
+    center: { x: 29, y: 12, z: -22 },
+    radius: 3,
+  },
+  {
+    id: 'festival-wind-loom-west-mid',
+    center: { x: 3, y: 20, z: -22 },
+    radius: 3,
+  },
+  {
+    id: 'festival-wind-loom-east-mid',
+    center: { x: 29, y: 20, z: -22 },
+    radius: 3,
+  },
+  {
+    id: 'festival-wind-loom-west-upper',
+    center: { x: 3, y: 28, z: -22 },
+    radius: 3,
+  },
+  {
+    id: 'festival-wind-loom-east-upper',
+    center: { x: 29, y: 28, z: -22 },
+    radius: 3,
+  },
+  {
+    id: 'festival-wind-loom-west-cap',
+    center: { x: 3, y: 35, z: -22 },
+    radius: 3.2,
+  },
+  {
+    id: 'festival-wind-loom-east-cap',
+    center: { x: 29, y: 35, z: -22 },
+    radius: 3.2,
   },
   {
     id: 'festival-grotto-roof',
