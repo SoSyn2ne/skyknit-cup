@@ -184,6 +184,97 @@ button {
   transform-origin: center;
 }
 
+.boost-gauge {
+  --boost-level: 100%;
+
+  position: absolute;
+  z-index: 2;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: max(16px, env(safe-area-inset-left));
+  display: grid;
+  width: 190px;
+  gap: 6px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--active);
+  border-radius: 6px;
+  color: var(--cloud);
+  background: color-mix(in srgb, var(--ink) 78%, transparent);
+  pointer-events: none;
+}
+
+.boost-gauge__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.boost-gauge__label,
+.boost-gauge__value {
+  color: var(--active);
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.boost-gauge__hint {
+  overflow: hidden;
+  color: var(--sky-haze);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.boost-gauge__value {
+  min-width: 2.4rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.boost-gauge__meter {
+  height: 7px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--sky-haze) 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 72%, transparent);
+}
+
+.boost-gauge__fill {
+  display: block;
+  width: var(--boost-level);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--active);
+}
+
+.boost-gauge[data-state='boosting'] {
+  border-left-color: var(--wing-gold);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--active) 20%, transparent);
+}
+
+.boost-gauge[data-state='empty'] .boost-gauge__value {
+  color: var(--danger);
+}
+
+.boost-gauge[data-input-device='touch'] {
+  right: max(22px, env(safe-area-inset-right));
+  bottom: max(110px, calc(env(safe-area-inset-bottom) + 94px));
+  left: auto;
+  width: 112px;
+}
+
+.boost-gauge[data-input-device='touch'] .boost-gauge__header {
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.boost-gauge[data-input-device='touch'] .boost-gauge__label {
+  display: none;
+}
+
 .touch-controls {
   position: absolute;
   z-index: 2;

@@ -39,6 +39,7 @@ import {
 } from './flight/fixedStep'
 import {
   createInitialFlightState,
+  FLIGHT_TUNING,
   getForwardVector,
   stepFlight,
   type FlightInput,
@@ -92,6 +93,11 @@ import {
   type OutOfBoundsTracker,
 } from './race/raceRuntime'
 import { createRaceHud, type RaceHud } from './ui/RaceHud'
+import {
+  createBoostGauge,
+  isBoostGaugeVisible,
+  type BoostGauge,
+} from './ui/BoostGauge'
 import {
   createExplorationHud,
   formatFestivalDiscoveryNotice,
@@ -372,6 +378,7 @@ export function createRenderer(
   let pendingTouchControls: TouchControls | null = null
   let pendingRaceHud: RaceHud | null = null
   let pendingExplorationHud: ExplorationHud | null = null
+  let pendingBoostGauge: BoostGauge | null = null
   let pendingOpenWorld: OpenWorldVisual | null = null
   let pendingOpenWorldActivities: OpenWorldActivitiesVisual | null = null
   let pendingCoinCourseVisual: CoinCourseVisual | null = null
@@ -480,7 +487,7 @@ export function createRenderer(
       recovery?.raceState ??
       createInitialRaceState({
         checkpointCount: SKYKNOT_COURSE.length,
-        boostCapacity: 100,
+        boostCapacity: FLIGHT_TUNING.boostCapacity,
         spawnPosition: START_ANCHOR.position,
         persistent: storedSettings,
       })
@@ -1227,6 +1234,8 @@ export function createRenderer(
     explorationHud.element.hidden = gameMode !== 'explore'
     raceHud.element.hidden = gameMode === 'explore'
     pendingExplorationHud = explorationHud
+    const boostGauge = createBoostGauge(host)
+    pendingBoostGauge = boostGauge
     const qaControls: HTMLButtonElement[] = []
     const developmentParams = new URLSearchParams(window.location.search)
     const advanceQaCourse = (): void => {
@@ -1840,6 +1849,22 @@ export function createRenderer(
       }
       host.dataset.inputDevice = inputController.activeDevice
       host.dataset.gameMode = gameMode
+      boostGauge.element.dataset.mode = gameMode
+      boostGauge.update({
+        visible: isBoostGaugeVisible(
+          gameMode === 'race'
+            ? { mode: 'race', phase: raceState.phase }
+            : {
+                mode: 'explore',
+                movement: explorationState.movement,
+                paused: explorationPaused,
+                mapOpen,
+              },
+        ),
+        boostRemaining: flightState.boostRemaining,
+        inputDevice: inputController.activeDevice,
+        isBoosting: flightState.isBoosting,
+      })
       touchControls.update(
         gameMode === 'explore'
           ? explorationSimulationActive
@@ -2271,6 +2296,7 @@ export function createRenderer(
         touchControls.dispose()
         raceHud.dispose()
         explorationHud?.dispose()
+        boostGauge.dispose()
         document.removeEventListener(
           'visibilitychange',
           handleVisibilityChange,
@@ -2304,6 +2330,7 @@ export function createRenderer(
     }
     pendingRaceHud?.dispose()
     pendingExplorationHud?.dispose()
+    pendingBoostGauge?.dispose()
     pendingOpenWorld?.dispose()
     pendingOpenWorldActivities?.dispose()
     pendingCoinCourseVisual?.dispose()
