@@ -1,4 +1,4 @@
-# Exploration BGM delivery assets
+# Game BGM delivery assets
 
 The two loop masters in this directory are generated from
 `assets/source/audio/sovereign-of-the-sunrise-skies.m4a` by
