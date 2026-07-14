@@ -47,6 +47,7 @@ import {
 } from './flight/flightModel'
 import {
   createExplorationFlightState,
+  EXPLORATION_TUNING,
   requestLanding,
   requestTakeoff,
   stepExplorationFlight,
@@ -524,19 +525,32 @@ export function createRenderer(
             landingPads,
           ).landingPadId
         : null
-    const restoresLandedState = savedLandingPadId !== null
+    const savedLandingPad =
+      savedLandingPadId === null
+        ? undefined
+        : landingPads.find(({ id }) => id === savedLandingPadId)
+    const restoresLandedState = savedLandingPad !== undefined
+    const restoredExplorationPosition =
+      savedLandingPad === undefined
+        ? savedExploration.position
+        : {
+            ...savedLandingPad.position,
+            y:
+              savedLandingPad.position.y +
+              EXPLORATION_TUNING.landedHeight,
+          }
     let explorationState: ExplorationFlightState =
       recovery?.explorationState ??
       {
         ...createExplorationFlightState({
-          position: savedExploration.position,
+          position: restoredExplorationPosition,
           headingRadians: savedExploration.headingRadians,
           speed: restoresLandedState ? 0 : 18,
         }),
         movement: restoresLandedState ? 'landed' : 'airborne',
         landingPadId: savedLandingPadId,
         movementStart: restoresLandedState
-          ? { ...savedExploration.position }
+          ? { ...restoredExplorationPosition }
           : null,
       }
     let discoveredRegionIds = [

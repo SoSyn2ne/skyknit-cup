@@ -25,9 +25,9 @@ const FESTIVAL_LANDING_PADS = [
 ] as const
 
 const FESTIVAL_LANDING_PAD_POSITIONS = {
-  'festival-hub-pad': { x: 0, z: -40 },
-  'festival-tower-pad': { x: -24, z: -62 },
-  'festival-grotto-pad': { x: -42, z: -12 },
+  'festival-hub-pad': { x: 0, y: 6.4, z: -40 },
+  'festival-tower-pad': { x: -24, y: 27.2, z: -62 },
+  'festival-grotto-pad': { x: -42, y: 7.2, z: -12 },
 } as const
 
 function isJourneyEvidenceProject(projectName: string): boolean {
@@ -388,17 +388,23 @@ test('restores takeoff at every saved Festival Hub landing pad', async ({
           const document = JSON.parse(raw) as {
             exploration?: {
               movement?: string
-              position?: { x?: number; z?: number }
+              position?: { x?: number; y?: number; z?: number }
             }
           }
           return {
             movement: document.exploration?.movement,
             x: document.exploration?.position?.x,
+            y: document.exploration?.position?.y,
             z: document.exploration?.position?.z,
           }
         }),
       )
-      .toEqual({ movement: 'landed', x: expected.x, z: expected.z })
+      .toEqual({
+        movement: 'landed',
+        x: expected.x,
+        y: expected.y,
+        z: expected.z,
+      })
 
     await page.reload()
     await page.getByRole('button', { name: '하늘 탐험' }).click()
@@ -407,6 +413,9 @@ test('restores takeoff at every saved Festival Hub landing pad', async ({
       .toBe('landed')
     expect((await readSnapshot(page))?.exploration.landingPadId).toBe(
       landingPadId,
+    )
+    expect((await readSnapshot(page))?.flight.position).toMatchObject(
+      expected,
     )
     await contextAction.click()
     await expect

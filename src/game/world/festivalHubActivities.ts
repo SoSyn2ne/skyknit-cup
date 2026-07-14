@@ -123,12 +123,14 @@ export const FESTIVAL_HUB_WIND_ZONES: readonly FestivalHubWindZone[] = [
   },
 ] as const
 
+export const FESTIVAL_HUB_PRIMARY_LANDING_PAD = {
+  id: 'festival-hub-pad',
+  position: { x: 0, y: 5.2, z: -40 },
+  radius: 20,
+} as const satisfies ExplorationLandingPad
+
 export const FESTIVAL_HUB_LANDING_PADS: readonly ExplorationLandingPad[] = [
-  {
-    id: 'festival-hub-pad',
-    position: { x: 0, y: 4, z: -40 },
-    radius: 20,
-  },
+  FESTIVAL_HUB_PRIMARY_LANDING_PAD,
   {
     id: 'festival-tower-pad',
     position: { x: -24, y: 26, z: -62 },

@@ -1,0 +1,44 @@
+{
+  "scope": "m35-landing-pose",
+  "active": false,
+  "phase": "completed",
+  "completed_at": "2026-07-14T16:46:42.2471274+09:00",
+  "reported_reference": "C:/Users/eum0742/AppData/Local/Temp/codex-clipboard-5768d8df-5065-4948-8ddc-5c3daecaa6d1.png",
+  "reproduction": {
+    "movement": "landed",
+    "paused": true,
+    "flight_y": 5.2,
+    "landing_pad_y": 4,
+    "screenshot": "artifacts/browser-qa/m35-landing-pose/before-desktop-landed.png",
+    "result": "Both wing roots are occluded by the landing surface while the body remains visible."
+  },
+  "root_cause": "festival-hub-pad used y=4 while the authored deck surface is y=5.2, placing the dragon movement root directly on the deck after adding landedHeight.",
+  "visual_verdict": {
+    "iteration": 1,
+    "score": 95,
+    "threshold": 90,
+    "passed": true,
+    "verdict": "pass",
+    "category_match": true,
+    "reasoning": "착륙 후 몸통과 양쪽 날개 뿌리가 모든 검증 뷰포트에서 지면 위에 있고 명확하게 연결되어 원래 결함이 해결됐다. 남은 하단 크롭과 최소 화면 버튼 겹침은 핵심 결함을 재현하지 않는 경미한 프레이밍 문제다.",
+    "differences": [
+      "수정 전에는 몸통과 날개 사이에 바닥색 간격이 생겼지만 수정 후에는 붉은 어깨와 날개 뿌리가 몸통에 연속적으로 연결된다.",
+      "짧은 화면의 하단 크롭은 지면 관통이 아니라 기존 근접 카메라 프레이밍이며 날개 연결 판독에는 지장이 없다.",
+      "320x568의 개발 전용 QA 버튼은 오른쪽 날개 하단 일부와 겹치지만 몸통과 날개 뿌리는 가리지 않는다."
+    ],
+    "suggestions": [
+      "현재 착륙 높이를 유지한다.",
+      "개발 전용 최소 화면 QA 버튼 겹침은 별도 범위로 둔다."
+    ],
+    "next_actions": []
+  },
+  "automated_verification": {
+    "unit": "41 files, 426 tests passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "audit": "0 vulnerabilities",
+    "build": "passed with the existing Vite chunk-size warning",
+    "landing_e2e": "4 passed across desktop and touch-minimum coverage",
+    "production_e2e": "5 required viewports passed"
+  }
+}

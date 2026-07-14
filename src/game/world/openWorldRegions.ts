@@ -1,5 +1,6 @@
 import type { Vec3Value } from '../flight/flightModel'
 import type { ExplorationLandingPad } from '../exploration/explorationFlight'
+import { FESTIVAL_HUB_PRIMARY_LANDING_PAD } from './festivalHubActivities'
 
 export type OpenWorldRegionId =
   | 'festival-hub'
@@ -35,11 +36,7 @@ export const OPEN_WORLD_REGIONS: readonly OpenWorldRegion[] = [
     center: { x: 0, y: 8, z: -40 },
     discoveryRadius: REGION_DISCOVERY_RADIUS,
     visualTheme: 'festival',
-    landingPad: {
-      id: 'festival-hub-pad',
-      position: { x: 0, y: 4, z: -40 },
-      radius: 20,
-    },
+    landingPad: FESTIVAL_HUB_PRIMARY_LANDING_PAD,
   },
   {
     id: 'wind-canyon',

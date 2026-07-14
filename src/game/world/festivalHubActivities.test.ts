@@ -15,6 +15,7 @@ import {
   sampleFestivalWind,
   stepFestivalDiscovery,
 } from './festivalHubActivities'
+import { OPEN_WORLD_REGIONS } from './openWorldRegions'
 
 function distance(
   left: { readonly x: number; readonly y: number; readonly z: number },
@@ -48,6 +49,18 @@ describe('festival hub activity contract', () => {
   it('defines three unique wind zones and three unique landing pads', () => {
     expect(new Set(FESTIVAL_HUB_WIND_ZONES.map(({ id }) => id)).size).toBe(3)
     expect(new Set(FESTIVAL_HUB_LANDING_PADS.map(({ id }) => id)).size).toBe(3)
+  })
+
+  it('aligns the primary Festival Hub pad with the authored deck surface', () => {
+    const festivalPad = FESTIVAL_HUB_LANDING_PADS.find(
+      ({ id }) => id === 'festival-hub-pad',
+    )
+    const regionPad = OPEN_WORLD_REGIONS.find(
+      ({ id }) => id === 'festival-hub',
+    )?.landingPad
+
+    expect(festivalPad?.position.y).toBe(5.2)
+    expect(regionPad).toEqual(festivalPad)
   })
 
   it('keeps every authored position, radius, and wind vector finite', () => {
