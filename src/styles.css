@@ -593,6 +593,46 @@ button {
   color: var(--active);
 }
 
+.exploration-hud__journey {
+  position: absolute;
+  top: max(92px, calc(env(safe-area-inset-top) + 76px));
+  left: 50%;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  min-width: 0;
+  padding: 6px 10px;
+  border-left: 3px solid
+    color-mix(in srgb, var(--active) 72%, transparent);
+  border-radius: 6px;
+  color: var(--sky-haze);
+  background: color-mix(in srgb, var(--ink) 76%, transparent);
+  font-size: 0.75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.exploration-hud__journey-progress {
+  flex: none;
+  color: var(--active);
+  font-variant-numeric: tabular-nums;
+}
+
+.exploration-hud__journey-copy,
+.exploration-hud__discovery {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exploration-hud__journey[data-notice='true'] {
+  border-left-color: var(--gate-rune);
+  color: var(--cloud);
+}
+
 .exploration-hud__destination {
   top: max(58px, calc(env(safe-area-inset-top) + 42px));
   display: flex;
@@ -924,6 +964,10 @@ button {
 }
 
 @media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+  .exploration-hud__journey {
+    top: max(122px, calc(env(safe-area-inset-top) + 106px));
+  }
+
   .race-hud[data-phase='ready'] .race-hud__panel {
     top: max(16px, env(safe-area-inset-top));
     bottom: auto;
@@ -1136,6 +1180,11 @@ button {
     top: max(114px, calc(env(safe-area-inset-top) + 98px));
     max-width: calc(100% - 24px);
     white-space: nowrap;
+  }
+
+  .exploration-hud__journey {
+    top: max(148px, calc(env(safe-area-inset-top) + 132px));
+    max-width: calc(100% - 24px);
   }
 
 

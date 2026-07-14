@@ -1,9 +1,20 @@
 import type { ExplorationMovement } from '../exploration/explorationFlight'
 import type { CoinRunState } from '../collectibles/coinRun'
 import type { CoinBestTimes } from '../persistence/records'
+import {
+  FESTIVAL_HUB_LANDMARKS,
+  FESTIVAL_HUB_WIND_ZONES,
+  type FestivalDiscoveryStep,
+  type FestivalJourney,
+} from '../world/festivalHubActivities'
 import type { DestinationGuidance, OpenWorldRegionId } from '../world/openWorldRegions'
 import { OPEN_WORLD_REGIONS } from '../world/openWorldRegions'
 import { formatMusicVolumePercent, formatRaceTime } from './RaceHud'
+
+export interface FestivalJourneyHudView extends FestivalJourney {
+  readonly publicLandmarkCount: number
+  readonly windZoneCount: number
+}
 
 export interface ExplorationHudView {
   readonly regionName: string
@@ -20,6 +31,8 @@ export interface ExplorationHudView {
   readonly coinRun: CoinRunState
   readonly coinBestTimesMs: Readonly<CoinBestTimes>
   readonly coinRunIsNewBest: boolean
+  readonly journey: FestivalJourneyHudView
+  readonly discoveryNotice: string | null
 }
 
 export interface ExplorationHudActions {
@@ -46,6 +59,53 @@ export function formatExploreDistance(distance: number): string {
 
 export function formatCoinRunTime(milliseconds: number): string {
   return formatRaceTime(milliseconds)
+}
+
+export function formatFestivalJourneyLine(
+  journey: FestivalJourneyHudView,
+): string {
+  const progress = `여정 ${journey.completedSteps}/${journey.totalSteps}`
+  switch (journey.nextObjectiveId) {
+    case 'landmarks':
+      return `${progress} · 다음: 랜드마크 ${journey.publicLandmarkCount}/4 발견`
+    case 'wind-zones':
+      return `${progress} · 다음: 상승기류 ${journey.windZoneCount}/3 통과`
+    case 'secret':
+      return `${progress} · 다음: 비밀 장소 찾기`
+    case 'coin-run':
+      return `${progress} · 다음: 하늘동전 기록 남기기`
+    case 'race-mission':
+      return `${progress} · 다음: 아치 레이스 완주`
+    case null:
+      return `${progress} · 축제 여정 완료`
+  }
+}
+
+export function formatFestivalDiscoveryNotice(
+  discovery: Pick<
+    FestivalDiscoveryStep,
+    'newLandmarkIds' | 'newWindZoneIds'
+  >,
+): string | null {
+  const landmarks = discovery.newLandmarkIds.map((id) =>
+    FESTIVAL_HUB_LANDMARKS.find((landmark) => landmark.id === id),
+  )
+  const winds = discovery.newWindZoneIds.map((id) =>
+    FESTIVAL_HUB_WIND_ZONES.find((zone) => zone.id === id),
+  )
+  const names = [
+    ...landmarks.map((landmark) => landmark?.name).filter(Boolean),
+    ...winds.map((wind) => wind?.name).filter(Boolean),
+  ]
+  if (names.length === 0) return null
+  if (names.length > 1) {
+    return `새 발견 ${names.length}개 · ${names.join(', ')}`
+  }
+  const landmark = landmarks[0]
+  if (landmark !== undefined) {
+    return `${landmark.secret ? '비밀 장소' : '랜드마크'} 발견 · ${landmark.name}`
+  }
+  return `상승기류 발견 · ${names[0]}`
 }
 
 export function getExploreContextLabel(
@@ -100,6 +160,21 @@ export function createExplorationHud(
   const coinCount = document.createElement('strong')
   const coinTime = document.createElement('span')
   coinRun.append(coinCount, coinTime)
+
+  const journey = document.createElement('div')
+  journey.className = 'exploration-hud__journey'
+  journey.dataset.exploreJourney = 'true'
+  const journeyProgress = document.createElement('strong')
+  journeyProgress.className = 'exploration-hud__journey-progress'
+  const journeyCopy = document.createElement('span')
+  journeyCopy.className = 'exploration-hud__journey-copy'
+  const discovery = document.createElement('span')
+  discovery.className = 'exploration-hud__discovery'
+  discovery.dataset.exploreDiscovery = 'true'
+  discovery.setAttribute('role', 'status')
+  discovery.setAttribute('aria-live', 'polite')
+  discovery.setAttribute('aria-atomic', 'true')
+  journey.append(journeyProgress, journeyCopy, discovery)
 
   const controls = document.createElement('div')
   controls.className = 'exploration-hud__controls'
@@ -187,7 +262,16 @@ export function createExplorationHud(
   const pausedReturn = paused.lastElementChild as HTMLButtonElement
   pausedReturn.addEventListener('click', actions.returnToMissions)
 
-  root.append(region, coinRun, destination, controls, context, map, paused)
+  root.append(
+    region,
+    coinRun,
+    journey,
+    destination,
+    controls,
+    context,
+    map,
+    paused,
+  )
   host.append(root)
 
   return {
@@ -201,6 +285,19 @@ export function createExplorationHud(
       coinRun.dataset.phase = view.coinRun.phase
       coinRun.dataset.newBest = String(view.coinRunIsNewBest)
       coinRun.title = view.coinRunIsNewBest ? '지역 최고 기록' : '하늘동전 기록 도전'
+      journeyProgress.textContent = `여정 ${view.journey.completedSteps}/${view.journey.totalSteps}`
+      journeyCopy.textContent = formatFestivalJourneyLine(view.journey).replace(
+        /^여정 \d+\/\d+ · /,
+        '',
+      )
+      const hasDiscoveryNotice = view.discoveryNotice !== null
+      journey.dataset.notice = String(hasDiscoveryNotice)
+      journeyCopy.hidden = hasDiscoveryNotice
+      discovery.hidden = !hasDiscoveryNotice
+      const nextDiscoveryText = view.discoveryNotice ?? ''
+      if (discovery.textContent !== nextDiscoveryText) {
+        discovery.textContent = nextDiscoveryText
+      }
       for (const settings of [audioSettings, pausedAudioSettings]) {
         settings.mute.textContent = view.muted ? '🔇' : '🔊'
         const muteAction = view.muted ? '소리 켜기' : '소리 끄기'
@@ -246,6 +343,7 @@ export function createExplorationHud(
       controls.hidden = view.paused
       region.hidden = view.paused
       coinRun.hidden = view.paused
+      journey.hidden = view.paused
       destination.hidden = view.paused || guidance === null
     },
     dispose: () => root.remove(),

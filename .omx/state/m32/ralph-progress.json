@@ -1,0 +1,53 @@
+{
+  "scope": "m32-open-world-vertical-slice",
+  "active": true,
+  "iteration": 1,
+  "phase": "activity-loop-complete-landmark-rebuild-pending",
+  "baseline": {
+    "source": ".omx/state/rc7/ralph-progress.json",
+    "score": 91,
+    "verdict": "pass"
+  },
+  "latest": {
+    "score": 86,
+    "verdict": "revise",
+    "category_match": true,
+    "threshold": 90,
+    "passed": false,
+    "differences": [
+      "The compact journey row is readable and collision-free across all five required viewports.",
+      "The festival tower, flags, circular platform, and floating coins still expose the primitive RC7 construction that Milestone 32 must replace.",
+      "Authored wind zones now affect gameplay and audio but do not yet have visible spatial guidance in the world."
+    ],
+    "suggestions": [
+      "Rebuild the Festival Hub high and low GLBs around the five landmark contract while preserving the validated camera negative space.",
+      "Add restrained low-draw-call wind ribbons that make the three authored zones readable without framing the whole canvas.",
+      "Repeat the five-viewport visual and performance gates after the GLB replacement."
+    ],
+    "reasoning": "The activity, HUD, responsive layout, discovery feedback, and ambient audio now read as a coherent exploration loop, but the requested production-quality landmark geometry is still visibly incomplete, so the overall M32 visual gate cannot pass yet.",
+    "evidence": [
+      "artifacts/browser-qa/m32/desktop-festival-journey.png",
+      "artifacts/browser-qa/m32/desktop-compact-festival-journey.png",
+      "artifacts/browser-qa/m32/touch-landscape-festival-journey.png",
+      "artifacts/browser-qa/m32/touch-portrait-festival-journey.png",
+      "artifacts/browser-qa/m32/touch-minimum-festival-journey.png"
+    ]
+  },
+  "journeyHudReview": {
+    "score": 92,
+    "verdict": "pass",
+    "category_match": true,
+    "threshold": 90,
+    "passed": true,
+    "differences": [
+      "Touch landscape needs a lower journey row because the contextual landing button occupies the upper center.",
+      "Portrait layouts remain intentionally dense in the upper third while keeping the dragon and flight controls unobstructed."
+    ],
+    "suggestions": [
+      "Preserve the coarse-landscape offset and single-line ellipsis behavior during later visual work.",
+      "Keep discovery announcements in the dedicated polite live region instead of live-announcing frame-by-frame objectives."
+    ],
+    "reasoning": "The journey objective, transient discovery copy, coin timer, region label, BGM controls, map, pause control, landing action, and touch flight controls remain legible and non-overlapping at 1440x900, 1280x720, 844x390, 390x844, and 320x568."
+  },
+  "nextGate": "Festival Hub Blender GLB landmark rebuild, semantic-node inspection, wind visuals, then five-viewport visual and performance verification"
+}

@@ -14,6 +14,10 @@ export interface GameAudioDebugSnapshot {
   readonly wingFlapCues: number
   readonly boostCues: number
   readonly finishCues: number
+  readonly discoveryCues: number
+  readonly windEntryCues: number
+  readonly ambientWindStrength: number
+  readonly windBedPlaying: boolean
 }
 
 export interface GameAudio {
@@ -24,7 +28,10 @@ export interface GameAudio {
   getMusicPositionSeconds(): number
   setMusicActive(active: boolean): void
   setPageVisible(visible: boolean): void
+  setAmbientWind(strength: number): void
   playGate(): void
+  playDiscovery(): void
+  playWindEntry(): void
   playWingFlap(): void
   setBoosting(boosting: boolean): void
   playFinish(): void
@@ -83,6 +90,14 @@ const BOOST_WHOOSH_BURST: NoiseBurst = {
   filterQ: 0.68,
   volume: 0.12,
 }
+const WIND_ENTRY_BURST: NoiseBurst = {
+  durationSeconds: 0.42,
+  attackSeconds: 0.08,
+  filterStartHz: 320,
+  filterEndHz: 1_100,
+  filterQ: 0.58,
+  volume: 0.045,
+}
 
 export function createGameAudio(
   contextFactory: AudioContextFactory = defaultContextFactory,
@@ -113,6 +128,13 @@ export function createGameAudio(
   let wingFlapCues = 0
   let boostCues = 0
   let finishCues = 0
+  let discoveryCues = 0
+  let windEntryCues = 0
+  let ambientWindStrength = 0
+  let windBedSource: AudioBufferSourceNode | null = null
+  let windBedFilter: BiquadFilterNode | null = null
+  let windBedGain: GainNode | null = null
+  let lastAppliedAmbientWindStrength = -1
   let noiseBuffer: AudioBuffer | null = null
   const activeSources = new Set<AudioScheduledSourceNode>()
 
@@ -226,7 +248,41 @@ export function createGameAudio(
     }
   }
 
+  const stopWindBed = (immediate = true): void => {
+    const source = windBedSource
+    const filter = windBedFilter
+    const gain = windBedGain
+    windBedSource = null
+    windBedFilter = null
+    windBedGain = null
+    lastAppliedAmbientWindStrength = -1
+    if (source === null) return
+    const stopAt =
+      immediate || context === null
+        ? undefined
+        : context.currentTime + 0.18
+    try {
+      if (!immediate && gain !== null && context !== null) {
+        gain.gain.setTargetAtTime(0.0001, context.currentTime, 0.05)
+      }
+      source.stop(stopAt)
+    } catch {
+      // An already-stopped ambient source needs no further recovery.
+    }
+    if (immediate) {
+      activeSources.delete(source)
+      try {
+        source.disconnect()
+        filter?.disconnect()
+        gain?.disconnect()
+      } catch {
+        // Ambient teardown is best-effort during lifecycle boundaries.
+      }
+    }
+  }
+
   const stopActiveSources = (): void => {
+    stopWindBed()
     for (const source of [...activeSources]) {
       try {
         source.stop()
@@ -237,7 +293,13 @@ export function createGameAudio(
   }
 
   const playTone = (tone: Tone): boolean => {
-    if (disposed || muted || !unlocked || context === null) {
+    if (
+      disposed ||
+      muted ||
+      !unlocked ||
+      !pageVisible ||
+      context === null
+    ) {
       return false
     }
 
@@ -303,8 +365,98 @@ export function createGameAudio(
     }
   }
 
+  const syncAmbientWind = (): void => {
+    const shouldPlay =
+      !disposed &&
+      !muted &&
+      unlocked &&
+      pageVisible &&
+      ambientWindStrength > 0.001 &&
+      context !== null
+    if (!shouldPlay || context === null) {
+      const lifecycleStop =
+        disposed || muted || !unlocked || !pageVisible || context === null
+      stopWindBed(lifecycleStop)
+      return
+    }
+
+    if (
+      windBedSource === null ||
+      windBedFilter === null ||
+      windBedGain === null
+    ) {
+      const buffer = getNoiseBuffer()
+      if (buffer === null) return
+      try {
+        const source = context.createBufferSource()
+        const filter = context.createBiquadFilter()
+        const gain = context.createGain()
+        source.buffer = buffer
+        source.loop = true
+        filter.type = 'bandpass'
+        filter.frequency.setValueAtTime(380, context.currentTime)
+        filter.Q.setValueAtTime(0.55, context.currentTime)
+        gain.gain.setValueAtTime(0.0001, context.currentTime)
+        source.connect(filter)
+        filter.connect(gain)
+        gain.connect(context.destination)
+        source.onended = () => {
+          activeSources.delete(source)
+          if (windBedSource === source) {
+            windBedSource = null
+            windBedFilter = null
+            windBedGain = null
+          }
+          try {
+            source.disconnect()
+            filter.disconnect()
+            gain.disconnect()
+          } catch {
+            // A completed ambient source has no remaining resources.
+          }
+        }
+        windBedSource = source
+        windBedFilter = filter
+        windBedGain = gain
+        activeSources.add(source)
+        source.start(context.currentTime, 0)
+      } catch {
+        stopWindBed()
+        return
+      }
+    }
+
+    if (
+      Math.abs(ambientWindStrength - lastAppliedAmbientWindStrength) <
+      0.01
+    ) {
+      return
+    }
+    const frequency = 380 + ambientWindStrength * 820
+    const volume = 0.008 + ambientWindStrength * 0.038
+    windBedFilter.frequency.setTargetAtTime(
+      frequency,
+      context.currentTime,
+      0.12,
+    )
+    windBedGain.gain.setTargetAtTime(
+      volume,
+      context.currentTime,
+      0.12,
+    )
+    lastAppliedAmbientWindStrength = ambientWindStrength
+  }
+
   const playNoiseBurst = (burst: NoiseBurst, variationIndex: number): boolean => {
-    if (disposed || muted || !unlocked || context === null) return false
+    if (
+      disposed ||
+      muted ||
+      !unlocked ||
+      !pageVisible ||
+      context === null
+    ) {
+      return false
+    }
 
     const buffer = getNoiseBuffer()
     if (buffer === null) return false
@@ -392,6 +544,7 @@ export function createGameAudio(
       if (bgmPlayAttempts === attemptsBeforeUnlock) {
         syncMusicPlayback()
       }
+      syncAmbientWind()
     },
     setMuted: (nextMuted) => {
       muted = nextMuted
@@ -399,6 +552,7 @@ export function createGameAudio(
         stopActiveSources()
       }
       syncMusicPlayback()
+      syncAmbientWind()
     },
     setMusicVolume: (nextVolume) => {
       if (!Number.isFinite(nextVolume)) return
@@ -424,7 +578,16 @@ export function createGameAudio(
     },
     setPageVisible: (visible) => {
       pageVisible = visible
+      if (!visible) {
+        stopActiveSources()
+      }
       syncMusicPlayback()
+      syncAmbientWind()
+    },
+    setAmbientWind: (strength) => {
+      if (!Number.isFinite(strength)) return
+      ambientWindStrength = Math.min(1, Math.max(0, strength))
+      syncAmbientWind()
     },
     playGate: () => {
       if (
@@ -441,6 +604,27 @@ export function createGameAudio(
     playWingFlap: () => {
       if (playNoiseBurst(WING_FLAP_BURST, wingFlapCues)) {
         wingFlapCues += 1
+      }
+    },
+    playDiscovery: () => {
+      const played = [
+        { frequency: 740, delaySeconds: 0 },
+        { frequency: 988, delaySeconds: 0.1 },
+      ]
+        .map((tone) =>
+          playTone({
+            ...tone,
+            durationSeconds: 0.24,
+            type: 'triangle',
+            volume: 0.045,
+          }),
+        )
+        .some(Boolean)
+      if (played) discoveryCues += 1
+    },
+    playWindEntry: () => {
+      if (playNoiseBurst(WIND_ENTRY_BURST, windEntryCues + 501)) {
+        windEntryCues += 1
       }
     },
     setBoosting: (nextBoosting) => {
@@ -485,6 +669,10 @@ export function createGameAudio(
       wingFlapCues,
       boostCues,
       finishCues,
+      discoveryCues,
+      windEntryCues,
+      ambientWindStrength,
+      windBedPlaying: windBedSource !== null,
     }),
     dispose: () => {
       if (disposed) {

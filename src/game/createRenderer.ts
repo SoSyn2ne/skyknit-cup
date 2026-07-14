@@ -81,6 +81,7 @@ import {
 import { createRaceHud, type RaceHud } from './ui/RaceHud'
 import {
   createExplorationHud,
+  formatFestivalDiscoveryNotice,
   type ExplorationHud,
 } from './ui/ExplorationHud'
 import {
@@ -124,10 +125,13 @@ import {
   FESTIVAL_HUB_LANDMARKS,
   FESTIVAL_HUB_LANDING_PADS,
   FESTIVAL_HUB_WIND_ZONES,
+  FESTIVAL_WIND_MAX_SPEED,
+  getFestivalJourney,
   sampleFestivalWind,
   stepFestivalDiscovery,
   type FestivalHubLandmarkId,
   type FestivalHubWindZoneId,
+  type FestivalJourney,
 } from './world/festivalHubActivities'
 
 export interface FlightDebugSnapshot {
@@ -184,6 +188,9 @@ export interface FlightDebugSnapshot {
     readonly discoveredLandmarkIds: RaceState['persistent']['exploration']['discoveredLandmarkIds']
     readonly traversedWindZoneIds: RaceState['persistent']['exploration']['traversedWindZoneIds']
     readonly activeWindZoneIds: RaceState['persistent']['exploration']['traversedWindZoneIds']
+    readonly windStrength: number
+    readonly journey: FestivalJourney
+    readonly discoveryNotice: string | null
     readonly destinationRegionId: OpenWorldRegionId | null
     readonly loadedRegionIds: readonly OpenWorldRegionId[]
     readonly regionAssets: readonly OpenWorldRegionAssetSnapshot[]
@@ -477,6 +484,9 @@ export function createRenderer(
     let lastExplorationObstacleId: string | null = null
     let activeWindZoneIds: RaceState['persistent']['exploration']['traversedWindZoneIds'] =
       []
+    let activeWindStrength = 0
+    let discoveryNotice: string | null = null
+    let discoveryNoticeRemainingSeconds = 0
     let qaBoostRemainingSeconds = 0
     let qaCollisionFeedbackRemainingSeconds = 0
     let visualSimulationSeconds = recovery?.visualSimulationSeconds ?? 0
@@ -486,6 +496,10 @@ export function createRenderer(
       explorationCollisionState = createCollisionState()
       lastExplorationObstacleId = null
       activeWindZoneIds = []
+      activeWindStrength = 0
+      discoveryNotice = null
+      discoveryNoticeRemainingSeconds = 0
+      gameAudio.setAmbientWind(0)
     }
 
     const resetFlight = (): void => {
@@ -666,6 +680,19 @@ export function createRenderer(
       }
       if (save) savePersistentSettings()
     }
+
+    const currentFestivalJourney = (): FestivalJourney =>
+      getFestivalJourney(
+        { discoveredLandmarkIds, traversedWindZoneIds },
+        raceState.persistent.coinBestTimesMs['festival-hub'],
+        raceState.persistent.bestTimeMs,
+      )
+
+    const publicFestivalLandmarkCount = (): number =>
+      FESTIVAL_HUB_LANDMARKS.filter(
+        ({ id, secret }) =>
+          !secret && discoveredLandmarkIds.includes(id),
+      ).length
 
     const isAtChallengeBeacon = (): boolean => {
       return (
@@ -1089,6 +1116,15 @@ export function createRenderer(
         const phaseAtStepStart = raceState.phase
 
         if (gameMode === 'explore' && !explorationPaused) {
+          if (discoveryNoticeRemainingSeconds > 0) {
+            discoveryNoticeRemainingSeconds = Math.max(
+              0,
+              discoveryNoticeRemainingSeconds - FIXED_STEP_SECONDS,
+            )
+            if (discoveryNoticeRemainingSeconds === 0) {
+              discoveryNotice = null
+            }
+          }
           const input = inputController.selectExplorationInput(
             keyboardInput.readExploration(),
             touchInput.readExploration(),
@@ -1130,24 +1166,33 @@ export function createRenderer(
               lastExplorationObstacleId = collision.obstacleId
             }
           }
-          activeWindZoneIds = [
-            ...sampleFestivalWind(explorationState.flight.position)
-              .activeZoneIds,
-          ]
+          const windAfterStep = sampleFestivalWind(
+            explorationState.flight.position,
+          )
+          activeWindZoneIds = [...windAfterStep.activeZoneIds]
+          activeWindStrength = Math.min(
+            1,
+            Math.hypot(
+              windAfterStep.velocity.x,
+              windAfterStep.velocity.y,
+              windAfterStep.velocity.z,
+            ) / FESTIVAL_WIND_MAX_SPEED,
+          )
           flightState = explorationState.flight
           if (
-            !mapOpen &&
             movementBeforeStep === 'airborne' &&
             explorationState.movement === 'airborne'
           ) {
-            applyCoinRunStep(
-              stepCoinRun(
-                coinRunState,
-                previousExplorationPosition,
-                explorationState.flight.position,
-                FIXED_STEP_SECONDS * 1_000,
-              ),
-            )
+            if (!mapOpen) {
+              applyCoinRunStep(
+                stepCoinRun(
+                  coinRunState,
+                  previousExplorationPosition,
+                  explorationState.flight.position,
+                  FIXED_STEP_SECONDS * 1_000,
+                ),
+              )
+            }
             const discovery = stepFestivalDiscovery(
               { discoveredLandmarkIds, traversedWindZoneIds },
               previousExplorationPosition,
@@ -1157,6 +1202,15 @@ export function createRenderer(
               discovery.newLandmarkIds.length > 0 ||
               discovery.newWindZoneIds.length > 0
             ) {
+              discoveryNotice = formatFestivalDiscoveryNotice(discovery)
+              discoveryNoticeRemainingSeconds =
+                discoveryNotice === null ? 0 : 2.5
+              if (discovery.newLandmarkIds.length > 0) {
+                gameAudio.playDiscovery()
+              }
+              if (discovery.newWindZoneIds.length > 0) {
+                gameAudio.playWindEntry()
+              }
               discoveredLandmarkIds.push(...discovery.newLandmarkIds)
               traversedWindZoneIds.push(...discovery.newWindZoneIds)
               syncExplorationPersistence()
@@ -1325,6 +1379,11 @@ export function createRenderer(
             raceState.phase === 'racing' &&
             flightState.isBoosting),
       )
+      gameAudio.setAmbientWind(
+        gameMode === 'explore' && !explorationPaused
+          ? 0.12 + activeWindStrength * 0.88
+          : 0,
+      )
       if (gameMode === 'explore') {
         openWorld.update(
           explorationState.flight.position,
@@ -1374,6 +1433,7 @@ export function createRenderer(
         const currentRegion = getCurrentRegion(
           explorationState.flight.position,
         )
+        const journey = currentFestivalJourney()
         explorationHud.update({
           regionName: currentRegion?.name ?? '군도 사이',
           discoveredRegionIds,
@@ -1395,6 +1455,12 @@ export function createRenderer(
           coinRun: coinRunState,
           coinBestTimesMs: raceState.persistent.coinBestTimesMs,
           coinRunIsNewBest,
+          journey: {
+            ...journey,
+            publicLandmarkCount: publicFestivalLandmarkCount(),
+            windZoneCount: traversedWindZoneIds.length,
+          },
+          discoveryNotice,
         })
       }
       host.dataset.inputDevice = inputController.activeDevice
@@ -1537,6 +1603,9 @@ export function createRenderer(
                 discoveredLandmarkIds: [...discoveredLandmarkIds],
                 traversedWindZoneIds: [...traversedWindZoneIds],
                 activeWindZoneIds: [...activeWindZoneIds],
+                windStrength: activeWindStrength,
+                journey: currentFestivalJourney(),
+                discoveryNotice,
                 destinationRegionId,
                 loadedRegionIds: openWorldSnapshot.loadedRegionIds,
                 regionAssets: openWorldSnapshot.regionAssets,
@@ -1601,7 +1670,9 @@ export function createRenderer(
               ({ id }) => id === landmarkId,
             )
             if (landmark !== undefined) {
+              const wasMapOpen = mapOpen
               placeQaExploration(landmark.position)
+              mapOpen = wasMapOpen
             }
           },
           qaExploreWindZone: (

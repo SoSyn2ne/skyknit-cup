@@ -5,6 +5,11 @@ import { createGameAudio } from './GameAudio'
 class FakeAudioParam {
   readonly setValues: Array<{ readonly value: number; readonly time: number }> = []
   readonly ramps: Array<{ readonly value: number; readonly time: number }> = []
+  readonly targets: Array<{
+    readonly value: number
+    readonly time: number
+    readonly timeConstant: number
+  }> = []
 
   setValueAtTime(value: number, time: number): void {
     this.setValues.push({ value, time })
@@ -12,6 +17,10 @@ class FakeAudioParam {
 
   exponentialRampToValueAtTime(value: number, time: number): void {
     this.ramps.push({ value, time })
+  }
+
+  setTargetAtTime(value: number, time: number, timeConstant: number): void {
+    this.targets.push({ value, time, timeConstant })
   }
 }
 
@@ -21,6 +30,7 @@ class FakeOscillator {
   onended: (() => void) | null = null
   starts = 0
   stops = 0
+  readonly stopTimes: number[] = []
   throwOnStart = false
 
   connect(): void {}
@@ -34,9 +44,12 @@ class FakeOscillator {
     this.starts += 1
   }
 
-  stop(): void {
+  stop(when = 0): void {
     this.stops += 1
-    this.onended?.()
+    this.stopTimes.push(when)
+    if (when === 0) {
+      this.onended?.()
+    }
   }
 }
 
@@ -62,6 +75,7 @@ class FakeAudioBuffer {
 
 class FakeBufferSource {
   buffer: AudioBuffer | null = null
+  loop = false
   onended: (() => void) | null = null
   starts = 0
   stops = 0
@@ -98,6 +112,7 @@ class FakeAudioContext {
   readonly oscillators: FakeOscillator[] = []
   readonly bufferSources: FakeBufferSource[] = []
   readonly filters: FakeBiquadFilter[] = []
+  readonly gains: FakeGain[] = []
   readonly sampleRate = 48_000
   currentTime = 10
   state: AudioContextState = 'suspended'
@@ -126,7 +141,9 @@ class FakeAudioContext {
   }
 
   createGain(): GainNode {
-    return new FakeGain() as unknown as GainNode
+    const gain = new FakeGain()
+    this.gains.push(gain)
+    return gain as unknown as GainNode
   }
 
   createBuffer(_channels: number, length: number): AudioBuffer {
@@ -214,6 +231,9 @@ describe('generated game audio', () => {
     })
 
     audio.playGate()
+    audio.playDiscovery()
+    audio.playWindEntry()
+    audio.setAmbientWind(0.6)
     audio.setBoosting(true)
     audio.playFinish()
 
@@ -234,6 +254,10 @@ describe('generated game audio', () => {
       wingFlapCues: 0,
       boostCues: 0,
       finishCues: 0,
+      discoveryCues: 0,
+      windEntryCues: 0,
+      ambientWindStrength: 0.6,
+      windBedPlaying: false,
     })
   })
 
@@ -314,6 +338,128 @@ describe('generated game audio', () => {
       'bandpass',
       'bandpass',
     ])
+  })
+
+  it('runs one looped ambient wind bed and follows authored strength', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+    audio.setAmbientWind(0.65)
+    await audio.unlock()
+
+    expect(context.bufferSources).toHaveLength(1)
+    expect(context.bufferSources[0]?.loop).toBe(true)
+    expect(context.filters[0]?.type).toBe('bandpass')
+    const initialGainTarget = context.gains[0]?.gain.targets.at(-1)?.value ?? 0
+    audio.setAmbientWind(0.85)
+    expect(context.bufferSources).toHaveLength(1)
+    expect(context.gains[0]?.gain.targets.at(-1)?.value ?? 0).toBeGreaterThan(
+      initialGainTarget,
+    )
+    audio.setAmbientWind(2)
+    expect(audio.debugSnapshot().ambientWindStrength).toBe(1)
+    audio.setAmbientWind(Number.NaN)
+    expect(audio.debugSnapshot().ambientWindStrength).toBe(1)
+    expect(audio.debugSnapshot()).toMatchObject({
+      ambientWindStrength: 1,
+      windBedPlaying: true,
+    })
+
+    audio.setAmbientWind(0)
+    expect(context.bufferSources[0]?.stops).toBeGreaterThan(0)
+    expect(context.bufferSources[0]?.stopTimes[0]).toBeCloseTo(10.18)
+    expect(audio.debugSnapshot().windBedPlaying).toBe(false)
+  })
+
+  it('plays dedicated landmark and wind-entry cues after unlock', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+    await audio.unlock()
+
+    audio.playDiscovery()
+    audio.playWindEntry()
+
+    expect(audio.debugSnapshot()).toMatchObject({
+      discoveryCues: 1,
+      windEntryCues: 1,
+    })
+    expect(context.oscillators.length).toBeGreaterThanOrEqual(2)
+    expect(context.bufferSources).toHaveLength(1)
+  })
+
+  it('stops and recreates ambient wind across visibility and mute boundaries', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+    audio.setAmbientWind(0.5)
+    await audio.unlock()
+
+    audio.setPageVisible(false)
+    expect(audio.debugSnapshot().windBedPlaying).toBe(false)
+    audio.setPageVisible(true)
+    expect(context.bufferSources).toHaveLength(2)
+    expect(audio.debugSnapshot().windBedPlaying).toBe(true)
+
+    audio.setMuted(true)
+    expect(audio.debugSnapshot().windBedPlaying).toBe(false)
+    audio.setMuted(false)
+    expect(context.bufferSources).toHaveLength(3)
+    expect(audio.debugSnapshot().windBedPlaying).toBe(true)
+  })
+
+  it('blocks discovery and wind-entry cues while the page is hidden', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+    await audio.unlock()
+    audio.setPageVisible(false)
+
+    audio.playDiscovery()
+    audio.playWindEntry()
+
+    expect(audio.debugSnapshot()).toMatchObject({
+      discoveryCues: 0,
+      windEntryCues: 0,
+    })
+    expect(context.oscillators).toHaveLength(0)
+    expect(context.bufferSources).toHaveLength(0)
+  })
+
+  it('stops cues that were already playing when the page becomes hidden', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+    await audio.unlock()
+    audio.playDiscovery()
+    audio.playWindEntry()
+
+    expect(context.oscillators.length).toBeGreaterThan(0)
+    expect(context.bufferSources.length).toBeGreaterThan(0)
+    const oscillatorStopsBeforeHide = context.oscillators.map(
+      (node) => node.stops,
+    )
+    const sourceStopsBeforeHide = context.bufferSources.map(
+      (node) => node.stops,
+    )
+
+    audio.setPageVisible(false)
+
+    expect(
+      context.oscillators.every(
+        (node, index) => node.stops > oscillatorStopsBeforeHide[index],
+      ),
+    ).toBe(true)
+    expect(
+      context.bufferSources.every(
+        (node, index) => node.stops > sourceStopsBeforeHide[index],
+      ),
+    ).toBe(true)
   })
 
   it('blocks new cues and stops active nodes while muted', async () => {
