@@ -22,7 +22,7 @@ export interface CreateDragonOptions {
 
 export const GHOST_DRAGON_VISUAL_SPEC = Object.freeze({
   teal: '#62e9df',
-  opacity: 0.34,
+  opacity: 0.42,
   emissiveIntensity: 0.72,
   renderOrder: 4,
 })
@@ -96,7 +96,7 @@ function createGhostMaterial(
   material.transparent = true
   material.opacity = GHOST_DRAGON_VISUAL_SPEC.opacity
   material.depthWrite = false
-  material.blending = THREE.AdditiveBlending
+  material.blending = THREE.NormalBlending
   material.dithering = true
   material.userData.skyLeagueGhost = true
 

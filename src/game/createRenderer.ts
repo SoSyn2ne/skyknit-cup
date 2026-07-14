@@ -1792,6 +1792,9 @@ export function createRenderer(
         resolvedQuality: renderQuality.tier,
         mission: raceState.mission,
         missionGrades: raceState.persistent.missionGrades,
+        liveDeltaMs: raceLiveDeltaMs,
+        leagueResult: raceState.leagueResult,
+        skyLeague: raceState.persistent.skyLeague,
       })
       if (explorationHud !== null) {
         const currentRegion = getCurrentRegion(
@@ -1800,6 +1803,7 @@ export function createRenderer(
         const journey = currentFestivalJourney()
         explorationHud.update({
           regionName: currentRegion?.name ?? '군도 사이',
+          currentRegionId: currentRegion?.id ?? null,
           discoveredRegionIds,
           destinationRegionId,
           destinationGuidance: getDestinationGuidance(
@@ -1819,6 +1823,9 @@ export function createRenderer(
           coinRun: coinRunState,
           coinBestTimesMs: raceState.persistent.coinBestTimesMs,
           coinRunIsNewBest,
+          coinLeagueResult: coinRunLeagueResult,
+          skyLeague: raceState.persistent.skyLeague,
+          coinLiveDeltaMs,
           selectedMissionId: raceState.mission.selectedMissionId,
           journey: {
             ...journey,

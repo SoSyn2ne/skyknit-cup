@@ -1,8 +1,17 @@
-import type { RacePhase } from '../race/raceState'
-import type { RaceQuality } from '../race/raceState'
+import type {
+  RaceLeaguePlacement,
+  RaceLeagueResult,
+  RacePhase,
+  RaceQuality,
+} from '../race/raceState'
 import type { RenderQualityTier } from '../quality/qualityPolicy'
 import type { InputDevice } from '../input/InputController'
 import type { GateIndicatorState } from './gateIndicator'
+import { formatGhostDelta } from '../competition/ghostRun'
+import type {
+  LeagueMedal,
+  SkyLeagueRecords,
+} from '../competition/skyLeagueRecords'
 import type {
   AwardedMissionGrade,
   MissionAttemptStats,
@@ -30,6 +39,9 @@ export interface RaceHudView {
   readonly resolvedQuality: RenderQualityTier
   readonly mission: MissionSessionState
   readonly missionGrades: Readonly<MissionGrades>
+  readonly liveDeltaMs: number | null
+  readonly leagueResult: RaceLeagueResult | null
+  readonly skyLeague: SkyLeagueRecords
 }
 
 export interface RaceHudActions {
@@ -81,6 +93,36 @@ export function formatMissionGrade(
   if (grade === 'bronze') return '브론즈'
   if (grade === 'silver') return '실버'
   return '골드'
+}
+
+export function formatLeagueMedal(medal: LeagueMedal | null): string {
+  if (medal === 'gold') return '금메달'
+  if (medal === 'silver') return '은메달'
+  if (medal === 'bronze') return '동메달'
+  return '메달 없음'
+}
+
+export function formatLeaguePlacement(
+  placement: RaceLeaguePlacement,
+): string {
+  if (placement.rank === null) return 'Top 10 밖'
+  return [
+    `${placement.rank}위`,
+    formatLeagueMedal(placement.medal),
+    placement.isNewBest ? '새 최고 기록' : null,
+  ]
+    .filter((label): label is string => label !== null)
+    .join(' · ')
+}
+
+export function updateCachedDom(
+  previousSignature: string | null,
+  nextSignature: string | null,
+  update: () => void,
+): string | null {
+  if (previousSignature === nextSignature) return previousSignature
+  update()
+  return nextSignature
 }
 
 export function formatMissionProgress(
@@ -136,7 +178,11 @@ export function createRaceHud(
   const timer = document.createElement('strong')
   timer.dataset.raceTimer = 'true'
   timer.textContent = formatRaceTime(0)
-  timerBlock.append(timerLabel, timer)
+  const liveDelta = document.createElement('small')
+  liveDelta.className = 'race-hud__delta'
+  liveDelta.dataset.raceDelta = 'true'
+  liveDelta.textContent = '기준 없음'
+  timerBlock.append(timerLabel, timer, liveDelta)
 
   const gateBlock = document.createElement('div')
   gateBlock.className = 'race-hud__metric race-hud__metric--gate'
@@ -168,7 +214,6 @@ export function createRaceHud(
 
   const panel = document.createElement('section')
   panel.className = 'race-hud__panel'
-  panel.setAttribute('aria-live', 'polite')
   const eyebrow = document.createElement('p')
   eyebrow.className = 'race-hud__eyebrow'
   eyebrow.textContent = 'SKYKNOT CUP'
@@ -214,6 +259,8 @@ export function createRaceHud(
   )
   const result = document.createElement('dl')
   result.className = 'race-hud__result'
+  result.setAttribute('aria-live', 'polite')
+  result.setAttribute('aria-atomic', 'true')
   result.hidden = true
   const settings = document.createElement('div')
   settings.className = 'race-hud__settings'
@@ -268,6 +315,39 @@ export function createRaceHud(
   const actionsRow = document.createElement('div')
   actionsRow.className = 'race-hud__actions'
 
+  const league = document.createElement('section')
+  league.className = 'race-hud__league'
+  league.dataset.skyLeague = 'true'
+  league.setAttribute('aria-label', '로컬 Sky League 기록판')
+  const leagueToggle = createButton('로컬 Top 10 보기', () => {
+    setLeagueExpanded(!leagueExpanded)
+  })
+  leagueToggle.className = 'race-hud__league-toggle'
+  leagueToggle.setAttribute('aria-expanded', 'false')
+  const leagueContent = document.createElement('div')
+  leagueContent.className = 'race-hud__league-content'
+  leagueContent.hidden = true
+  const leagueCategories = document.createElement('div')
+  leagueCategories.className = 'race-hud__league-categories'
+  leagueCategories.setAttribute('role', 'group')
+  leagueCategories.setAttribute('aria-label', '기록판 종류')
+  const raceLeagueButton = createButton('전체 레이스', () => {
+    setLeagueCategory('race')
+  })
+  raceLeagueButton.dataset.leagueCategory = 'race'
+  raceLeagueButton.setAttribute('aria-pressed', 'true')
+  const missionLeagueButton = createButton('선택 미션', () => {
+    setLeagueCategory('mission')
+  })
+  missionLeagueButton.dataset.leagueCategory = 'mission'
+  missionLeagueButton.setAttribute('aria-pressed', 'false')
+  leagueCategories.append(raceLeagueButton, missionLeagueButton)
+  const leaderboard = document.createElement('ol')
+  leaderboard.className = 'race-hud__leaderboard'
+  leaderboard.setAttribute('aria-label', '로컬 Top 10 순위')
+  leagueContent.append(leagueCategories, leaderboard)
+  league.append(leagueToggle, leagueContent)
+
   const resume = createButton('계속 날기', actions.resume)
   const respawn = createButton('관문에서 계속', actions.respawn)
   const restart = createButton('처음부터', actions.restart)
@@ -284,11 +364,17 @@ export function createRaceHud(
     missionPicker,
     settings,
     result,
+    league,
     actionsRow,
   )
   root.append(status, missionTracker, countdown, gateGuide, panel)
   host.append(root)
   let previousPhase: RacePhase | null = null
+  let resultSignature: string | null = null
+  let leaderboardSignature: string | null = null
+  let leagueExpanded = false
+  let leagueCategory: 'race' | 'mission' = 'race'
+  let latestView: RaceHudView | null = null
 
   const showOnly = (...buttons: HTMLButtonElement[]): void => {
     for (const button of [resume, respawn, restart, retry, chooseMission]) {
@@ -296,56 +382,186 @@ export function createRaceHud(
     }
   }
 
+  function setLeagueExpanded(expanded: boolean): void {
+    leagueExpanded = expanded
+    leagueContent.hidden = !expanded
+    leagueToggle.setAttribute('aria-expanded', String(expanded))
+    leagueToggle.textContent = expanded
+      ? '로컬 Top 10 닫기'
+      : '로컬 Top 10 보기'
+  }
+
+  function setLeagueCategory(category: 'race' | 'mission'): void {
+    leagueCategory = category
+    raceLeagueButton.setAttribute(
+      'aria-pressed',
+      String(category === 'race'),
+    )
+    missionLeagueButton.setAttribute(
+      'aria-pressed',
+      String(category === 'mission'),
+    )
+    if (latestView !== null) updateLeaderboard(latestView)
+  }
+
+  const appendResultRow = (
+    term: string,
+    value: string,
+    category?: 'race' | 'mission',
+    placement?: RaceLeaguePlacement,
+  ): void => {
+    const termElement = document.createElement('dt')
+    termElement.textContent = term
+    const valueElement = document.createElement('dd')
+    valueElement.textContent = value
+    if (category !== undefined && placement !== undefined) {
+      valueElement.dataset.leagueCategory = category
+      valueElement.dataset.resultRank = String(placement.rank ?? 'none')
+      valueElement.dataset.resultMedal = placement.medal ?? 'none'
+    }
+    result.append(termElement, valueElement)
+  }
+
   const updateResult = (view: RaceHudView): void => {
-    result.replaceChildren()
+    if (view.finalElapsedMs === null) return
+    const finalElapsedMs = view.finalElapsedMs
 
-    if (view.finalElapsedMs === null) {
-      return
-    }
+    const nextSignature = JSON.stringify({
+      finalElapsedMs,
+      bestTimeMs: view.bestTimeMs,
+      previousBestTimeMs: view.previousBestTimeMs,
+      missionId: view.mission.selectedMissionId,
+      missionResult: view.mission.result,
+      missionGrade: view.missionGrades[view.mission.selectedMissionId] ?? null,
+      leagueResult: view.leagueResult,
+    })
 
-    const rows: readonly [string, string][] = [
-      [
-        '미션 결과',
-        view.mission.result?.success === true ? '성공' : '실패',
-      ],
-      [
-        '이번 등급',
-        formatMissionGrade(view.mission.result?.grade ?? 'failed'),
-      ],
-      [
-        '최고 등급',
-        formatMissionGrade(
-          view.missionGrades[view.mission.selectedMissionId] ?? null,
-        ),
-      ],
-      ['이번 기록', formatRaceTime(view.finalElapsedMs)],
-      [
-        '최고 기록',
-        view.bestTimeMs === null ? '기록 없음' : formatRaceTime(view.bestTimeMs),
-      ],
-      [
-        '최고 기록 대비',
-        view.previousBestTimeMs === null ||
-        view.finalElapsedMs < view.previousBestTimeMs
-          ? '새 최고 기록'
-          : `+${formatRaceTime(
-              view.finalElapsedMs - view.previousBestTimeMs,
-            )}`,
-      ],
-    ]
+    resultSignature = updateCachedDom(
+      resultSignature,
+      nextSignature,
+      () => {
+        result.replaceChildren()
 
-    for (const [term, value] of rows) {
-      const termElement = document.createElement('dt')
-      termElement.textContent = term
-      const valueElement = document.createElement('dd')
-      valueElement.textContent = value
-      result.append(termElement, valueElement)
-    }
+        const rows: readonly [string, string][] = [
+          [
+            '미션 결과',
+            view.mission.result?.success === true ? '성공' : '실패',
+          ],
+          [
+            '이번 등급',
+            formatMissionGrade(view.mission.result?.grade ?? 'failed'),
+          ],
+          [
+            '최고 등급',
+            formatMissionGrade(
+              view.missionGrades[view.mission.selectedMissionId] ?? null,
+            ),
+          ],
+          ['이번 기록', formatRaceTime(finalElapsedMs)],
+          [
+            '최고 기록',
+            view.bestTimeMs === null
+              ? '기록 없음'
+              : formatRaceTime(view.bestTimeMs),
+          ],
+          [
+            '최고 기록 대비',
+            view.previousBestTimeMs === null ||
+            finalElapsedMs < view.previousBestTimeMs
+              ? '새 최고 기록'
+              : `+${formatRaceTime(
+                  finalElapsedMs - view.previousBestTimeMs,
+                )}`,
+          ],
+        ]
+
+        for (const [term, value] of rows) appendResultRow(term, value)
+
+        if (view.leagueResult !== null) {
+          appendResultRow(
+            '전체 레이스 순위',
+            formatLeaguePlacement(view.leagueResult.race),
+            'race',
+            view.leagueResult.race,
+          )
+          if (
+            view.mission.result?.success === true &&
+            view.leagueResult.mission !== null
+          ) {
+            appendResultRow(
+              '선택 미션 순위',
+              formatLeaguePlacement(view.leagueResult.mission),
+              'mission',
+              view.leagueResult.mission,
+            )
+          }
+        }
+      },
+    )
+  }
+
+  const updateLeaderboard = (view: RaceHudView): void => {
+    const missionId = view.mission.selectedMissionId
+    const missionDefinition =
+      MISSION_CATALOG.find((mission) => mission.id === missionId) ??
+      MISSION_CATALOG[0]
+    missionLeagueButton.textContent = missionDefinition.name
+    const raceBoard = view.skyLeague.raceTop10Ms
+    const missionBoard = view.skyLeague.missionTop10[missionId] ?? []
+    const nextSignature =
+      leagueCategory === 'race'
+        ? `race:${raceBoard.join(',')}`
+        : `mission:${missionId}:${missionBoard
+            .map((entry) => `${entry.grade}:${entry.elapsedMs}`)
+            .join(',')}`
+
+    leaderboardSignature = updateCachedDom(
+      leaderboardSignature,
+      nextSignature,
+      () => {
+        leaderboard.replaceChildren()
+        const rowCount =
+          leagueCategory === 'race' ? raceBoard.length : missionBoard.length
+        if (rowCount === 0) {
+          const empty = document.createElement('li')
+          empty.className = 'race-hud__leaderboard-empty'
+          empty.textContent = '아직 기록이 없습니다.'
+          leaderboard.append(empty)
+          return
+        }
+
+        if (leagueCategory === 'race') {
+          raceBoard.forEach((elapsedMs, index) => {
+            const row = document.createElement('li')
+            row.dataset.leaderboardRow = String(index + 1)
+            row.textContent = `${index + 1}위 · ${formatRaceTime(elapsedMs)}`
+            leaderboard.append(row)
+          })
+          return
+        }
+
+        missionBoard.forEach((entry, index) => {
+          const row = document.createElement('li')
+          row.dataset.leaderboardRow = String(index + 1)
+          row.textContent = `${index + 1}위 · ${formatMissionGrade(
+            entry.grade,
+          )} · ${formatRaceTime(entry.elapsedMs)}`
+          leaderboard.append(row)
+        })
+      },
+    )
+  }
+
+  const clearResult = (): void => {
+    resultSignature = updateCachedDom(resultSignature, null, () => {
+      result.replaceChildren()
+    })
   }
 
   return {
     element: root,
     update: (view) => {
+      latestView = view
       const phaseChanged = previousPhase !== view.phase
       const missionDefinition =
         MISSION_CATALOG.find(
@@ -356,6 +572,12 @@ export function createRaceHud(
       timer.textContent = formatRaceTime(
         view.finalElapsedMs ?? view.elapsedMs,
       )
+      liveDelta.hidden =
+        view.phase !== 'countdown' && view.phase !== 'racing'
+      liveDelta.textContent =
+        view.liveDeltaMs === null
+          ? '기준 없음'
+          : formatGhostDelta(view.liveDeltaMs)
       gate.textContent = `${Math.min(
         view.nextCheckpointIndex,
         view.checkpointCount,
@@ -381,6 +603,7 @@ export function createRaceHud(
       gateGuide.style.transform = `translate(-50%, -50%) rotate(${view.gateIndicator.angleRadians}rad)`
       panel.hidden = view.phase === 'countdown' || view.phase === 'racing'
       result.hidden = view.phase !== 'finished'
+      league.hidden = view.phase !== 'finished'
       missionPicker.hidden = view.phase !== 'ready'
       missionSelect.value = view.mission.selectedMissionId
       missionObjective.textContent = missionDefinition?.objective ?? ''
@@ -416,20 +639,25 @@ export function createRaceHud(
           view.inputDevice === 'touch'
             ? '미션을 고르고 비행 시작을 누르세요.'
             : '미션을 고른 뒤 Enter 또는 비행 키로 출발하세요.'
-        result.replaceChildren()
+        clearResult()
         showOnly()
       } else if (view.phase === 'paused') {
         title.textContent = '바람길 일시정지'
         detail.textContent = '타이머와 비행 진행이 그대로 멈췄습니다.'
-        result.replaceChildren()
+        clearResult()
         showOnly(resume, respawn, restart)
       } else if (view.phase === 'finished') {
+        if (phaseChanged) {
+          setLeagueCategory('race')
+          setLeagueExpanded(false)
+        }
         title.textContent = '하늘매듭 완주'
         detail.textContent =
           view.mission.result?.success === true
             ? `${missionDefinition?.name ?? '미션'} 성공 · 더 높은 등급에 도전해 보세요.`
             : `${missionDefinition?.name ?? '미션'} 실패 · 조건을 확인하고 다시 도전하세요.`
         updateResult(view)
+        updateLeaderboard(view)
         showOnly(retry, chooseMission)
       }
 

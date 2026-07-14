@@ -139,7 +139,7 @@ describe('Sky League ghost dragon appearance', () => {
         expect(material.transparent).toBe(true)
         expect(material.opacity).toBe(GHOST_DRAGON_VISUAL_SPEC.opacity)
         expect(material.depthWrite).toBe(false)
-        expect(material.blending).toBe(THREE.AdditiveBlending)
+        expect(material.blending).toBe(THREE.NormalBlending)
         if (material instanceof THREE.MeshStandardMaterial) {
           colors.add(material.color.getHex())
         }

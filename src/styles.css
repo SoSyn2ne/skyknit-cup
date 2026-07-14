@@ -115,6 +115,15 @@ button {
   line-height: 1.25;
 }
 
+.race-hud__delta {
+  margin-top: 3px;
+  color: var(--active);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .race-hud__mission-tracker {
   position: absolute;
   top: max(84px, calc(env(safe-area-inset-top) + 68px));
@@ -443,6 +452,93 @@ button {
   border-block: 1px solid color-mix(in srgb, var(--sky-haze) 22%, transparent);
 }
 
+.race-hud[data-phase='finished'] .race-hud__panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.race-hud[data-phase='finished'] .race-hud__result {
+  flex: 0 0 auto;
+}
+
+.race-hud__league {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 10px;
+}
+
+.race-hud__league-toggle,
+.race-hud__league-categories button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--sky-haze) 44%, transparent);
+  border-radius: 6px;
+  color: var(--cloud);
+  font-weight: 800;
+  background: color-mix(in srgb, var(--rock) 82%, transparent);
+  cursor: pointer;
+}
+
+.race-hud__league-toggle {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.race-hud__league-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.race-hud__league-categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.race-hud__league-categories button[aria-pressed='true'] {
+  border-color: var(--active);
+  color: var(--ink);
+  background: var(--active);
+}
+
+.race-hud__leaderboard {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(190px, 30vh);
+  margin: 8px 0 0;
+  padding: 4px 8px;
+  overflow: auto;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--sky-zenith) 20%, transparent);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  list-style: none;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.race-hud__leaderboard li {
+  padding: 7px 4px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--sky-haze) 16%, transparent);
+}
+
+.race-hud__leaderboard li:last-child {
+  border-bottom: 0;
+}
+
+.race-hud__leaderboard-empty {
+  color: var(--sky-haze);
+  text-align: center;
+}
+
 .race-hud__settings {
   display: flex;
   flex-wrap: wrap;
@@ -537,6 +633,12 @@ button {
   outline-offset: 3px;
 }
 
+.race-hud__league-toggle:focus-visible,
+.race-hud__league-categories button:focus-visible {
+  outline: 3px solid var(--cloud);
+  outline-offset: 3px;
+}
+
 .exploration-hud {
   position: absolute;
   z-index: 1;
@@ -567,6 +669,7 @@ button {
   top: max(16px, env(safe-area-inset-top));
   left: max(16px, env(safe-area-inset-left));
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
   min-width: 154px;
@@ -576,6 +679,7 @@ button {
   background: color-mix(in srgb, var(--ink) 78%, transparent);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+  pointer-events: auto;
 }
 
 .exploration-hud__coin-run strong {
@@ -583,9 +687,88 @@ button {
   letter-spacing: 0.025em;
 }
 
-.exploration-hud__coin-run span {
+.exploration-hud__coin-time {
   min-width: 4.7rem;
   text-align: right;
+}
+
+.exploration-hud__coin-delta {
+  order: 4;
+  flex: 1 0 100%;
+  color: var(--active);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.exploration-hud__coin-result {
+  order: 5;
+  flex: 1 0 100%;
+  overflow: hidden;
+  color: var(--active);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exploration-hud__coin-league {
+  position: relative;
+  order: 3;
+  margin-left: auto;
+}
+
+.exploration-hud__coin-league-toggle {
+  min-width: 52px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--active) 50%, transparent);
+  border-radius: 6px;
+  color: var(--cloud);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--rock) 88%, transparent);
+  cursor: pointer;
+}
+
+.exploration-hud__coin-league-content {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 8px);
+  right: 0;
+  left: auto;
+  width: min(220px, calc(100vw - 16px));
+  padding: 8px;
+  border-left: 3px solid var(--active);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 94%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 28%, transparent);
+}
+
+.exploration-hud__coin-leaderboard {
+  max-height: min(220px, 34vh);
+  margin: 0;
+  padding: 0 4px;
+  overflow: auto;
+  font-size: 0.75rem;
+  list-style: none;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.exploration-hud__coin-leaderboard li {
+  padding: 7px 3px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--sky-haze) 16%, transparent);
+}
+
+.exploration-hud__coin-leaderboard li:last-child {
+  border-bottom: 0;
+}
+
+.exploration-hud__coin-leaderboard-empty {
+  color: var(--sky-haze);
+  text-align: center;
 }
 
 .exploration-hud__coin-run[data-new-best='true'] {
@@ -813,6 +996,16 @@ button {
   margin-top: 22px;
 }
 
+.race-hud[data-phase='finished'] .race-hud__actions {
+  position: sticky;
+  z-index: 1;
+  bottom: 0;
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-top: 10px;
+  background: color-mix(in srgb, var(--ink) 96%, transparent);
+}
+
 .race-hud__actions button {
   min-height: 48px;
   padding: 0 18px;
@@ -956,6 +1149,65 @@ button {
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
+  .race-hud[data-phase='finished'] .race-hud__panel {
+    top: max(8px, env(safe-area-inset-top));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: min(620px, calc(100% - 32px));
+    height: auto;
+    max-height: none;
+    padding: 12px 14px;
+    transform: translateX(-50%);
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__eyebrow,
+  .race-hud[data-phase='finished'] .race-hud__settings {
+    display: none;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__panel h1 {
+    font-size: 1.5rem;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__detail {
+    margin-top: 4px;
+    overflow: hidden;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__result {
+    grid-template-columns: max-content 1fr max-content 1fr;
+    gap: 4px 12px;
+    margin-top: 8px;
+    padding: 8px 0;
+    font-size: 0.75rem;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__league {
+    margin-top: 6px;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__league-content {
+    margin-top: 6px;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__leaderboard {
+    max-height: 76px;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__actions {
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__actions button {
+    flex: 1;
+    min-height: 44px;
+  }
+
   .race-hud[data-phase='ready'] .race-hud__panel {
     bottom: max(16px, env(safe-area-inset-bottom));
     left: max(16px, env(safe-area-inset-left));
@@ -1166,9 +1418,10 @@ button {
   }
 
   .exploration-hud__coin-run {
-    top: max(72px, calc(env(safe-area-inset-top) + 56px));
+    top: max(132px, calc(env(safe-area-inset-top) + 116px));
     left: 50%;
     gap: 6px;
+    max-width: calc(100% - 16px);
     min-width: 138px;
     padding: 8px 6px;
     font-size: 0.72rem;
@@ -1187,13 +1440,13 @@ button {
   }
 
   .exploration-hud__destination {
-    top: max(114px, calc(env(safe-area-inset-top) + 98px));
+    top: max(244px, calc(env(safe-area-inset-top) + 228px));
     max-width: calc(100% - 24px);
     white-space: nowrap;
   }
 
   .exploration-hud__journey {
-    top: max(148px, calc(env(safe-area-inset-top) + 132px));
+    top: max(282px, calc(env(safe-area-inset-top) + 266px));
     max-width: calc(100% - 24px);
   }
 
@@ -1212,10 +1465,61 @@ button {
 }
 
 @media (max-width: 360px) {
+  .race-hud[data-phase='finished'] .race-hud__panel {
+    padding: 12px 14px;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__eyebrow {
+    margin-bottom: 4px;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__panel h1 {
+    font-size: 1.5rem;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__detail {
+    margin-top: 6px;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__result {
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 10px;
+    margin-top: 8px;
+    padding: 8px 0;
+    font-size: 0.75rem;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__result dt {
+    white-space: nowrap;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__result dd {
+    min-width: 0;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__league {
+    margin-top: 6px;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .race-hud[data-phase='finished'] .race-hud__actions button {
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 8px;
+  }
+
   .exploration-hud__coin-run {
-    right: 62px;
-    left: auto;
-    transform: none;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
   }
 }
 

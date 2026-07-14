@@ -1,6 +1,9 @@
 import type { ExplorationMovement } from '../exploration/explorationFlight'
 import type { CoinRunState } from '../collectibles/coinRun'
 import type { CoinBestTimes } from '../persistence/records'
+import type { RaceLeaguePlacement } from '../race/raceState'
+import type { SkyLeagueRecords } from '../competition/skyLeagueRecords'
+import { formatGhostDelta } from '../competition/ghostRun'
 import {
   MISSION_CATALOG,
   type MissionId,
@@ -13,7 +16,12 @@ import {
 } from '../world/festivalHubActivities'
 import type { DestinationGuidance, OpenWorldRegionId } from '../world/openWorldRegions'
 import { OPEN_WORLD_REGIONS } from '../world/openWorldRegions'
-import { formatMusicVolumePercent, formatRaceTime } from './RaceHud'
+import {
+  formatLeagueMedal,
+  formatMusicVolumePercent,
+  formatRaceTime,
+  updateCachedDom,
+} from './RaceHud'
 
 export interface FestivalJourneyHudView extends FestivalJourney {
   readonly publicLandmarkCount: number
@@ -23,6 +31,7 @@ export interface FestivalJourneyHudView extends FestivalJourney {
 
 export interface ExplorationHudView {
   readonly regionName: string
+  readonly currentRegionId: OpenWorldRegionId | null
   readonly discoveredRegionIds: readonly OpenWorldRegionId[]
   readonly destinationRegionId: OpenWorldRegionId | null
   readonly destinationGuidance: DestinationGuidance | null
@@ -36,6 +45,9 @@ export interface ExplorationHudView {
   readonly coinRun: CoinRunState
   readonly coinBestTimesMs: Readonly<CoinBestTimes>
   readonly coinRunIsNewBest: boolean
+  readonly coinLeagueResult: RaceLeaguePlacement | null
+  readonly skyLeague: SkyLeagueRecords
+  readonly coinLiveDeltaMs: number | null
   readonly selectedMissionId: MissionId
   readonly journey: FestivalJourneyHudView
   readonly discoveryNotice: string | null
@@ -65,6 +77,29 @@ export function formatExploreDistance(distance: number): string {
 
 export function formatCoinRunTime(milliseconds: number): string {
   return formatRaceTime(milliseconds)
+}
+
+export function formatCoinLeagueResult(
+  placement: RaceLeaguePlacement,
+): string {
+  const placementLabel =
+    placement.rank === null
+      ? '지역 Top 10 밖'
+      : [
+          `지역 ${placement.rank}위`,
+          formatLeagueMedal(placement.medal),
+          placement.isNewBest ? '새 최고 기록' : null,
+        ]
+          .filter((label): label is string => label !== null)
+          .join(' · ')
+  return `${placementLabel} · 잠시 후 다시 도전할 수 있어요`
+}
+
+export function resolveCoinLeagueRegionId(
+  coinRunRegionId: OpenWorldRegionId | null,
+  currentRegionId: OpenWorldRegionId | null,
+): OpenWorldRegionId | null {
+  return coinRunRegionId ?? currentRegionId
 }
 
 export function formatFestivalJourneyLine(
@@ -177,10 +212,45 @@ export function createExplorationHud(
   const coinRun = document.createElement('div')
   coinRun.className = 'exploration-hud__coin-run'
   coinRun.dataset.coinRun = 'true'
-  coinRun.setAttribute('aria-live', 'polite')
   const coinCount = document.createElement('strong')
   const coinTime = document.createElement('span')
-  coinRun.append(coinCount, coinTime)
+  coinTime.className = 'exploration-hud__coin-time'
+  const coinDelta = document.createElement('span')
+  coinDelta.className = 'exploration-hud__coin-delta'
+  coinDelta.dataset.coinDelta = 'true'
+  coinDelta.textContent = '기준 없음'
+  const coinResult = document.createElement('span')
+  coinResult.className = 'exploration-hud__coin-result'
+  coinResult.dataset.coinResult = 'true'
+  coinResult.setAttribute('role', 'status')
+  coinResult.setAttribute('aria-live', 'polite')
+  coinResult.setAttribute('aria-atomic', 'true')
+  coinResult.hidden = true
+
+  const coinLeague = document.createElement('section')
+  coinLeague.className = 'exploration-hud__coin-league'
+  coinLeague.dataset.skyLeague = 'true'
+  coinLeague.setAttribute('aria-label', '현재 지역 로컬 Top 10')
+  const coinLeagueToggle = button('Top 10', 'exploration-hud__coin-league-toggle', () => {
+    setCoinLeagueExpanded(!coinLeagueExpanded)
+  })
+  coinLeagueToggle.dataset.leagueCategory = 'coin'
+  coinLeagueToggle.setAttribute('aria-expanded', 'false')
+  const coinLeagueContent = document.createElement('div')
+  coinLeagueContent.className = 'exploration-hud__coin-league-content'
+  coinLeagueContent.hidden = true
+  const coinLeaderboard = document.createElement('ol')
+  coinLeaderboard.className = 'exploration-hud__coin-leaderboard'
+  coinLeaderboard.setAttribute('aria-label', '현재 지역 하늘동전 Top 10 순위')
+  coinLeagueContent.append(coinLeaderboard)
+  coinLeague.append(coinLeagueToggle, coinLeagueContent)
+  coinRun.append(
+    coinCount,
+    coinTime,
+    coinDelta,
+    coinResult,
+    coinLeague,
+  )
 
   const journey = document.createElement('div')
   journey.className = 'exploration-hud__journey'
@@ -305,6 +375,57 @@ export function createExplorationHud(
   )
   host.append(root)
 
+  let coinLeagueExpanded = false
+  let coinLeaderboardSignature: string | null = null
+  let coinResultSignature: string | null = null
+  let previousCoinRegionId: OpenWorldRegionId | null = null
+
+  function setCoinLeagueExpanded(expanded: boolean): void {
+    coinLeagueExpanded = expanded
+    coinLeagueContent.hidden = !expanded
+    coinLeagueToggle.setAttribute('aria-expanded', String(expanded))
+    coinLeagueToggle.textContent = expanded ? '닫기' : 'Top 10'
+  }
+
+  const updateCoinLeaderboard = (view: ExplorationHudView): void => {
+    const regionId = resolveCoinLeagueRegionId(
+      view.coinRun.regionId,
+      view.currentRegionId,
+    )
+    if (regionId === null) return
+    const regionDefinition = OPEN_WORLD_REGIONS.find(
+      (entry) => entry.id === regionId,
+    )
+    const board = view.skyLeague.coinTop10Ms[regionId] ?? []
+    const nextSignature = `${regionId}:${board.join(',')}`
+    coinLeagueToggle.setAttribute(
+      'aria-label',
+      `${regionDefinition?.name ?? '현재 지역'} 하늘동전 Top 10 ${
+        coinLeagueExpanded ? '닫기' : '보기'
+      }`,
+    )
+    coinLeaderboardSignature = updateCachedDom(
+      coinLeaderboardSignature,
+      nextSignature,
+      () => {
+        coinLeaderboard.replaceChildren()
+        if (board.length === 0) {
+          const empty = document.createElement('li')
+          empty.className = 'exploration-hud__coin-leaderboard-empty'
+          empty.textContent = '아직 기록이 없습니다.'
+          coinLeaderboard.append(empty)
+          return
+        }
+        board.forEach((elapsedMs, index) => {
+          const row = document.createElement('li')
+          row.dataset.leaderboardRow = String(index + 1)
+          row.textContent = `${index + 1}위 · ${formatCoinRunTime(elapsedMs)}`
+          coinLeaderboard.append(row)
+        })
+      },
+    )
+  }
+
   return {
     element: root,
     update: (view) => {
@@ -313,9 +434,45 @@ export function createExplorationHud(
       coinTime.textContent = formatCoinRunTime(
         view.coinRun.finalElapsedMs ?? view.coinRun.elapsedMs,
       )
+      coinDelta.hidden = view.coinRun.phase !== 'running'
+      coinDelta.textContent =
+        view.coinLiveDeltaMs === null
+          ? '기준 없음'
+          : formatGhostDelta(view.coinLiveDeltaMs)
       coinRun.dataset.phase = view.coinRun.phase
       coinRun.dataset.newBest = String(view.coinRunIsNewBest)
       coinRun.title = view.coinRunIsNewBest ? '지역 최고 기록' : '하늘동전 기록 도전'
+      const completedPlacement =
+        view.coinRun.phase === 'completed' ? view.coinLeagueResult : null
+      const nextCoinResultSignature =
+        completedPlacement === null
+          ? null
+          : JSON.stringify({
+              regionId: view.coinRun.regionId,
+              placement: completedPlacement,
+            })
+      coinResultSignature = updateCachedDom(
+        coinResultSignature,
+        nextCoinResultSignature,
+        () => {
+          coinResult.textContent =
+            completedPlacement === null
+              ? ''
+              : formatCoinLeagueResult(completedPlacement)
+        },
+      )
+      coinResult.hidden = completedPlacement === null
+
+      const leagueRegionId = resolveCoinLeagueRegionId(
+        view.coinRun.regionId,
+        view.currentRegionId,
+      )
+      if (leagueRegionId !== previousCoinRegionId) {
+        setCoinLeagueExpanded(false)
+        previousCoinRegionId = leagueRegionId
+      }
+      coinLeague.hidden = leagueRegionId === null || view.paused
+      if (leagueRegionId !== null) updateCoinLeaderboard(view)
       journeyProgress.textContent = `여정 ${view.journey.completedSteps}/${view.journey.totalSteps}`
       journeyCopy.textContent = formatFestivalJourneyLine(view.journey).replace(
         /^여정 \d+\/\d+ · /,

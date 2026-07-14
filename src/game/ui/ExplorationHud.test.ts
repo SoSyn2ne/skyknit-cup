@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  formatCoinLeagueResult,
   formatCoinRunTime,
   formatExploreDistance,
   formatFestivalDiscoveryNotice,
   formatFestivalJourneyLine,
   formatFestivalMapProgress,
   getExploreContextLabel,
+  resolveCoinLeagueRegionId,
 } from './ExplorationHud'
 import type { FestivalJourneyObjectiveId } from '../world/festivalHubActivities'
 
@@ -28,6 +30,33 @@ describe('exploration HUD formatting', () => {
     expect(formatCoinRunTime(0)).toBe('0:00.000')
     expect(formatCoinRunTime(65_432)).toBe('1:05.432')
     expect(formatCoinRunTime(Number.NaN)).toBe('0:00.000')
+  })
+
+  it('summarizes a completed regional Sky League run without a live countdown', () => {
+    expect(
+      formatCoinLeagueResult({
+        rank: 2,
+        medal: 'silver',
+        isNewBest: false,
+        inserted: true,
+      }),
+    ).toBe('지역 2위 · 은메달 · 잠시 후 다시 도전할 수 있어요')
+    expect(
+      formatCoinLeagueResult({
+        rank: null,
+        medal: null,
+        isNewBest: false,
+        inserted: false,
+      }),
+    ).toBe('지역 Top 10 밖 · 잠시 후 다시 도전할 수 있어요')
+  })
+
+  it('keeps the current-region board available while idle and pins an active course', () => {
+    expect(resolveCoinLeagueRegionId(null, 'cloud-ruins')).toBe('cloud-ruins')
+    expect(
+      resolveCoinLeagueRegionId('festival-hub', 'cloud-ruins'),
+    ).toBe('festival-hub')
+    expect(resolveCoinLeagueRegionId(null, null)).toBeNull()
   })
 
   it.each([
