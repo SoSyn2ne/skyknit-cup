@@ -91,7 +91,7 @@ export function createOpenWorldActivities(
   const material = new THREE.MeshBasicMaterial({
     color: windColor,
     transparent: true,
-    opacity: 0.18,
+    opacity: 0.24,
     depthWrite: false,
     fog: true,
   })

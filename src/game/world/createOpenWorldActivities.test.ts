@@ -20,10 +20,10 @@ describe('open-world activity visuals', () => {
     })
     const ribbons = scene.getObjectByName('M32_FestivalWindRibbons')
     expect(ribbons).toBeInstanceOf(THREE.InstancedMesh)
-    expect(
-      ((ribbons as THREE.InstancedMesh).material as THREE.MeshBasicMaterial)
-        .color,
-    ).toEqual(new THREE.Color('#39c99a'))
+    const material = (ribbons as THREE.InstancedMesh)
+      .material as THREE.MeshBasicMaterial
+    expect(material.color).toEqual(new THREE.Color('#39c99a'))
+    expect(material.opacity).toBe(0.24)
 
     const before = [
       ...(ribbons as THREE.InstancedMesh).instanceMatrix.array,

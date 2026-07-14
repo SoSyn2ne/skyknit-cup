@@ -212,6 +212,11 @@ export interface FlightDebugSnapshot {
   }
 }
 
+export type FestivalHubLandingPadId =
+  | 'festival-hub-pad'
+  | 'festival-tower-pad'
+  | 'festival-grotto-pad'
+
 export interface RendererSession {
   readonly canvas: HTMLCanvasElement
   loseContext?: () => void
@@ -219,6 +224,9 @@ export interface RendererSession {
   qaExploreRegion?: (regionId: OpenWorldRegionId) => void
   qaExploreChallenge?: () => void
   qaExploreLandmark?: (landmarkId: FestivalHubLandmarkId) => void
+  qaExploreLandmarkView?: (landmarkId: FestivalHubLandmarkId) => void
+  qaExploreOverview?: () => void
+  qaExploreLandingPad?: (landingPadId: FestivalHubLandingPadId) => void
   qaExploreWindZone?: (windZoneId: FestivalHubWindZoneId) => void
   qaExploreCollision?: () => void
   qaCollectCoin?: (regionId: OpenWorldRegionId, index: number) => void
@@ -1509,6 +1517,7 @@ export function createRenderer(
       position: FlightState['position'],
       headingRadians = 0,
       speed = 0,
+      pitchRadians = 0,
     ): void => {
       gameMode = 'explore'
       gameAudio.setMusicActive(true)
@@ -1521,6 +1530,7 @@ export function createRenderer(
         position: { ...position },
         headingRadians,
         speed,
+        pitchRadians,
       })
       flightState = explorationState.flight
       discoveredRegionIds = [
@@ -1704,6 +1714,72 @@ export function createRenderer(
               placeQaExploration(landmark.position)
               mapOpen = wasMapOpen
             }
+          },
+          qaExploreLandingPad: (
+            landingPadId: FestivalHubLandingPadId,
+          ): void => {
+            const landingPad = FESTIVAL_HUB_LANDING_PADS.find(
+              ({ id }) => id === landingPadId,
+            )
+            if (landingPad !== undefined) {
+              placeQaExploration({
+                ...landingPad.position,
+                y: landingPad.position.y + 7,
+              })
+            }
+          },
+          qaExploreOverview: (): void => {
+            placeQaExploration(
+              { x: 0, y: 50, z: 35 },
+              0,
+              0,
+              -0.42,
+            )
+          },
+          qaExploreLandmarkView: (
+            landmarkId: FestivalHubLandmarkId,
+          ): void => {
+            const viewpoints: Record<
+              FestivalHubLandmarkId,
+              {
+                readonly position: FlightState['position']
+                readonly headingRadians: number
+                readonly pitchRadians: number
+              }
+            > = {
+              'dawnwing-airfield': {
+                position: { x: 0, y: 26, z: 18 },
+                headingRadians: 0,
+                pitchRadians: -0.28,
+              },
+              'sunweave-spire': {
+                position: { x: 0, y: 30, z: -34 },
+                headingRadians: -0.56,
+                pitchRadians: -0.08,
+              },
+              'crown-race-arch': {
+                position: { x: 5, y: 25, z: -18 },
+                headingRadians: 0.74,
+                pitchRadians: -0.1,
+              },
+              'wind-loom': {
+                position: { x: -5, y: 26, z: 5 },
+                headingRadians: 0.66,
+                pitchRadians: -0.04,
+              },
+              'whispering-grotto': {
+                position: { x: -15, y: 20, z: 5 },
+                headingRadians: -0.79,
+                pitchRadians: -0.2,
+              },
+            }
+            const viewpoint = viewpoints[landmarkId]
+            placeQaExploration(
+              viewpoint.position,
+              viewpoint.headingRadians,
+              0,
+              viewpoint.pitchRadians,
+            )
           },
           qaExploreWindZone: (
             windZoneId: FestivalHubWindZoneId,

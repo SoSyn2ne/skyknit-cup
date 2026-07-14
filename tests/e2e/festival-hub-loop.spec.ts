@@ -1,6 +1,71 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+import type { FlightDebugSnapshot } from '../../src/game/createRenderer'
 
 const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'm32'
+
+const FESTIVAL_LANDMARK_IDS = [
+  'dawnwing-airfield',
+  'sunweave-spire',
+  'crown-race-arch',
+  'wind-loom',
+  'whispering-grotto',
+] as const
+
+const FESTIVAL_WIND_ZONE_IDS = [
+  'harbor-lift',
+  'spire-spiral',
+  'arch-tailwind',
+] as const
+
+const FESTIVAL_LANDING_PADS = [
+  'festival-hub-pad',
+  'festival-tower-pad',
+  'festival-grotto-pad',
+] as const
+
+function isJourneyEvidenceProject(projectName: string): boolean {
+  return projectName === 'desktop' || projectName === 'touch-minimum'
+}
+
+async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
+  return page.evaluate(() => window.__DRAGON_RACE_TEST__?.snapshot() ?? null)
+}
+
+async function expectFestivalRecords(
+  page: Page,
+  expected: { readonly coinBestMs: number; readonly raceBestMs: number },
+): Promise<void> {
+  await expect
+    .poll(async () => {
+      const snapshot = await readSnapshot(page)
+      if (snapshot === null) return null
+      return {
+        discoveredLandmarkIds:
+          snapshot.exploration.discoveredLandmarkIds,
+        traversedWindZoneIds:
+          snapshot.exploration.traversedWindZoneIds,
+        coinBestMs:
+          snapshot.exploration.coinBestTimesMs['festival-hub'] ?? null,
+        raceBestMs: snapshot.race.bestTimeMs,
+        raceMissionGrade: snapshot.race.missionGrades['first-skyknot'] ?? null,
+        journey: snapshot.exploration.journey,
+      }
+    })
+    .toMatchObject({
+      discoveredLandmarkIds: expect.arrayContaining(FESTIVAL_LANDMARK_IDS),
+      traversedWindZoneIds: expect.arrayContaining(FESTIVAL_WIND_ZONE_IDS),
+      coinBestMs: expected.coinBestMs,
+      raceBestMs: expected.raceBestMs,
+      raceMissionGrade: 'gold',
+      journey: {
+        completedSteps: 5,
+        totalSteps: 5,
+        nextObjectiveId: null,
+        isComplete: true,
+      },
+    })
+}
 
 function overlaps(
   left: { x: number; y: number; width: number; height: number },
@@ -231,6 +296,194 @@ test('runs festival discovery, wind, collision, and recovery without changing ra
     )
     .toBe('explore')
   expect(errors).toEqual([])
+})
+
+test('cycles every Festival Hub landing pad before entering the selected golden-knot mission', async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    !isJourneyEvidenceProject(testInfo.project.name),
+    'desktop and minimum touch journey evidence',
+  )
+  test.setTimeout(45_000)
+
+  await page.goto('/?qaCourse=1')
+  await page
+    .locator('[data-mission-select="true"]')
+    .selectOption('golden-knot')
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  const contextAction = page.locator('[data-explore-context]')
+
+  for (const landingPadId of FESTIVAL_LANDING_PADS) {
+    await page.evaluate(
+      (id) => window.__DRAGON_RACE_TEST__?.qaExploreLandingPad(id),
+      landingPadId,
+    )
+    await expect(contextAction).toHaveText('착륙')
+    await contextAction.click()
+    await expect
+      .poll(async () => (await readSnapshot(page))?.exploration.movement)
+      .toBe('landed')
+    await expect(contextAction).toHaveText('이륙')
+    await contextAction.click()
+    await expect
+      .poll(async () => (await readSnapshot(page))?.exploration.movement)
+      .toBe('airborne')
+  }
+
+  await page.evaluate(() =>
+    window.__DRAGON_RACE_TEST__?.qaExploreChallenge(),
+  )
+  await expect(contextAction).toHaveText('레이스 도전')
+  await contextAction.click()
+  await expect
+    .poll(async () => (await readSnapshot(page))?.race.mission)
+    .toMatchObject({
+      selectedMissionId: 'golden-knot',
+      status: 'active',
+    })
+})
+
+test('preserves the completed Festival Hub journey across reload and WebGL recovery', async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    !isJourneyEvidenceProject(testInfo.project.name),
+    'desktop and minimum touch journey evidence',
+  )
+  test.setTimeout(60_000)
+
+  await page.goto('/?qaCourse=1')
+  await page
+    .locator('[data-mission-select="true"]')
+    .selectOption('first-skyknot')
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+
+  for (const landmarkId of FESTIVAL_LANDMARK_IDS) {
+    await page.evaluate(
+      (id) => window.__DRAGON_RACE_TEST__?.qaExploreLandmark(id),
+      landmarkId,
+    )
+    await expect
+      .poll(
+        async () =>
+          (await readSnapshot(page))?.exploration.discoveredLandmarkIds ?? [],
+      )
+      .toContain(landmarkId)
+  }
+
+  for (const windZoneId of FESTIVAL_WIND_ZONE_IDS) {
+    await page.evaluate(
+      (id) => window.__DRAGON_RACE_TEST__?.qaExploreWindZone(id),
+      windZoneId,
+    )
+    await expect
+      .poll(
+        async () =>
+          (await readSnapshot(page))?.exploration.traversedWindZoneIds ?? [],
+      )
+      .toContain(windZoneId)
+  }
+
+  for (let coinIndex = 0; coinIndex < 10; coinIndex += 1) {
+    await page.evaluate(
+      (index) =>
+        window.__DRAGON_RACE_TEST__?.qaCollectCoin('festival-hub', index),
+      coinIndex,
+    )
+  }
+  await expect
+    .poll(async () => (await readSnapshot(page))?.exploration.coinRun)
+    .toMatchObject({
+      phase: 'completed',
+      regionId: 'festival-hub',
+      collectedCount: 10,
+    })
+
+  await page.evaluate(() =>
+    window.__DRAGON_RACE_TEST__?.qaExploreChallenge(),
+  )
+  const contextAction = page.locator('[data-explore-context]')
+  await expect(contextAction).toHaveText('레이스 도전')
+  await contextAction.click()
+  await expect
+    .poll(async () => (await readSnapshot(page))?.race.phase, {
+      timeout: 5_000,
+    })
+    .toBe('racing')
+  for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
+    await page.evaluate(() =>
+      window.__DRAGON_RACE_TEST__?.qaPassCheckpoint(),
+    )
+  }
+  await expect
+    .poll(async () => (await readSnapshot(page))?.race.phase)
+    .toBe('finished')
+
+  const completed = await readSnapshot(page)
+  const coinBestMs =
+    completed?.exploration.coinBestTimesMs['festival-hub'] ?? 0
+  const raceBestMs = completed?.race.bestTimeMs ?? 0
+  expect(coinBestMs).toBeGreaterThan(0)
+  expect(raceBestMs).toBeGreaterThan(0)
+  await expectFestivalRecords(page, { coinBestMs, raceBestMs })
+
+  await page.reload()
+  await expectFestivalRecords(page, { coinBestMs, raceBestMs })
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await expect(page.locator('[data-explore-journey]')).toContainText('여정 5/5')
+
+  await page.evaluate(() => window.__DRAGON_RACE_TEST__?.loseContext())
+  await expect(page.getByRole('alert')).toBeVisible()
+  await page.getByRole('button', { name: '다시 시도' }).click()
+  await expectFestivalRecords(page, { coinBestMs, raceBestMs })
+  await expect(page.locator('[data-explore-journey]')).toContainText('여정 5/5')
+})
+
+test('captures the authored Festival Hub landmarks in the runtime renderer', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'desktop visual evidence')
+  await page.goto('/')
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.__DRAGON_RACE_TEST__
+            ?.snapshot()
+            ?.exploration.regionAssets.find(
+              ({ id }) => id === 'festival-hub',
+            )?.status ?? null,
+      ),
+    )
+    .toBe('loaded')
+
+  await page.evaluate(() =>
+    window.__DRAGON_RACE_TEST__?.qaExploreOverview(),
+  )
+  await page.waitForTimeout(700)
+  await page.screenshot({
+    path: `artifacts/browser-qa/${QA_SCOPE}/desktop-festival-overview.png`,
+  })
+
+  for (const landmark of [
+    'dawnwing-airfield',
+    'sunweave-spire',
+    'crown-race-arch',
+    'wind-loom',
+    'whispering-grotto',
+  ] as const) {
+    await page.evaluate(
+      (landmarkId) =>
+        window.__DRAGON_RACE_TEST__?.qaExploreLandmarkView(landmarkId),
+      landmark,
+    )
+    await page.waitForTimeout(500)
+    await page.screenshot({
+      path: `artifacts/browser-qa/${QA_SCOPE}/desktop-${landmark}.png`,
+    })
+  }
 })
 
 test('keeps the festival journey readable in every required viewport', async ({

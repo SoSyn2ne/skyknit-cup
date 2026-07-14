@@ -1,6 +1,9 @@
 /// <reference types="vite/client" />
 
-import type { FlightDebugSnapshot } from './game/createRenderer'
+import type {
+  FestivalHubLandingPadId,
+  FlightDebugSnapshot,
+} from './game/createRenderer'
 import type {
   FestivalHubLandmarkId,
   FestivalHubWindZoneId,
@@ -15,6 +18,9 @@ declare global {
       qaExploreRegion: (regionId: OpenWorldRegionId) => void
       qaExploreChallenge: () => void
       qaExploreLandmark: (landmarkId: FestivalHubLandmarkId) => void
+      qaExploreLandmarkView: (landmarkId: FestivalHubLandmarkId) => void
+      qaExploreOverview: () => void
+      qaExploreLandingPad: (landingPadId: FestivalHubLandingPadId) => void
       qaExploreWindZone: (windZoneId: FestivalHubWindZoneId) => void
       qaExploreCollision: () => void
       qaCollectCoin: (regionId: OpenWorldRegionId, index: number) => void

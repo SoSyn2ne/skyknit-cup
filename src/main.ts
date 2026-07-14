@@ -130,6 +130,11 @@ function startApplication(recovery?: RendererRecoveryState): void {
         qaExploreChallenge: () => rendererSession?.qaExploreChallenge?.(),
         qaExploreLandmark: (landmarkId) =>
           rendererSession?.qaExploreLandmark?.(landmarkId),
+        qaExploreLandmarkView: (landmarkId) =>
+          rendererSession?.qaExploreLandmarkView?.(landmarkId),
+        qaExploreOverview: () => rendererSession?.qaExploreOverview?.(),
+        qaExploreLandingPad: (landingPadId) =>
+          rendererSession?.qaExploreLandingPad?.(landingPadId),
         qaExploreWindZone: (windZoneId) =>
           rendererSession?.qaExploreWindZone?.(windZoneId),
         qaExploreCollision: () => rendererSession?.qaExploreCollision?.(),

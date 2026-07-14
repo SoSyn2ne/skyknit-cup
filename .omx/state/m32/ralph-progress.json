@@ -1,36 +1,44 @@
 {
   "scope": "m32-open-world-vertical-slice",
   "active": true,
-  "iteration": 1,
-  "phase": "activity-loop-complete-landmark-rebuild-pending",
+  "iteration": 3,
+  "phase": "final-visual-collision-and-pbr-approved",
   "baseline": {
     "source": ".omx/state/rc7/ralph-progress.json",
     "score": 91,
     "verdict": "pass"
   },
   "latest": {
-    "score": 86,
-    "verdict": "revise",
+    "score": 94,
+    "verdict": "pass",
     "category_match": true,
     "threshold": 90,
-    "passed": false,
+    "passed": true,
     "differences": [
-      "The compact journey row is readable and collision-free across all five required viewports.",
-      "The festival tower, flags, circular platform, and floating coins still expose the primitive RC7 construction that Milestone 32 must replace.",
-      "Authored wind zones now affect gameplay and audio but do not yet have visible spatial guidance in the world."
+      "Large foreground coins can obscure part of a landmark during very close approaches.",
+      "Distant islands intentionally lose some tonal separation in the yellow-green atmospheric gradient.",
+      "The palest wind-ribbon sections soften against the brightest sky while remaining readable."
     ],
     "suggestions": [
-      "Rebuild the Festival Hub high and low GLBs around the five landmark contract while preserving the validated camera negative space.",
-      "Add restrained low-draw-call wind ribbons that make the three authored zones readable without framing the whole canvas.",
-      "Repeat the five-viewport visual and performance gates after the GLB replacement."
+      "Preserve the original ten-coin route; consider only visual scale tuning if foreground coins need later polish.",
+      "Consider a small distance-aware landmark contrast lift without darkening the open-sky aesthetic.",
+      "Keep the current wind-ribbon opacity, single-draw-call budget, and five-viewport HUD clearances."
     ],
-    "reasoning": "The activity, HUD, responsive layout, discovery feedback, and ambient audio now read as a coherent exploration loop, but the requested production-quality landmark geometry is still visibly incomplete, so the overall M32 visual gate cannot pass yet.",
+    "reasoning": "The final clearance and PBR rebuild exceeds the threshold: the wider Wind Loom, reshaped tower pad, preserved Gold and Rune response, readable wind ribbons, and five distinct runtime silhouettes form a cohesive polished Three.js region rather than primitive scenery. The overview, landmark approaches, map, and minimum-width HUD retain strong hierarchy and usability.",
     "evidence": [
-      "artifacts/browser-qa/m32/desktop-festival-journey.png",
-      "artifacts/browser-qa/m32/desktop-compact-festival-journey.png",
-      "artifacts/browser-qa/m32/touch-landscape-festival-journey.png",
-      "artifacts/browser-qa/m32/touch-portrait-festival-journey.png",
-      "artifacts/browser-qa/m32/touch-minimum-festival-journey.png"
+      "artifacts/browser-qa/m32-landmarks-final/desktop-festival-journey.png",
+      "artifacts/browser-qa/m32-landmarks-final/desktop-compact-festival-journey.png",
+      "artifacts/browser-qa/m32-landmarks-final/touch-landscape-festival-journey.png",
+      "artifacts/browser-qa/m32-landmarks-final/touch-portrait-festival-journey.png",
+      "artifacts/browser-qa/m32-landmarks-final/touch-minimum-festival-journey.png",
+      "artifacts/browser-qa/m32-landmark-views-final/desktop-festival-overview.png",
+      "artifacts/browser-qa/m32-landmark-views-final/desktop-dawnwing-airfield.png",
+      "artifacts/browser-qa/m32-landmark-views-final/desktop-sunweave-spire.png",
+      "artifacts/browser-qa/m32-landmark-views-final/desktop-crown-race-arch.png",
+      "artifacts/browser-qa/m32-landmark-views-final/desktop-wind-loom.png",
+      "artifacts/browser-qa/m32-landmark-views-final/desktop-whispering-grotto.png",
+      "artifacts/browser-qa/m32-landmark-views-final/touch-minimum-festival-journey.png",
+      "C:/Users/eum0742/AppData/Local/Temp/m32-festival-final-verified.png"
     ]
   },
   "journeyHudReview": {
@@ -49,5 +57,5 @@
     ],
     "reasoning": "The journey objective, transient discovery copy, coin timer, region label, BGM controls, map, pause control, landing action, and touch flight controls remain legible and non-overlapping at 1440x900, 1280x720, 844x390, 390x844, and 320x568."
   },
-  "nextGate": "Festival Hub Blender GLB landmark rebuild, semantic-node inspection, wind visuals, then five-viewport visual and performance verification"
+  "nextGate": "Full performance, production-bundle, ten-minute soak, audit, and playtest handoff verification"
 }
