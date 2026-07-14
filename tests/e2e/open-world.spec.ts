@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 const REGIONS = ['festival-hub', 'wind-canyon', 'cloud-ruins'] as const
+const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
 
 interface CanvasSample {
   readonly minimumLuma: number
@@ -90,7 +91,7 @@ test('opens exploration and streams all three regions inside every required view
     expect(second).not.toBeNull()
     expect(second?.hash).not.toBe(first?.hash)
     await page.screenshot({
-      path: `artifacts/browser-qa/rc7/${testInfo.project.name}-${regionId}.png`,
+      path: `artifacts/browser-qa/${QA_SCOPE}/${testInfo.project.name}-${regionId}.png`,
     })
   }
 

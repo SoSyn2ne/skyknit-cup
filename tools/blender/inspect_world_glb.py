@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -13,7 +14,6 @@ import bpy
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ASSET_ROOT = ROOT / "public" / "assets" / "models" / "world"
-REPORT_PATH = ROOT / "artifacts" / "world-rc7" / "world-glb-report.json"
 ASSET_VERSION = "0.7"
 GEOMETRY_STYLE = "handcrafted-layered"
 
@@ -69,6 +69,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=str(DEFAULT_ASSET_ROOT))
     parser.add_argument("--region", choices=tuple(REGION_NODES))
+    parser.add_argument(
+        "--scope",
+        default=os.environ.get("DRAGON_QA_SCOPE", "rc7"),
+    )
     return parser.parse_args(arguments)
 
 
@@ -251,6 +255,9 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
 
 def main() -> None:
     args = parse_args()
+    scope = args.scope.strip() or "rc7"
+    if not all(character.isalnum() or character in "-_" for character in scope):
+        raise SystemExit(f"invalid artifact scope: {scope}")
     asset_root = Path(args.root).resolve()
     regions = (args.region,) if args.region else tuple(REGION_NODES)
     reports: list[dict[str, object]] = []
@@ -282,13 +289,20 @@ def main() -> None:
                 )
 
     result = {
+        "scope": scope,
         "asset_version": ASSET_VERSION,
         "asset_root": str(asset_root),
         "reports": reports,
         "errors": errors,
     }
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text(
+    report_name = (
+        f"world-glb-report-{args.region}.json"
+        if args.region
+        else "world-glb-report.json"
+    )
+    report_path = ROOT / "artifacts" / f"world-{scope}" / report_name
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n",
         encoding="utf8",
     )
