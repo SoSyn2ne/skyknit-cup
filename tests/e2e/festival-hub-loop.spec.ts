@@ -27,6 +27,21 @@ test('runs festival discovery, wind, collision, and recovery without changing ra
 
   await page.goto('/')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.__DRAGON_RACE_TEST__?.snapshot()?.exploration.windVisual ??
+          null,
+      ),
+    )
+    .toMatchObject({
+      qualityTier: 'high',
+      zoneCount: 3,
+      visibleInstanceCount: 12,
+      drawCalls: 1,
+      disposed: false,
+    })
   const journey = page.locator('[data-explore-journey]')
   const discoveryStatus = page.locator('[data-explore-discovery]')
   await expect(journey).toBeVisible()
@@ -192,6 +207,15 @@ test('runs festival discovery, wind, collision, and recovery without changing ra
       page.evaluate(() => window.__DRAGON_RACE_TEST__?.snapshot()?.audio ?? null),
     )
     .toMatchObject({ ambientWindStrength: 0, windBedPlaying: false })
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.__DRAGON_RACE_TEST__?.snapshot()?.exploration.windVisual
+            .drawCalls ?? -1,
+      ),
+    )
+    .toBe(0)
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await expect
     .poll(() =>

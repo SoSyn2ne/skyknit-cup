@@ -112,6 +112,11 @@ import {
   type OpenWorldVisual,
 } from './world/createOpenWorld'
 import {
+  createOpenWorldActivities,
+  type OpenWorldActivitiesSnapshot,
+  type OpenWorldActivitiesVisual,
+} from './world/createOpenWorldActivities'
+import {
   OPEN_WORLD_REGIONS,
   getCurrentRegion,
   getDestinationGuidance,
@@ -195,6 +200,7 @@ export interface FlightDebugSnapshot {
     readonly loadedRegionIds: readonly OpenWorldRegionId[]
     readonly regionAssets: readonly OpenWorldRegionAssetSnapshot[]
     readonly regionMeshCount: number
+    readonly windVisual: OpenWorldActivitiesSnapshot
     readonly paused: boolean
     readonly mapOpen: boolean
     readonly coinRun: CoinRunState
@@ -323,6 +329,7 @@ export function createRenderer(
   let pendingRaceHud: RaceHud | null = null
   let pendingExplorationHud: ExplorationHud | null = null
   let pendingOpenWorld: OpenWorldVisual | null = null
+  let pendingOpenWorldActivities: OpenWorldActivitiesVisual | null = null
   let pendingCoinCourseVisual: CoinCourseVisual | null = null
   let pendingGameAudio: GameAudio | null = null
   let pendingVisibilityChangeHandler: (() => void) | null = null
@@ -388,6 +395,12 @@ export function createRenderer(
     handleVisibilityChange()
     document.addEventListener('visibilitychange', handleVisibilityChange)
     const coarsePointerQuery = window.matchMedia('(pointer: coarse)')
+    const reducedMotionQuery = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    )
+    const forceReducedMotion =
+      import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get('qaReducedMotion') === '1'
     const navigatorCapabilities = window.navigator as Navigator & {
       readonly deviceMemory?: number
     }
@@ -410,6 +423,13 @@ export function createRenderer(
       qualityTier: renderQuality.tier,
     })
     pendingOpenWorld = openWorld
+    const openWorldActivities = createOpenWorldActivities(
+      scene,
+      renderQuality.tier,
+      palette.gateRune,
+      () => reducedMotionQuery.matches || forceReducedMotion,
+    )
+    pendingOpenWorldActivities = openWorldActivities
     const coinCourseVisual = createCoinCourseVisual(scene)
     pendingCoinCourseVisual = coinCourseVisual
     let raceState =
@@ -1012,6 +1032,7 @@ export function createRenderer(
       })
       sandbox.setQuality(renderQuality)
       openWorld.setQuality(renderQuality.tier)
+      openWorldActivities.setQuality(renderQuality.tier)
       renderer.shadowMap.enabled = renderQuality.shadows
       renderer.setPixelRatio(renderQuality.pixelRatio)
       renderer.setSize(width, height, false)
@@ -1391,6 +1412,11 @@ export function createRenderer(
         )
       }
       const openWorldSnapshot = openWorld.debugSnapshot()
+      openWorldActivities.update(
+        visualSimulationSeconds,
+        openWorldSnapshot.loadedRegionIds,
+        gameMode === 'explore' && !explorationPaused,
+      )
       coinCourseVisual.update(
         coinRunState,
         openWorldSnapshot.loadedRegionIds,
@@ -1610,6 +1636,7 @@ export function createRenderer(
                 loadedRegionIds: openWorldSnapshot.loadedRegionIds,
                 regionAssets: openWorldSnapshot.regionAssets,
                 regionMeshCount: openWorldSnapshot.meshCount,
+                windVisual: openWorldActivities.debugSnapshot(),
                 paused: explorationPaused,
                 mapOpen,
                 coinRun: { ...coinRunState },
@@ -1801,6 +1828,7 @@ export function createRenderer(
         }
         sandbox.dispose()
         openWorld.dispose()
+        openWorldActivities.dispose()
         coinCourseVisual.dispose()
         resizeObserver.disconnect()
         canvas.removeEventListener('webglcontextlost', handleContextLost)
@@ -1822,6 +1850,7 @@ export function createRenderer(
     pendingRaceHud?.dispose()
     pendingExplorationHud?.dispose()
     pendingOpenWorld?.dispose()
+    pendingOpenWorldActivities?.dispose()
     pendingCoinCourseVisual?.dispose()
     if (pendingVisibilityChangeHandler !== null) {
       document.removeEventListener(
