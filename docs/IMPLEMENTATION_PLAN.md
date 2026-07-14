@@ -1,6 +1,6 @@
 # 하늘매듭배 구현 계획
 
-> 상태: **RC9 / Milestone 33 Sky League 구현 중**
+> 상태: **RC9 / Milestone 33 Sky League 자동 검증 완료 / 실기기·사람 플레이테스트 대기**
 >
 > 선행 문서: `docs/PRODUCT_GOAL.md`
 
@@ -611,7 +611,7 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 
 ### Milestone 33: Sky League 오프라인 기록 경쟁
 
-**상태: 구현 중 — 2026-07-14**
+**상태: 자동 검증 완료 / 실기기·사람 플레이테스트 대기 — 2026-07-14**
 
 **결과물**
 - `.omx/plans/prd-m33-sky-league.md`, `.omx/plans/test-spec-m33-sky-league.md`

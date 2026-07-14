@@ -1,7 +1,29 @@
 {
   "scope": "m33",
-  "active": true,
-  "phase": "final-verification",
+  "active": false,
+  "phase": "human-playtest-handoff",
+  "completed_at": "2026-07-14T15:09:17+09:00",
+  "automated_verification": {
+    "unitTests": 413,
+    "fullE2e": {
+      "total": 300,
+      "passed": 146,
+      "skipped": 154,
+      "failed": 0,
+      "durationSeconds": 631.9
+    },
+    "productionViewports": 5,
+    "auditVulnerabilities": 0,
+    "soak": {
+      "configuredDurationMs": 600000,
+      "actualDurationMs": 603688,
+      "measuredCycles": 69,
+      "passed": true,
+      "browserErrors": 0,
+      "loadedGeometryDrift": 0,
+      "loadedTextureDrift": 0
+    }
+  },
   "visual_verdict": {
     "iteration": 4,
     "score": 95,
