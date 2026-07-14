@@ -18,6 +18,10 @@ interface AudioSnapshot {
   readonly wingFlapCues: number
   readonly boostCues: number
   readonly finishCues: number
+  readonly discoveryCues: number
+  readonly windEntryCues: number
+  readonly ambientWindStrength: number
+  readonly windBedPlaying: boolean
 }
 
 async function readAudio(page: Page): Promise<AudioSnapshot | null> {
@@ -67,6 +71,10 @@ test('gates generated audio behind gesture, edges, and mute', async ({
     wingFlapCues: 0,
     boostCues: 0,
     finishCues: 0,
+    discoveryCues: 0,
+    windEntryCues: 0,
+    ambientWindStrength: 0,
+    windBedPlaying: false,
   })
 
   await page.keyboard.press('ArrowUp')
