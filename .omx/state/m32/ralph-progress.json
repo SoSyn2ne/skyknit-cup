@@ -1,8 +1,8 @@
 {
   "scope": "m32-open-world-vertical-slice",
-  "active": true,
+  "active": false,
   "iteration": 3,
-  "phase": "final-visual-collision-and-pbr-approved",
+  "phase": "release-gates-complete",
   "baseline": {
     "source": ".omx/state/rc7/ralph-progress.json",
     "score": 91,
@@ -57,5 +57,15 @@
     ],
     "reasoning": "The journey objective, transient discovery copy, coin timer, region label, BGM controls, map, pause control, landing action, and touch flight controls remain legible and non-overlapping at 1440x900, 1280x720, 844x390, 390x844, and 320x568."
   },
-  "nextGate": "Full performance, production-bundle, ten-minute soak, audit, and playtest handoff verification"
+  "releaseGates": {
+    "unit": "36 files / 369 tests passed",
+    "e2e": "260 total / 139 passed / 121 intentional skips / 0 failed",
+    "performance": "four 30-second profiles at 60/60 median/minimum fps; max 65 draw calls",
+    "production": "5/5 viewports; errors 0; QA hooks 0",
+    "transfer": "14 files / 6201485 gzip-9 bytes / 5.914 MiB",
+    "audit": "0 vulnerabilities",
+    "soak": "600991 ms / 73 cycles / geometry and texture drift 0 / errors 0"
+  },
+  "nextGate": "Physical-device 10-15 minute navigation, thermal, touch, listening, and BGM rights playtest",
+  "completed_at": "2026-07-14T12:31:58+09:00"
 }
