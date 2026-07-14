@@ -90,6 +90,8 @@ describe('versioned game settings', () => {
           movement: 'airborne',
           discoveredRegionIds: ['festival-hub'],
           destinationRegionId: 'wind-canyon',
+          discoveredLandmarkIds: ['sunweave-spire'],
+          traversedWindZoneIds: ['harbor-lift'],
         },
       }),
     )
@@ -117,6 +119,10 @@ describe('versioned game settings', () => {
       musicVolume: 0.55,
       missionGrades: { 'first-skyknot': 'gold' },
       coinBestTimesMs: { 'festival-hub': 18_200 },
+      exploration: {
+        discoveredLandmarkIds: [],
+        traversedWindZoneIds: [],
+      },
     })
   })
 
@@ -144,6 +150,15 @@ describe('versioned game settings', () => {
     )
 
     expect(readSettings(storage).exploration).toMatchObject({
+      discoveredLandmarkIds: [
+        'dawnwing-airfield',
+        'whispering-grotto',
+      ],
+      traversedWindZoneIds: ['harbor-lift'],
+    })
+    expect(
+      JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').exploration,
+    ).toMatchObject({
       discoveredLandmarkIds: [
         'dawnwing-airfield',
         'whispering-grotto',
@@ -438,6 +453,23 @@ describe('versioned game settings', () => {
     storage.throwOnWrite = true
 
     expect(saveSettings(storage, DEFAULT_SETTINGS)).toBe(false)
+  })
+
+  it('rejects missing version 7 discovery arrays without throwing', () => {
+    const storage = new MemoryStorage()
+    const exploration = {
+      ...DEFAULT_SETTINGS.exploration,
+      discoveredLandmarkIds: undefined,
+      traversedWindZoneIds: undefined,
+    }
+
+    expect(
+      saveSettings(storage, {
+        ...DEFAULT_SETTINGS,
+        exploration,
+      } as never),
+    ).toBe(false)
+    expect(storage.values.size).toBe(0)
   })
 
   it.each([

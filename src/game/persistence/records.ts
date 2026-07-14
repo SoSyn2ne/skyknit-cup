@@ -154,7 +154,10 @@ function isValidExplorationPosition(value: unknown): value is Vec3Value {
   )
 }
 
-function parseExploration(value: unknown): ExplorationProgress {
+function parseExploration(
+  value: unknown,
+  includeFestivalDiscoveries: boolean,
+): ExplorationProgress {
   const defaults = freshDefaults().exploration
   if (typeof value !== 'object' || value === null) return defaults
 
@@ -183,6 +186,7 @@ function parseExploration(value: unknown): ExplorationProgress {
       ? value.destinationRegionId
       : null
   const discoveredLandmarkIds =
+    includeFestivalDiscoveries &&
     'discoveredLandmarkIds' in value &&
     Array.isArray(value.discoveredLandmarkIds)
       ? [
@@ -192,6 +196,7 @@ function parseExploration(value: unknown): ExplorationProgress {
         ]
       : defaults.discoveredLandmarkIds
   const traversedWindZoneIds =
+    includeFestivalDiscoveries &&
     'traversedWindZoneIds' in value &&
     Array.isArray(value.traversedWindZoneIds)
       ? [
@@ -210,6 +215,36 @@ function parseExploration(value: unknown): ExplorationProgress {
     discoveredLandmarkIds,
     traversedWindZoneIds,
   }
+}
+
+function arrayMatches(
+  value: unknown,
+  expected: readonly string[],
+): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    value.every((entry, index) => entry === expected[index])
+  )
+}
+
+function hasCanonicalFestivalDiscoveries(
+  value: unknown,
+  exploration: ExplorationProgress,
+): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const landmarks =
+    'discoveredLandmarkIds' in value
+      ? value.discoveredLandmarkIds
+      : undefined
+  const windZones =
+    'traversedWindZoneIds' in value
+      ? value.traversedWindZoneIds
+      : undefined
+  return (
+    arrayMatches(landmarks, exploration.discoveredLandmarkIds) &&
+    arrayMatches(windZones, exploration.traversedWindZoneIds)
+  )
 }
 
 function parseSettings(
@@ -253,10 +288,14 @@ function parseSettings(
     'missionGrades' in parsed
       ? parseMissionGrades(parsed.missionGrades)
       : {}
-  const exploration =
+  const rawExploration =
     parsed.version >= 4 && 'exploration' in parsed
-      ? parseExploration(parsed.exploration)
-      : freshDefaults().exploration
+      ? parsed.exploration
+      : undefined
+  const exploration =
+    rawExploration === undefined
+      ? freshDefaults().exploration
+      : parseExploration(rawExploration, parsed.version === 7)
   const coinBestTimesMs =
     parsed.version >= 5 && 'coinBestTimesMs' in parsed
       ? parseCoinBestTimes(parsed.coinBestTimesMs)
@@ -272,7 +311,9 @@ function parseSettings(
       coinBestTimesMs,
       exploration,
     },
-    shouldMigrate: parsed.version !== 7,
+    shouldMigrate:
+      parsed.version !== 7 ||
+      !hasCanonicalFestivalDiscoveries(rawExploration, exploration),
   }
 }
 
@@ -292,6 +333,10 @@ function parseLegacyRecord(raw: string): LegacyStoredRecord | null {
 }
 
 function isValidSettings(settings: GameSettings): boolean {
+  if (typeof settings !== 'object' || settings === null) return false
+  const exploration = settings.exploration
+  if (typeof exploration !== 'object' || exploration === null) return false
+
   return (
     (settings.bestTimeMs === null || isValidBestTime(settings.bestTimeMs)) &&
     typeof settings.muted === 'boolean' &&
@@ -309,19 +354,18 @@ function isValidSettings(settings: GameSettings): boolean {
       ([regionId, elapsedMs]) =>
         isOpenWorldRegionId(regionId) && isValidBestTime(elapsedMs),
     ) &&
-    isValidExplorationPosition(settings.exploration.position) &&
-    Number.isFinite(settings.exploration.headingRadians) &&
-    (settings.exploration.movement === 'airborne' ||
-      settings.exploration.movement === 'landed') &&
-    settings.exploration.discoveredRegionIds.every(isOpenWorldRegionId) &&
-    settings.exploration.discoveredLandmarkIds.every(
-      isFestivalHubLandmarkId,
-    ) &&
-    settings.exploration.traversedWindZoneIds.every(
-      isFestivalHubWindZoneId,
-    ) &&
-    (settings.exploration.destinationRegionId === null ||
-      isOpenWorldRegionId(settings.exploration.destinationRegionId))
+    isValidExplorationPosition(exploration.position) &&
+    Number.isFinite(exploration.headingRadians) &&
+    (exploration.movement === 'airborne' ||
+      exploration.movement === 'landed') &&
+    Array.isArray(exploration.discoveredRegionIds) &&
+    exploration.discoveredRegionIds.every(isOpenWorldRegionId) &&
+    Array.isArray(exploration.discoveredLandmarkIds) &&
+    exploration.discoveredLandmarkIds.every(isFestivalHubLandmarkId) &&
+    Array.isArray(exploration.traversedWindZoneIds) &&
+    exploration.traversedWindZoneIds.every(isFestivalHubWindZoneId) &&
+    (exploration.destinationRegionId === null ||
+      isOpenWorldRegionId(exploration.destinationRegionId))
   )
 }
 
