@@ -1,4 +1,5 @@
 import {
+  isAwardedMissionGrade,
   mergeBestGrade,
   type AwardedMissionGrade,
   type MissionId,
@@ -16,10 +17,20 @@ import {
   startMissionAttempt,
   type MissionSessionState,
 } from '../missions/missionState'
-import type {
-  CoinBestTimes,
-  ExplorationProgress,
+import {
+  cloneSkyLeagueGhosts,
+  type CoinBestTimes,
+  type ExplorationProgress,
+  type SkyLeagueGhosts,
 } from '../persistence/records'
+import {
+  cloneSkyLeagueRecords,
+  recordMissionLeagueResult,
+  recordRaceLeagueTime,
+  type LeagueMedal,
+  type SkyLeagueRecordResult,
+  type SkyLeagueRecords,
+} from '../competition/skyLeagueRecords'
 
 export type RacePhase =
   | 'loading'
@@ -57,7 +68,25 @@ export interface RacePersistentState {
     Partial<Record<MissionId, AwardedMissionGrade>>
   >
   readonly coinBestTimesMs: Readonly<CoinBestTimes>
+  readonly skyLeague: SkyLeagueRecords
+  readonly ghosts: SkyLeagueGhosts
   readonly exploration: ExplorationProgress
+}
+
+export interface RaceLeaguePlacement {
+  readonly rank: number | null
+  readonly medal: LeagueMedal | null
+  readonly isNewBest: boolean
+  readonly inserted: boolean
+}
+
+export interface RaceMissionLeaguePlacement extends RaceLeaguePlacement {
+  readonly missionId: MissionId
+}
+
+export interface RaceLeagueResult {
+  readonly race: RaceLeaguePlacement
+  readonly mission: RaceMissionLeaguePlacement | null
 }
 
 export interface RaceConfig {
@@ -71,6 +100,7 @@ export interface RaceState {
   readonly pausedFrom: PausableRacePhase | null
   readonly run: RaceRunState
   readonly finalElapsedMs: number | null
+  readonly leagueResult: RaceLeagueResult | null
   readonly mission: MissionSessionState
   readonly persistent: RacePersistentState
   readonly config: RaceConfig
@@ -122,7 +152,19 @@ function startFreshCountdown(state: RaceState): RaceState {
     pausedFrom: null,
     run: createCleanRun(state.config),
     finalElapsedMs: null,
+    leagueResult: null,
     mission: startMissionAttempt(state.mission),
+  }
+}
+
+function toLeaguePlacement(
+  result: SkyLeagueRecordResult,
+): RaceLeaguePlacement {
+  return {
+    rank: result.rank,
+    medal: result.medal,
+    isNewBest: result.isNewBest,
+    inserted: result.inserted,
   }
 }
 
@@ -148,18 +190,52 @@ function finishRace(state: RaceState): RaceState {
           [mission.selectedMissionId]: bestMissionGrade,
         }
 
+  const raceLeague = elapsedIsValid
+    ? recordRaceLeagueTime(state.persistent.skyLeague, elapsedMs)
+    : null
+  const missionLeague =
+    raceLeague !== null && isAwardedMissionGrade(missionGrade)
+      ? recordMissionLeagueResult(
+          raceLeague.records,
+          mission.selectedMissionId,
+          elapsedMs,
+          missionGrade,
+        )
+      : null
+  const skyLeague =
+    missionLeague?.records ??
+    raceLeague?.records ??
+    state.persistent.skyLeague
+  const leagueResult =
+    raceLeague === null
+      ? null
+      : {
+          race: toLeaguePlacement(raceLeague),
+          mission:
+            missionLeague === null
+              ? null
+              : {
+                  missionId: mission.selectedMissionId,
+                  ...toLeaguePlacement(missionLeague),
+                },
+        }
+
   return {
     ...state,
     phase: 'finished',
     pausedFrom: null,
     finalElapsedMs: elapsedIsValid ? elapsedMs : null,
+    leagueResult,
     mission,
     persistent:
-      isNewBest || missionGrades !== state.persistent.missionGrades
+      isNewBest ||
+      missionGrades !== state.persistent.missionGrades ||
+      skyLeague !== state.persistent.skyLeague
         ? {
             ...state.persistent,
             bestTimeMs: isNewBest ? elapsedMs : state.persistent.bestTimeMs,
             missionGrades,
+            skyLeague,
           }
         : state.persistent,
   }
@@ -179,11 +255,14 @@ export function createInitialRaceState(
     pausedFrom: null,
     run: createCleanRun(config),
     finalElapsedMs: null,
+    leagueResult: null,
     mission: createMissionSession(),
     persistent: {
       ...options.persistent,
       missionGrades: { ...options.persistent.missionGrades },
       coinBestTimesMs: { ...options.persistent.coinBestTimesMs },
+      skyLeague: cloneSkyLeagueRecords(options.persistent.skyLeague),
+      ghosts: cloneSkyLeagueGhosts(options.persistent.ghosts),
     },
     config,
   }
@@ -296,6 +375,7 @@ export function transitionRace(
       pausedFrom: null,
       run: createCleanRun(state.config),
       finalElapsedMs: null,
+      leagueResult: null,
       mission: returnToMissionSelection(state.mission),
     }
   }

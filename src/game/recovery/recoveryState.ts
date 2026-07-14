@@ -4,6 +4,8 @@ import {
   type RaceVector,
 } from '../race/raceState'
 import { cloneMissionSession } from '../missions/missionState'
+import { cloneSkyLeagueRecords } from '../competition/skyLeagueRecords'
+import { cloneSkyLeagueGhosts } from '../persistence/records'
 
 function cloneVector(vector: RaceVector): RaceVector {
   return { x: vector.x, y: vector.y, z: vector.z }
@@ -28,6 +30,8 @@ export function prepareRaceForRecovery(state: RaceState): RaceState {
       ...paused.persistent,
       missionGrades: { ...paused.persistent.missionGrades },
       coinBestTimesMs: { ...paused.persistent.coinBestTimesMs },
+      skyLeague: cloneSkyLeagueRecords(paused.persistent.skyLeague),
+      ghosts: cloneSkyLeagueGhosts(paused.persistent.ghosts),
     },
     config: {
       ...paused.config,

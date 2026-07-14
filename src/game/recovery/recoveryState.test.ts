@@ -17,6 +17,7 @@ function makeState(phase: RacePhase): RaceState {
       temporaryEffects: ['gate-wave'],
     },
     finalElapsedMs: phase === 'finished' ? 34_500 : null,
+    leagueResult: null,
     mission: {
       selectedMissionId: 'clean-flight',
       status: phase === 'finished' ? 'finished' : 'active',
@@ -44,6 +45,12 @@ function makeState(phase: RacePhase): RaceState {
       quality: 'low',
       missionGrades: { 'first-skyknot': 'silver' },
       coinBestTimesMs: { 'festival-hub': 18_250 },
+      skyLeague: {
+        raceTop10Ms: [40_000],
+        coinTop10Ms: { 'festival-hub': [18_250] },
+        missionTop10: {},
+      },
+      ghosts: { race: null, coin: {}, mission: {} },
       exploration: {
         position: { x: 0, y: 18, z: 20 },
         headingRadians: 0,
@@ -99,6 +106,15 @@ describe('renderer recovery race state', () => {
     )
     expect(recovered.persistent.coinBestTimesMs).not.toBe(
       state.persistent.coinBestTimesMs,
+    )
+    expect(recovered.persistent.skyLeague).not.toBe(
+      state.persistent.skyLeague,
+    )
+    expect(recovered.persistent.skyLeague.raceTop10Ms).not.toBe(
+      state.persistent.skyLeague.raceTop10Ms,
+    )
+    expect(recovered.persistent.ghosts).not.toBe(
+      state.persistent.ghosts,
     )
     expect(recovered.mission).not.toBe(state.mission)
     expect(recovered.mission.attempt).not.toBe(state.mission.attempt)

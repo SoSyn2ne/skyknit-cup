@@ -15,6 +15,22 @@ import {
   type FestivalHubLandmarkId,
   type FestivalHubWindZoneId,
 } from '../world/festivalHubActivities'
+import {
+  canonicalizeGhostRun,
+  cloneGhostRun,
+  isCanonicalGhostRun,
+  type GhostRun,
+} from '../competition/ghostRun'
+import {
+  canonicalizeSkyLeagueRecords,
+  cloneSkyLeagueRecords,
+  createEmptySkyLeagueRecords,
+  isCanonicalSkyLeagueRecords,
+  recordCoinLeagueTime,
+  SKY_LEAGUE_TOP_LIMIT,
+  type SkyLeagueRecordResult,
+  type SkyLeagueRecords,
+} from '../competition/skyLeagueRecords'
 
 export interface RecordStorage {
   getItem(key: string): string | null
@@ -24,6 +40,12 @@ export interface RecordStorage {
 export type QualityPreference = 'auto' | 'low' | 'high'
 export type MissionGrades = Partial<Record<MissionId, AwardedMissionGrade>>
 export type CoinBestTimes = Partial<Record<OpenWorldRegionId, number>>
+
+export interface SkyLeagueGhosts {
+  readonly race: GhostRun | null
+  readonly coin: Readonly<Partial<Record<OpenWorldRegionId, GhostRun>>>
+  readonly mission: Readonly<Partial<Record<MissionId, GhostRun>>>
+}
 
 export interface ExplorationProgress {
   readonly position: Vec3Value
@@ -42,11 +64,18 @@ export interface GameSettings {
   readonly quality: QualityPreference
   readonly missionGrades: Readonly<MissionGrades>
   readonly coinBestTimesMs: Readonly<CoinBestTimes>
+  readonly skyLeague: SkyLeagueRecords
+  readonly ghosts: SkyLeagueGhosts
   readonly exploration: ExplorationProgress
 }
 
+export interface CoinCompetitionResult {
+  readonly settings: GameSettings
+  readonly placement: SkyLeagueRecordResult
+}
+
 interface StoredSettings extends GameSettings {
-  readonly version: 7
+  readonly version: 8
 }
 
 interface LegacyStoredRecord {
@@ -57,6 +86,12 @@ interface LegacyStoredRecord {
 export const SETTINGS_KEY = 'skyknit-cup:settings'
 const LEGACY_RECORD_KEY = 'skyknit-cup:best-time'
 
+export const EMPTY_SKY_LEAGUE_GHOSTS: SkyLeagueGhosts = Object.freeze({
+  race: null,
+  coin: Object.freeze({}),
+  mission: Object.freeze({}),
+})
+
 export const DEFAULT_SETTINGS: GameSettings = {
   bestTimeMs: null,
   muted: false,
@@ -64,6 +99,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   quality: 'auto',
   missionGrades: {},
   coinBestTimesMs: {},
+  skyLeague: createEmptySkyLeagueRecords(),
+  ghosts: EMPTY_SKY_LEAGUE_GHOSTS,
   exploration: {
     position: { x: 0, y: 18, z: 20 },
     headingRadians: 0,
@@ -75,11 +112,102 @@ export const DEFAULT_SETTINGS: GameSettings = {
   },
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+export function createEmptySkyLeagueGhosts(): SkyLeagueGhosts {
+  return { race: null, coin: {}, mission: {} }
+}
+
+export function cloneSkyLeagueGhosts(
+  ghosts: SkyLeagueGhosts,
+): SkyLeagueGhosts {
+  const coin: Partial<Record<OpenWorldRegionId, GhostRun>> = {}
+  for (const [regionId, run] of Object.entries(ghosts.coin) as [
+    OpenWorldRegionId,
+    GhostRun,
+  ][]) {
+    coin[regionId] = cloneGhostRun(run)
+  }
+
+  const mission: Partial<Record<MissionId, GhostRun>> = {}
+  for (const [missionId, run] of Object.entries(ghosts.mission) as [
+    MissionId,
+    GhostRun,
+  ][]) {
+    mission[missionId] = cloneGhostRun(run)
+  }
+
+  return {
+    race: ghosts.race === null ? null : cloneGhostRun(ghosts.race),
+    coin,
+    mission,
+  }
+}
+
+export function canonicalizeSkyLeagueGhosts(
+  value: unknown,
+): SkyLeagueGhosts {
+  if (!isObjectRecord(value)) return createEmptySkyLeagueGhosts()
+
+  const race = canonicalizeGhostRun(value.race)
+  const coin: Partial<Record<OpenWorldRegionId, GhostRun>> = {}
+  if (isObjectRecord(value.coin)) {
+    for (const [regionId, rawRun] of Object.entries(value.coin)) {
+      if (!isOpenWorldRegionId(regionId)) continue
+      const run = canonicalizeGhostRun(rawRun)
+      if (run !== null) coin[regionId] = run
+    }
+  }
+
+  const mission: Partial<Record<MissionId, GhostRun>> = {}
+  if (isObjectRecord(value.mission)) {
+    for (const [missionId, rawRun] of Object.entries(value.mission)) {
+      if (!isMissionId(missionId)) continue
+      const run = canonicalizeGhostRun(rawRun)
+      if (run !== null) mission[missionId] = run
+    }
+  }
+
+  return { race, coin, mission }
+}
+
+export function isCanonicalSkyLeagueGhosts(
+  value: unknown,
+): value is SkyLeagueGhosts {
+  if (!isObjectRecord(value)) return false
+  if (
+    Object.keys(value).some(
+      (key) => key !== 'race' && key !== 'coin' && key !== 'mission',
+    ) ||
+    !('race' in value) ||
+    !(value.race === null || isCanonicalGhostRun(value.race)) ||
+    !isObjectRecord(value.coin) ||
+    !isObjectRecord(value.mission)
+  ) {
+    return false
+  }
+
+  return (
+    Object.entries(value.coin).every(
+      ([regionId, run]) =>
+        isOpenWorldRegionId(regionId) && isCanonicalGhostRun(run),
+    ) &&
+    Object.entries(value.mission).every(
+      ([missionId, run]) =>
+        isMissionId(missionId) && isCanonicalGhostRun(run),
+    )
+  )
+}
+
 function freshDefaults(): GameSettings {
   return {
     ...DEFAULT_SETTINGS,
     missionGrades: {},
     coinBestTimesMs: {},
+    skyLeague: cloneSkyLeagueRecords(DEFAULT_SETTINGS.skyLeague),
+    ghosts: cloneSkyLeagueGhosts(DEFAULT_SETTINGS.ghosts),
     exploration: {
       ...DEFAULT_SETTINGS.exploration,
       position: { ...DEFAULT_SETTINGS.exploration.position },
@@ -133,6 +261,116 @@ function parseCoinBestTimes(value: unknown): CoinBestTimes {
     }
   }
   return bestTimes
+}
+
+function synchronizeSkyLeague(
+  records: SkyLeagueRecords,
+  bestTimeMs: number | null,
+  coinBestTimesMs: Readonly<CoinBestTimes>,
+): SkyLeagueRecords {
+  const raceTop10Ms = mergeBestTimeIntoBoard(
+    records.raceTop10Ms,
+    bestTimeMs,
+  )
+  const coinTop10Ms: Partial<
+    Record<OpenWorldRegionId, readonly number[]>
+  > = { ...records.coinTop10Ms }
+  for (const [regionId, elapsedMs] of Object.entries(coinBestTimesMs) as [
+    OpenWorldRegionId,
+    number,
+  ][]) {
+    coinTop10Ms[regionId] = mergeBestTimeIntoBoard(
+      coinTop10Ms[regionId] ?? [],
+      elapsedMs,
+    )
+  }
+
+  return {
+    raceTop10Ms,
+    coinTop10Ms,
+    missionTop10: records.missionTop10,
+  }
+}
+
+function mergeBestTimeIntoBoard(
+  board: readonly number[],
+  bestTimeMs: number | null,
+): readonly number[] {
+  if (bestTimeMs === null || (board[0] !== undefined && board[0] <= bestTimeMs)) {
+    return board
+  }
+  return [bestTimeMs, ...board].slice(0, SKY_LEAGUE_TOP_LIMIT)
+}
+
+function deriveCoinBestTimes(
+  records: SkyLeagueRecords,
+): CoinBestTimes {
+  const bestTimes: CoinBestTimes = {}
+  for (const [regionId, board] of Object.entries(records.coinTop10Ms) as [
+    OpenWorldRegionId,
+    readonly number[],
+  ][]) {
+    const bestTime = board[0]
+    if (bestTime !== undefined) bestTimes[regionId] = bestTime
+  }
+  return bestTimes
+}
+
+function strongerMissionGrade(
+  left: AwardedMissionGrade | undefined,
+  right: AwardedMissionGrade,
+): AwardedMissionGrade {
+  if (left === 'gold' || right === 'gold') return 'gold'
+  if (left === 'silver' || right === 'silver') return 'silver'
+  return 'bronze'
+}
+
+function synchronizeMissionGrades(
+  grades: MissionGrades,
+  records: SkyLeagueRecords,
+): MissionGrades {
+  const synchronized: MissionGrades = { ...grades }
+  for (const [missionId, board] of Object.entries(records.missionTop10) as [
+    MissionId,
+    readonly { readonly grade: AwardedMissionGrade }[],
+  ][]) {
+    const leagueGrade = board[0]?.grade
+    if (leagueGrade !== undefined) {
+      synchronized[missionId] = strongerMissionGrade(
+        synchronized[missionId],
+        leagueGrade,
+      )
+    }
+  }
+  return synchronized
+}
+
+function stringRecordMatches(left: object, right: object): boolean {
+  const rightRecord = right as Readonly<Record<string, unknown>>
+  const leftEntries = Object.entries(left)
+  return (
+    leftEntries.length === Object.keys(rightRecord).length &&
+    leftEntries.every(([key, value]) => rightRecord[key] === value)
+  )
+}
+
+function hasCanonicalCompatibilitySummaries(
+  settings: GameSettings,
+): boolean {
+  return (
+    settings.bestTimeMs === (settings.skyLeague.raceTop10Ms[0] ?? null) &&
+    stringRecordMatches(
+      settings.coinBestTimesMs,
+      deriveCoinBestTimes(settings.skyLeague),
+    ) &&
+    stringRecordMatches(
+      settings.missionGrades,
+      synchronizeMissionGrades(
+        { ...settings.missionGrades },
+        settings.skyLeague,
+      ),
+    )
+  )
 }
 
 function isValidExplorationPosition(value: unknown): value is Vec3Value {
@@ -260,7 +498,8 @@ function parseSettings(
       parsed.version !== 4 &&
       parsed.version !== 5 &&
       parsed.version !== 6 &&
-      parsed.version !== 7)
+      parsed.version !== 7 &&
+      parsed.version !== 8)
   ) {
     return null
   }
@@ -295,25 +534,56 @@ function parseSettings(
   const exploration =
     rawExploration === undefined
       ? freshDefaults().exploration
-      : parseExploration(rawExploration, parsed.version === 7)
+      : parseExploration(rawExploration, parsed.version >= 7)
   const coinBestTimesMs =
     parsed.version >= 5 && 'coinBestTimesMs' in parsed
       ? parseCoinBestTimes(parsed.coinBestTimesMs)
       : {}
+  const rawSkyLeague =
+    parsed.version >= 8 && 'skyLeague' in parsed
+      ? parsed.skyLeague
+      : undefined
+  const skyLeague = synchronizeSkyLeague(
+    parsed.version >= 8
+      ? canonicalizeSkyLeagueRecords(rawSkyLeague)
+      : createEmptySkyLeagueRecords(),
+    bestTimeMs,
+    coinBestTimesMs,
+  )
+  const synchronizedBestTimeMs = skyLeague.raceTop10Ms[0] ?? null
+  const synchronizedCoinBestTimesMs = deriveCoinBestTimes(skyLeague)
+  const synchronizedMissionGrades = synchronizeMissionGrades(
+    missionGrades,
+    skyLeague,
+  )
+  const rawGhosts =
+    parsed.version >= 8 && 'ghosts' in parsed ? parsed.ghosts : undefined
+  const ghosts = canonicalizeSkyLeagueGhosts(rawGhosts)
 
   return {
     settings: {
-      bestTimeMs,
+      bestTimeMs: synchronizedBestTimeMs,
       muted,
       musicVolume,
       quality,
-      missionGrades,
-      coinBestTimesMs,
+      missionGrades: synchronizedMissionGrades,
+      coinBestTimesMs: synchronizedCoinBestTimesMs,
+      skyLeague,
+      ghosts,
       exploration,
     },
     shouldMigrate:
-      parsed.version !== 7 ||
-      !hasCanonicalFestivalDiscoveries(rawExploration, exploration),
+      parsed.version !== 8 ||
+      !hasCanonicalFestivalDiscoveries(rawExploration, exploration) ||
+      !isCanonicalSkyLeagueRecords(rawSkyLeague) ||
+      JSON.stringify(rawSkyLeague) !== JSON.stringify(skyLeague) ||
+      !isCanonicalSkyLeagueGhosts(rawGhosts) ||
+      bestTimeMs !== synchronizedBestTimeMs ||
+      !stringRecordMatches(
+        coinBestTimesMs,
+        synchronizedCoinBestTimesMs,
+      ) ||
+      !stringRecordMatches(missionGrades, synchronizedMissionGrades),
   }
 }
 
@@ -354,6 +624,9 @@ function isValidSettings(settings: GameSettings): boolean {
       ([regionId, elapsedMs]) =>
         isOpenWorldRegionId(regionId) && isValidBestTime(elapsedMs),
     ) &&
+    isCanonicalSkyLeagueRecords(settings.skyLeague) &&
+    isCanonicalSkyLeagueGhosts(settings.ghosts) &&
+    hasCanonicalCompatibilitySummaries(settings) &&
     isValidExplorationPosition(exploration.position) &&
     Number.isFinite(exploration.headingRadians) &&
     (exploration.movement === 'airborne' ||
@@ -385,9 +658,15 @@ export function readSettings(storage: RecordStorage): GameSettings {
     const legacy = parseLegacyRecord(legacyRaw)
     if (legacy === null) return freshDefaults()
 
+    const defaults = freshDefaults()
     const migrated: GameSettings = {
-      ...freshDefaults(),
+      ...defaults,
       bestTimeMs: legacy.bestTimeMs,
+      skyLeague: synchronizeSkyLeague(
+        defaults.skyLeague,
+        legacy.bestTimeMs,
+        defaults.coinBestTimesMs,
+      ),
     }
     saveSettings(storage, migrated)
     return migrated
@@ -403,10 +682,12 @@ export function saveSettings(
   if (!isValidSettings(settings)) return false
 
   const stored: StoredSettings = {
-    version: 7,
+    version: 8,
     ...settings,
     missionGrades: { ...settings.missionGrades },
     coinBestTimesMs: { ...settings.coinBestTimesMs },
+    skyLeague: cloneSkyLeagueRecords(settings.skyLeague),
+    ghosts: cloneSkyLeagueGhosts(settings.ghosts),
     exploration: {
       ...settings.exploration,
       position: { ...settings.exploration.position },
@@ -436,4 +717,37 @@ export function recordCoinBestTime(
   const currentBest = records[regionId]
   if (currentBest !== undefined && elapsedMs >= currentBest) return records
   return { ...records, [regionId]: elapsedMs }
+}
+
+export function recordCoinCompetitionResult(
+  settings: GameSettings,
+  regionId: OpenWorldRegionId,
+  elapsedMs: number,
+): CoinCompetitionResult {
+  const placement = recordCoinLeagueTime(
+    settings.skyLeague,
+    regionId,
+    elapsedMs,
+  )
+  const coinBestTimesMs = recordCoinBestTime(
+    settings.coinBestTimesMs,
+    regionId,
+    elapsedMs,
+  )
+
+  if (
+    placement.records === settings.skyLeague &&
+    coinBestTimesMs === settings.coinBestTimesMs
+  ) {
+    return { settings, placement }
+  }
+
+  return {
+    settings: {
+      ...settings,
+      coinBestTimesMs,
+      skyLeague: placement.records,
+    },
+    placement,
+  }
 }

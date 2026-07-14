@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 
+import type { GhostPose } from '../competition/ghostRun'
 import {
   getForwardVector,
   type FlightState,
@@ -8,6 +9,7 @@ import {
   createDragon as createDragonVisual,
   type DragonDebugSnapshot,
   type DragonPalette,
+  type DragonVisual,
 } from './createDragon'
 import { createWorld, type WorldDebugSnapshot } from './createWorld'
 import { getCollisionCameraOffset } from './cameraFeedback'
@@ -50,6 +52,8 @@ export interface FlightSandboxDebugSnapshot {
   readonly collisionCameraShakeDistance: number
   readonly reducedMotion: boolean
   readonly dragon: DragonDebugSnapshot
+  readonly ghostVisible: boolean
+  readonly ghostDragon: DragonDebugSnapshot | null
   readonly world: WorldDebugSnapshot
 }
 
@@ -80,6 +84,7 @@ export interface FlightSandbox {
     collisionFeedbackSeconds?: number,
     presentation?: 'ready' | 'countdown' | 'race' | 'explore',
   ) => FlightSandboxStepResult
+  updateGhost: (pose: GhostPose | null, fixedDt: number) => void
   triggerGatePass: (checkpointIndex: number) => void
   gateProjection: (viewportHeight: number) => {
     readonly point: ProjectedPoint | null
@@ -149,6 +154,21 @@ export const WIND_THREAD_VISUAL_SPEC = Object.freeze({
   leftColorRole: 'gateRune' as const,
   rightColorRole: 'wingGold' as const,
 })
+
+export function getGhostWingFlapRadians(
+  elapsedMs: number,
+  isBoosting: boolean,
+): number {
+  const animationSeconds = Number.isFinite(elapsedMs)
+    ? Math.max(0, elapsedMs) / 1_000
+    : 0
+  const flapFrequency = isBoosting ? 3.4 : 2.2
+  const flapAmplitude = isBoosting ? 0.12 : 0.28
+  return (
+    Math.sin(animationSeconds * Math.PI * 2 * flapFrequency) *
+    flapAmplitude
+  )
+}
 
 const LANDSCAPE_READY_CAMERA: ReadyCameraFraming = Object.freeze({
   mode: 'landscape',
@@ -480,7 +500,11 @@ export function createFlightSandbox(
 ): FlightSandbox {
   const dragon = createDragonVisual(palette)
   dragon.setShadows(initialQuality.shadows)
+  let ghostDragon: DragonVisual | null = null
   let dragonPose = createDragonPoseState()
+  let ghostDragonPose = createDragonPoseState()
+  let ghostVisible = false
+  let lastGhostElapsedMs = -1
   let characterAnimationSeconds = 0
   let quality = initialQuality
   const world = createWorld(scene, camera, palette, quality)
@@ -542,6 +566,18 @@ export function createFlightSandbox(
   const speedStreakPosition = new THREE.Vector3()
   const speedStreakQuaternion = new THREE.Quaternion()
   const speedStreakScale = new THREE.Vector3()
+  const ghostFlight = {
+    position: { x: 0, y: 0, z: 0 },
+    headingRadians: 0,
+    pitchRadians: 0,
+    bankRadians: 0,
+    boostRemaining: 0,
+    boostRechargeDelaySeconds: 0,
+    distanceTravelled: 0,
+    speed: 0,
+    isBoosting: false,
+  }
+  let disposed = false
 
   scene.add(dragon.movementRoot)
   scene.add(passWave)
@@ -808,6 +844,65 @@ export function createFlightSandbox(
     )
   }
 
+  const updateGhostDragon = (
+    pose: GhostPose | null,
+    fixedDt: number,
+  ): void => {
+    if (disposed) return
+    if (pose === null) {
+      if (ghostDragon !== null) {
+        ghostDragon.movementRoot.visible = false
+      }
+      ghostDragonPose = createDragonPoseState()
+      ghostVisible = false
+      lastGhostElapsedMs = -1
+      return
+    }
+
+    if (ghostDragon === null) {
+      ghostDragon = createDragonVisual(palette, { appearance: 'ghost' })
+      ghostDragon.setShadows(false)
+      ghostDragon.movementRoot.visible = false
+      scene.add(ghostDragon.movementRoot)
+    }
+    const activeGhostDragon = ghostDragon
+
+    const elapsedMs = Number.isFinite(pose.elapsedMs)
+      ? Math.max(0, pose.elapsedMs)
+      : 0
+    if (!ghostVisible || elapsedMs < lastGhostElapsedMs) {
+      ghostDragonPose = createDragonPoseState()
+    }
+    ghostVisible = true
+    lastGhostElapsedMs = elapsedMs
+
+    const nextPose = stepDragonPose(
+      ghostDragonPose,
+      {
+        bankRadians: pose.bankRadians,
+        pitchRadians: pose.pitchRadians,
+        isBoosting: pose.boost,
+        collisionFeedbackSeconds: 0,
+        animationSeconds: elapsedMs / 1_000,
+      },
+      fixedDt,
+    )
+    ghostDragonPose = {
+      ...nextPose,
+      wingFlapRadians: getGhostWingFlapRadians(elapsedMs, pose.boost),
+    }
+
+    ghostFlight.position.x = pose.position.x
+    ghostFlight.position.y = pose.position.y
+    ghostFlight.position.z = pose.position.z
+    ghostFlight.headingRadians = pose.headingRadians
+    ghostFlight.pitchRadians = pose.pitchRadians
+    ghostFlight.bankRadians = pose.bankRadians
+    ghostFlight.isBoosting = pose.boost
+    activeGhostDragon.update(ghostFlight, ghostDragonPose)
+    activeGhostDragon.movementRoot.visible = true
+  }
+
   const updateCamera = (
     flight: FlightState,
     simulationSeconds: number,
@@ -934,6 +1029,7 @@ export function createFlightSandbox(
       world.update(simulationSeconds)
       return { wingDownstrokeStarted }
     },
+    updateGhost: updateGhostDragon,
     triggerGatePass: (checkpointIndex) => {
       const passedGate = gates[checkpointIndex]
 
@@ -1003,7 +1099,15 @@ export function createFlightSandbox(
       }
     },
     dispose: () => {
+      if (disposed) return
+      disposed = true
+      scene.remove(dragon.movementRoot)
       dragon.dispose()
+      if (ghostDragon !== null) {
+        scene.remove(ghostDragon.movementRoot)
+        ghostDragon.dispose()
+        ghostDragon = null
+      }
       for (const thread of windThreads) {
         thread.segmentGeometry.dispose()
         thread.outer.material.dispose()
@@ -1056,6 +1160,8 @@ export function createFlightSandbox(
               collisionCameraShakeDistance,
               reducedMotion: reducedMotion(),
               dragon: dragon.debugSnapshot(),
+              ghostVisible,
+              ghostDragon: ghostDragon?.debugSnapshot() ?? null,
               world: world.debugSnapshot(),
             }
           },

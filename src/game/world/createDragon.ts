@@ -14,7 +14,21 @@ export interface DragonPalette {
   readonly collisionCoral: string
 }
 
+export type DragonAppearance = 'player' | 'ghost'
+
+export interface CreateDragonOptions {
+  readonly appearance?: DragonAppearance
+}
+
+export const GHOST_DRAGON_VISUAL_SPEC = Object.freeze({
+  teal: '#62e9df',
+  opacity: 0.34,
+  emissiveIntensity: 0.72,
+  renderOrder: 4,
+})
+
 export interface DragonDebugSnapshot {
+  readonly appearance: DragonAppearance
   readonly source: 'fallback' | 'glb'
   readonly meshCount: number
   readonly tailSegmentCount: number
@@ -64,6 +78,95 @@ function captureMaterialStates(
   }))
 }
 
+function ghostUsesGold(
+  object: THREE.Object3D,
+  material: THREE.Material,
+): boolean {
+  return /wing|gold|membrane|horn|crest|claw|eye/i.test(
+    `${object.name} ${material.name}`,
+  )
+}
+
+function createGhostMaterial(
+  source: THREE.Material,
+  color: THREE.ColorRepresentation,
+): THREE.Material {
+  const material = source.clone()
+  material.name = `M33_Ghost_${source.name || source.type}`
+  material.transparent = true
+  material.opacity = GHOST_DRAGON_VISUAL_SPEC.opacity
+  material.depthWrite = false
+  material.blending = THREE.AdditiveBlending
+  material.dithering = true
+  material.userData.skyLeagueGhost = true
+
+  if (
+    material instanceof THREE.MeshStandardMaterial ||
+    material instanceof THREE.MeshBasicMaterial ||
+    material instanceof THREE.MeshLambertMaterial ||
+    material instanceof THREE.MeshPhongMaterial ||
+    material instanceof THREE.MeshToonMaterial ||
+    material instanceof THREE.MeshMatcapMaterial
+  ) {
+    material.color.set(color)
+    material.vertexColors = false
+  }
+  if (
+    material instanceof THREE.MeshStandardMaterial ||
+    material instanceof THREE.MeshLambertMaterial ||
+    material instanceof THREE.MeshPhongMaterial ||
+    material instanceof THREE.MeshToonMaterial
+  ) {
+    material.emissive.set(color)
+    material.emissiveIntensity =
+      GHOST_DRAGON_VISUAL_SPEC.emissiveIntensity
+  }
+  if (material instanceof THREE.MeshStandardMaterial) {
+    material.roughness = Math.min(material.roughness, 0.48)
+  }
+  material.needsUpdate = true
+  return material
+}
+
+function applyGhostAppearance(
+  root: THREE.Object3D,
+  palette: DragonPalette,
+): void {
+  const replacements = new Map<string, THREE.Material>()
+  const sourceMaterials = new Set<THREE.Material>()
+
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material]
+    const ghostMaterials = materials.map((material) => {
+      sourceMaterials.add(material)
+      const color = ghostUsesGold(object, material)
+        ? palette.wingGold
+        : GHOST_DRAGON_VISUAL_SPEC.teal
+      const replacementKey = `${material.uuid}:${color}`
+      const existing = replacements.get(replacementKey)
+      if (existing !== undefined) return existing
+
+      const replacement = createGhostMaterial(material, color)
+      replacements.set(replacementKey, replacement)
+      return replacement
+    })
+
+    object.material = Array.isArray(object.material)
+      ? ghostMaterials
+      : (ghostMaterials[0] ?? object.material)
+    object.castShadow = false
+    object.receiveShadow = false
+    object.renderOrder = GHOST_DRAGON_VISUAL_SPEC.renderOrder
+    object.userData.skyLeagueGhost = true
+  })
+
+  for (const material of sourceMaterials) material.dispose()
+}
+
 function createWingGeometry(side: -1 | 1): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry()
   const positions = new Float32Array([
@@ -81,6 +184,7 @@ function createWingGeometry(side: -1 | 1): THREE.BufferGeometry {
 
 function createFallbackDragon(
   palette: DragonPalette,
+  appearance: DragonAppearance,
 ): { readonly root: THREE.Group; readonly rig: RigParts } {
   const ember = new THREE.MeshStandardMaterial({
     color: palette.dragonEmber,
@@ -98,13 +202,14 @@ function createFallbackDragon(
     side: THREE.DoubleSide,
     flatShading: true,
   })
-  const charcoal = new THREE.MeshStandardMaterial({
-    color: palette.ink,
-    roughness: 0.82,
-    flatShading: true,
-  })
+  ember.name = 'Dragon_Ember'
+  emberDark.name = 'Dragon_EmberDark'
+  gold.name = 'Dragon_WingGold'
   const root = new THREE.Group()
-  root.name = 'M3_DragonFallback'
+  root.name =
+    appearance === 'ghost'
+      ? 'M33_SkyLeagueGhostDragonFallback'
+      : 'M3_DragonFallback'
   const bodyRoot = new THREE.Group()
   root.add(bodyRoot)
 
@@ -137,6 +242,21 @@ function createFallbackDragon(
   rightWing.add(new THREE.Mesh(createWingGeometry(1), gold))
   bodyRoot.add(rightWing)
 
+  if (appearance === 'ghost') applyGhostAppearance(root, palette)
+
+  const materials = new Set<THREE.MeshStandardMaterial>()
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+    const objectMaterials = Array.isArray(object.material)
+      ? object.material
+      : [object.material]
+    for (const material of objectMaterials) {
+      if (material instanceof THREE.MeshStandardMaterial) {
+        materials.add(material)
+      }
+    }
+  })
+
   return {
     root,
     rig: {
@@ -147,12 +267,7 @@ function createFallbackDragon(
       tail: [tailMesh],
       jaw: null,
       eyes: [],
-      materialStates: captureMaterialStates([
-        ember,
-        emberDark,
-        gold,
-        charcoal,
-      ]),
+      materialStates: captureMaterialStates(materials),
     },
   }
 }
@@ -210,18 +325,36 @@ function collectRig(scene: THREE.Object3D): RigParts | null {
 }
 
 function disposeObject(root: THREE.Object3D): void {
+  const disposedGeometries = new Set<THREE.BufferGeometry>()
+  const disposedMaterials = new Set<THREE.Material>()
+  const disposedTextures = new Set<THREE.Texture>()
   root.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) {
       return
     }
-    object.geometry.dispose()
+    if (!disposedGeometries.has(object.geometry)) {
+      object.geometry.dispose()
+      disposedGeometries.add(object.geometry)
+    }
     const materials = Array.isArray(object.material)
       ? object.material
       : [object.material]
     for (const material of materials) {
+      if (disposedMaterials.has(material)) continue
+      for (const value of Object.values(material)) {
+        if (
+          value instanceof THREE.Texture &&
+          !disposedTextures.has(value)
+        ) {
+          value.dispose()
+          disposedTextures.add(value)
+        }
+      }
       material.dispose()
+      disposedMaterials.add(material)
     }
   })
+  root.removeFromParent()
 }
 
 function setObjectShadows(root: THREE.Object3D, enabled: boolean): void {
@@ -233,12 +366,23 @@ function setObjectShadows(root: THREE.Object3D, enabled: boolean): void {
   })
 }
 
-export function createDragon(palette: DragonPalette): DragonVisual {
+export function createDragon(
+  palette: DragonPalette,
+  options: CreateDragonOptions = {},
+): DragonVisual {
+  const appearance = options.appearance ?? 'player'
+  const isGhost = appearance === 'ghost'
   const movementRoot = new THREE.Group()
-  movementRoot.name = 'M3_DragonMovementRoot'
+  movementRoot.name = isGhost
+    ? 'M33_SkyLeagueGhostDragonMovementRoot'
+    : 'M3_DragonMovementRoot'
+  movementRoot.userData.skyLeagueGhost = isGhost
   const poseRoot = new THREE.Group()
+  poseRoot.name = isGhost
+    ? 'M33_SkyLeagueGhostDragonPoseRoot'
+    : 'M3_DragonPoseRoot'
   movementRoot.add(poseRoot)
-  const fallback = createFallbackDragon(palette)
+  const fallback = createFallbackDragon(palette, appearance)
   poseRoot.add(fallback.root)
 
   let rig = fallback.rig
@@ -249,6 +393,7 @@ export function createDragon(palette: DragonPalette): DragonVisual {
   let blinkAmount = 0
   let jawOpenRadians = 0
   let shadowsEnabled = false
+  let loadedAsset: THREE.Object3D | null = null
   const hitColor = new THREE.Color(palette.collisionCoral)
   const forceFallback =
     import.meta.env.DEV &&
@@ -264,18 +409,26 @@ export function createDragon(palette: DragonPalette): DragonVisual {
       if (gltf.scene === null) {
         return 'fallback' as const
       }
+      if (disposed) {
+        disposeObject(gltf.scene)
+        return 'fallback' as const
+      }
+      if (isGhost) applyGhostAppearance(gltf.scene, palette)
       const loadedRig = collectRig(gltf.scene)
 
-      if (disposed || loadedRig === null) {
+      if (loadedRig === null) {
         disposeObject(gltf.scene)
         return 'fallback' as const
       }
 
-      gltf.scene.name = 'M3_SkyknotDragonAsset'
+      gltf.scene.name = isGhost
+        ? 'M33_SkyLeagueGhostDragonAsset'
+        : 'M3_SkyknotDragonAsset'
       gltf.scene.scale.setScalar(0.34)
       gltf.scene.position.set(0, -1.32, 0.08)
       setObjectShadows(gltf.scene, shadowsEnabled)
       poseRoot.add(gltf.scene)
+      loadedAsset = gltf.scene
       fallback.root.visible = false
       rig = loadedRig
       source = 'glb'
@@ -293,6 +446,7 @@ export function createDragon(palette: DragonPalette): DragonVisual {
     movementRoot,
     ready,
     update: (flight, pose) => {
+      if (disposed) return
       breathScale = pose.breathScale
       blinkAmount = pose.blinkAmount
       jawOpenRadians = pose.jawOpenRadians
@@ -333,16 +487,17 @@ export function createDragon(palette: DragonPalette): DragonVisual {
       }
     },
     setShadows: (enabled) => {
-      shadowsEnabled = enabled
-      setObjectShadows(fallback.root, enabled)
+      if (disposed) return
+      shadowsEnabled = !isGhost && enabled
+      setObjectShadows(fallback.root, shadowsEnabled)
       if (source === 'glb') {
-        const loadedAsset = poseRoot.getObjectByName('M3_SkyknotDragonAsset')
-        if (loadedAsset !== undefined) {
-          setObjectShadows(loadedAsset, enabled)
+        if (loadedAsset !== null) {
+          setObjectShadows(loadedAsset, shadowsEnabled)
         }
       }
     },
     debugSnapshot: () => ({
+      appearance,
       source,
       meshCount,
       tailSegmentCount: rig.tail.length,
@@ -353,7 +508,14 @@ export function createDragon(palette: DragonPalette): DragonVisual {
       shadowsEnabled,
     }),
     dispose: () => {
+      if (disposed) return
       disposed = true
+      disposeObject(fallback.root)
+      if (loadedAsset !== null) {
+        disposeObject(loadedAsset)
+        loadedAsset = null
+      }
+      poseRoot.removeFromParent()
     },
   }
 }

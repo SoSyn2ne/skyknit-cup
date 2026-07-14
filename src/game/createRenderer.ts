@@ -14,6 +14,18 @@ import {
   type CoinRunStepResult,
 } from './collectibles/coinRun'
 import {
+  captureGhostSample,
+  createGhostRecorder,
+  finishGhostRun,
+  matchGhostProgress,
+  sampleGhostRun,
+  snapshotGhostRecorder,
+  type GhostProgressHint,
+  type GhostRecorder,
+  type GhostRecorderSnapshot,
+  type GhostRun,
+} from './competition/ghostRun'
+import {
   applyObstacleCollision,
   createCollisionState,
   findSweptSphereCollision,
@@ -50,7 +62,7 @@ import { TouchInput } from './input/TouchInput'
 import {
   DEFAULT_SETTINGS,
   readSettings,
-  recordCoinBestTime,
+  recordCoinCompetitionResult,
   saveSettings,
 } from './persistence/records'
 import {
@@ -70,6 +82,7 @@ import {
   syncRaceRun,
   transitionRace,
   type RaceQuality,
+  type RaceLeaguePlacement,
   type RaceState,
 } from './race/raceState'
 import {
@@ -167,6 +180,14 @@ export interface FlightDebugSnapshot {
     readonly checkpointCount: number
     readonly finalElapsedMs: number | null
     readonly bestTimeMs: number | null
+    readonly leagueResult: RaceState['leagueResult']
+    readonly raceTop10Ms: readonly number[]
+    readonly selectedMissionTop10: RaceState['persistent']['skyLeague']['missionTop10'][keyof RaceState['persistent']['skyLeague']['missionTop10']]
+    readonly ghost: {
+      readonly recorderSampleCount: number
+      readonly comparisonDurationMs: number | null
+      readonly liveDeltaMs: number | null
+    }
     readonly mission: RaceState['mission']
     readonly missionGrades: RaceState['persistent']['missionGrades']
     readonly outOfBoundsSeconds: number
@@ -206,6 +227,13 @@ export interface FlightDebugSnapshot {
     readonly mapOpen: boolean
     readonly coinRun: CoinRunState
     readonly coinBestTimesMs: RaceState['persistent']['coinBestTimesMs']
+    readonly coinRunLeagueResult: RaceLeaguePlacement | null
+    readonly coinTop10Ms: readonly number[]
+    readonly ghost: {
+      readonly recorderSampleCount: number
+      readonly comparisonDurationMs: number | null
+      readonly liveDeltaMs: number | null
+    }
     readonly coinVisual: CoinCourseVisualSnapshot
     readonly collision: CollisionState & {
       readonly lastObstacleId: string | null
@@ -246,6 +274,13 @@ export interface RendererRecoveryState {
   readonly mapOpen: boolean
   readonly coinRunState: CoinRunState
   readonly coinRunIsNewBest: boolean
+  readonly coinRunLeagueResult: RaceLeaguePlacement | null
+  readonly raceGhostRecorder: GhostRecorderSnapshot | null
+  readonly coinGhostRecorder: GhostRecorderSnapshot | null
+  readonly raceGhostMatch: GhostProgressHint | null
+  readonly coinGhostMatch: GhostProgressHint | null
+  readonly raceLiveDeltaMs: number | null
+  readonly coinLiveDeltaMs: number | null
   readonly musicActive: boolean
   readonly musicPlaybackPositionSeconds: number
 }
@@ -512,6 +547,31 @@ export function createRenderer(
     let mapOpen = recovery?.mapOpen ?? false
     let coinRunState = recovery?.coinRunState ?? createCoinRunState()
     let coinRunIsNewBest = recovery?.coinRunIsNewBest ?? false
+    let coinRunLeagueResult = recovery?.coinRunLeagueResult ?? null
+    let raceGhostRecorder: GhostRecorder | null =
+      recovery?.raceGhostRecorder === undefined ||
+      recovery.raceGhostRecorder === null
+        ? null
+        : createGhostRecorder(recovery.raceGhostRecorder)
+    let coinGhostRecorder: GhostRecorder | null =
+      recovery?.coinGhostRecorder === undefined ||
+      recovery.coinGhostRecorder === null
+        ? null
+        : createGhostRecorder(recovery.coinGhostRecorder)
+    let raceGhostMatch = recovery?.raceGhostMatch ?? null
+    let coinGhostMatch = recovery?.coinGhostMatch ?? null
+    let raceLiveDeltaMs = recovery?.raceLiveDeltaMs ?? null
+    let coinLiveDeltaMs = recovery?.coinLiveDeltaMs ?? null
+    const selectRaceGhost = (): GhostRun | null =>
+      raceState.persistent.ghosts.mission[
+        raceState.mission.selectedMissionId
+      ] ?? raceState.persistent.ghosts.race
+    let raceGhostComparison =
+      raceGhostRecorder === null ? null : selectRaceGhost()
+    let coinGhostComparison =
+      coinGhostRecorder === null || coinRunState.regionId === null
+        ? null
+        : (raceState.persistent.ghosts.coin[coinRunState.regionId] ?? null)
     if (gameMode === 'explore') {
       flightState = explorationState.flight
     }
@@ -566,6 +626,183 @@ export function createRenderer(
       clearInputs()
     }
 
+    const clearRaceGhostAttempt = (): void => {
+      raceGhostRecorder = null
+      raceGhostComparison = null
+      raceGhostMatch = null
+      raceLiveDeltaMs = null
+      sandbox.updateGhost(null, 0)
+    }
+
+    const beginRaceGhostAttempt = (): void => {
+      raceGhostRecorder = createGhostRecorder()
+      raceGhostComparison = selectRaceGhost()
+      raceGhostMatch = null
+      raceLiveDeltaMs = null
+      captureGhostSample(
+        raceGhostRecorder,
+        0,
+        flightState,
+        raceState.run.nextCheckpointIndex,
+        true,
+      )
+    }
+
+    const updateRaceGhostDelta = (): void => {
+      if (raceGhostComparison === null) {
+        raceGhostMatch = null
+        raceLiveDeltaMs = null
+        return
+      }
+
+      const match = matchGhostProgress(
+        raceGhostComparison,
+        flightState.position,
+        raceState.run.nextCheckpointIndex,
+        raceGhostMatch ?? undefined,
+      )
+      raceGhostMatch = match
+      raceLiveDeltaMs =
+        match === null ? null : raceState.run.elapsedMs - match.referenceElapsedMs
+    }
+
+    const finishRaceGhostAttempt = (): void => {
+      const elapsedMs = raceState.finalElapsedMs
+      const recorder = raceGhostRecorder
+      if (elapsedMs === null || recorder === null) {
+        raceGhostRecorder = null
+        return
+      }
+
+      captureGhostSample(
+        recorder,
+        elapsedMs,
+        flightState,
+        raceState.run.nextCheckpointIndex,
+        true,
+      )
+      updateRaceGhostDelta()
+      const run = finishGhostRun(recorder, elapsedMs)
+      raceGhostRecorder = null
+      const leagueResult = raceState.leagueResult
+      if (run === null || leagueResult === null) return
+
+      let ghosts = raceState.persistent.ghosts
+      if (leagueResult.race.isNewBest) {
+        ghosts = { ...ghosts, race: run }
+      }
+      if (leagueResult.mission?.isNewBest === true) {
+        ghosts = {
+          ...ghosts,
+          mission: {
+            ...ghosts.mission,
+            [leagueResult.mission.missionId]: run,
+          },
+        }
+      }
+      if (ghosts !== raceState.persistent.ghosts) {
+        raceState = {
+          ...raceState,
+          persistent: { ...raceState.persistent, ghosts },
+        }
+      }
+    }
+
+    const clearCoinGhostAttempt = (): void => {
+      coinGhostRecorder = null
+      coinGhostComparison = null
+      coinGhostMatch = null
+      coinLiveDeltaMs = null
+      sandbox.updateGhost(null, 0)
+    }
+
+    const resetCoinRunAttempt = (): void => {
+      coinRunState = createCoinRunState()
+      coinRunIsNewBest = false
+      coinRunLeagueResult = null
+      clearCoinGhostAttempt()
+    }
+
+    const beginCoinGhostAttempt = (regionId: OpenWorldRegionId): void => {
+      coinGhostRecorder = createGhostRecorder()
+      coinGhostComparison =
+        raceState.persistent.ghosts.coin[regionId] ?? null
+      coinGhostMatch = null
+      coinLiveDeltaMs = null
+      captureGhostSample(
+        coinGhostRecorder,
+        0,
+        explorationState.flight,
+        coinRunState.collectedCount,
+        true,
+      )
+    }
+
+    const updateCoinGhostDelta = (): void => {
+      if (coinGhostComparison === null) {
+        coinGhostMatch = null
+        coinLiveDeltaMs = null
+        return
+      }
+
+      const match = matchGhostProgress(
+        coinGhostComparison,
+        explorationState.flight.position,
+        coinRunState.collectedCount,
+        coinGhostMatch ?? undefined,
+      )
+      coinGhostMatch = match
+      coinLiveDeltaMs =
+        match === null ? null : coinRunState.elapsedMs - match.referenceElapsedMs
+    }
+
+    const finishCoinGhostAttempt = (): GhostRun | null => {
+      const elapsedMs = coinRunState.finalElapsedMs
+      const recorder = coinGhostRecorder
+      if (elapsedMs === null || recorder === null) {
+        coinGhostRecorder = null
+        return null
+      }
+
+      captureGhostSample(
+        recorder,
+        elapsedMs,
+        explorationState.flight,
+        coinRunState.collectedCount,
+        true,
+      )
+      updateCoinGhostDelta()
+      coinGhostRecorder = null
+      return finishGhostRun(recorder, elapsedMs)
+    }
+
+    const updateGhostVisual = (fixedDt: number): void => {
+      if (gameMode === 'race' && raceGhostComparison !== null) {
+        const elapsedMs = raceState.finalElapsedMs ?? raceState.run.elapsedMs
+        sandbox.updateGhost(
+          sampleGhostRun(raceGhostComparison, elapsedMs),
+          fixedDt,
+        )
+        return
+      }
+
+      if (
+        gameMode === 'explore' &&
+        coinGhostComparison !== null &&
+        coinRunState.phase !== 'idle'
+      ) {
+        const elapsedMs =
+          coinRunState.finalElapsedMs ?? coinRunState.elapsedMs
+        sandbox.updateGhost(
+          sampleGhostRun(coinGhostComparison, elapsedMs),
+          fixedDt,
+        )
+        return
+      }
+
+      sandbox.updateGhost(null, 0)
+    }
+
     const respawn = (trackMission = true): void => {
       if (trackMission) {
         raceState = recordRaceRespawn(raceState)
@@ -604,6 +841,7 @@ export function createRenderer(
 
       if (phaseBeforePass !== 'finished' && raceState.phase === 'finished') {
         gameAudio.playFinish()
+        finishRaceGhostAttempt()
       }
 
       if (
@@ -668,10 +906,30 @@ export function createRenderer(
     const applyCoinRunStep = (step: CoinRunStepResult): void => {
       const previousPhase = coinRunState.phase
       coinRunState = step.state
-      if (previousPhase === 'idle' && coinRunState.phase === 'running') {
+      if (
+        previousPhase === 'idle' &&
+        coinRunState.phase === 'running' &&
+        coinRunState.regionId !== null
+      ) {
         coinRunIsNewBest = false
+        coinRunLeagueResult = null
+        beginCoinGhostAttempt(coinRunState.regionId)
       } else if (coinRunState.phase === 'idle') {
         coinRunIsNewBest = false
+        coinRunLeagueResult = null
+        clearCoinGhostAttempt()
+      }
+      if (
+        coinRunState.phase === 'running' &&
+        coinGhostRecorder !== null
+      ) {
+        captureGhostSample(
+          coinGhostRecorder,
+          coinRunState.elapsedMs,
+          explorationState.flight,
+          coinRunState.collectedCount,
+        )
+        updateCoinGhostDelta()
       }
       if (step.collectedCoinId !== null) gameAudio.playGate()
       if (
@@ -681,19 +939,36 @@ export function createRenderer(
         return
       }
 
-      const previousBest =
-        raceState.persistent.coinBestTimesMs[step.completedRegionId]
-      const coinBestTimesMs = recordCoinBestTime(
-        raceState.persistent.coinBestTimesMs,
+      const completedGhost = finishCoinGhostAttempt()
+      const result = recordCoinCompetitionResult(
+        raceState.persistent,
         step.completedRegionId,
         step.completedTimeMs,
       )
-      coinRunIsNewBest =
-        previousBest === undefined || step.completedTimeMs < previousBest
-      if (coinBestTimesMs === raceState.persistent.coinBestTimesMs) return
+      coinRunIsNewBest = result.placement.isNewBest
+      coinRunLeagueResult = {
+        rank: result.placement.rank,
+        medal: result.placement.medal,
+        isNewBest: result.placement.isNewBest,
+        inserted: result.placement.inserted,
+      }
+      const nextSettings =
+        completedGhost !== null && result.placement.isNewBest
+          ? {
+              ...result.settings,
+              ghosts: {
+                ...result.settings.ghosts,
+                coin: {
+                  ...result.settings.ghosts.coin,
+                  [step.completedRegionId]: completedGhost,
+                },
+              },
+            }
+          : result.settings
+      if (nextSettings === raceState.persistent) return
       raceState = {
         ...raceState,
-        persistent: { ...raceState.persistent, coinBestTimesMs },
+        persistent: nextSettings,
       }
       savePersistentSettings()
     }
@@ -749,8 +1024,7 @@ export function createRenderer(
       resetExplorationEnvironment()
       gameMode = 'race'
       gameAudio.setMusicActive(true)
-      coinRunState = createCoinRunState()
-      coinRunIsNewBest = false
+      resetCoinRunAttempt()
       explorationPaused = false
       mapOpen = false
       openWorld.clear()
@@ -764,6 +1038,7 @@ export function createRenderer(
         input: inputController.activeDevice,
       })
       resetFlight()
+      beginRaceGhostAttempt()
     }
 
     const performExplorationInteraction = (): void => {
@@ -861,11 +1136,13 @@ export function createRenderer(
           type: 'START',
           input: touchCapable ? 'touch' : 'keyboard',
         })
+        beginRaceGhostAttempt()
       },
       startExplore: () => {
         gameAudio.setMusicActive(true)
         void gameAudio.unlock()
         resetExplorationEnvironment()
+        clearRaceGhostAttempt()
         gameMode = 'explore'
         explorationPaused = false
         mapOpen = false
@@ -883,6 +1160,7 @@ export function createRenderer(
         raceState = transitionRace(raceState, {
           type: 'RETURN_TO_READY',
         })
+        clearRaceGhostAttempt()
         resetFlight()
       },
       resume: () => {
@@ -892,6 +1170,7 @@ export function createRenderer(
         raceState = transitionRace(raceState, { type: 'RESTART' })
         previousBestTimeMs = raceState.persistent.bestTimeMs
         resetFlight()
+        beginRaceGhostAttempt()
       },
       respawn: () => {
         respawn()
@@ -901,6 +1180,7 @@ export function createRenderer(
         raceState = transitionRace(raceState, { type: 'RETRY' })
         previousBestTimeMs = raceState.persistent.bestTimeMs
         resetFlight()
+        beginRaceGhostAttempt()
       },
       toggleMute,
       setMusicVolume,
@@ -933,14 +1213,14 @@ export function createRenderer(
         resetExplorationEnvironment()
         gameMode = 'race'
         gameAudio.setMusicActive(true)
-        coinRunState = createCoinRunState()
-        coinRunIsNewBest = false
+        resetCoinRunAttempt()
         explorationPaused = false
         mapOpen = false
         openWorld.clear()
         explorationHud?.element.setAttribute('hidden', '')
         raceHud.element.hidden = false
         raceState = transitionRace(raceState, { type: 'RETURN_TO_READY' })
+        clearRaceGhostAttempt()
         resetFlight()
       },
     })
@@ -1098,6 +1378,24 @@ export function createRenderer(
         mapOpen,
         coinRunState: { ...coinRunState },
         coinRunIsNewBest,
+        coinRunLeagueResult:
+          coinRunLeagueResult === null
+            ? null
+            : { ...coinRunLeagueResult },
+        raceGhostRecorder:
+          raceGhostRecorder === null
+            ? null
+            : snapshotGhostRecorder(raceGhostRecorder),
+        coinGhostRecorder:
+          coinGhostRecorder === null
+            ? null
+            : snapshotGhostRecorder(coinGhostRecorder),
+        raceGhostMatch:
+          raceGhostMatch === null ? null : { ...raceGhostMatch },
+        coinGhostMatch:
+          coinGhostMatch === null ? null : { ...coinGhostMatch },
+        raceLiveDeltaMs,
+        coinLiveDeltaMs,
         musicActive,
         musicPlaybackPositionSeconds: gameAudio.getMusicPositionSeconds(),
       })
@@ -1124,6 +1422,7 @@ export function createRenderer(
             type: 'START',
             input: inputController.activeDevice,
           })
+          beginRaceGhostAttempt()
           sandbox.resetCamera()
         }
 
@@ -1358,6 +1657,16 @@ export function createRenderer(
             passCheckpoint(checkpointProgress.passedCheckpointIndex)
           }
 
+          if (raceGhostRecorder !== null) {
+            captureGhostSample(
+              raceGhostRecorder,
+              raceState.run.elapsedMs,
+              flightState,
+              raceState.run.nextCheckpointIndex,
+            )
+            updateRaceGhostDelta()
+          }
+
           if (raceState.phase === 'racing') {
             const segment = getCourseSegment(
               raceState.run.nextCheckpointIndex,
@@ -1385,16 +1694,18 @@ export function createRenderer(
           visualSimulationSeconds += FIXED_STEP_SECONDS
         }
 
-        const sandboxStep = sandbox.step(
-          flightState,
-          visualSimulationSeconds,
+        const sandboxFixedDt =
           gameMode === 'explore'
             ? explorationSimulationActive
               ? FIXED_STEP_SECONDS
               : 0
             : phaseAtStepStart === 'paused'
               ? 0
-              : FIXED_STEP_SECONDS,
+              : FIXED_STEP_SECONDS
+        const sandboxStep = sandbox.step(
+          flightState,
+          visualSimulationSeconds,
+          sandboxFixedDt,
           gameMode === 'explore' ? -1 : raceState.run.nextCheckpointIndex,
           Math.max(
             gameMode === 'explore'
@@ -1410,6 +1721,7 @@ export function createRenderer(
               ? 'countdown'
               : 'race',
         )
+        updateGhostVisual(sandboxFixedDt)
         const wingAudioActive =
           gameMode === 'explore'
             ? explorationSimulationActive &&
@@ -1539,11 +1851,11 @@ export function createRenderer(
       pitchRadians = 0,
     ): void => {
       gameMode = 'explore'
+      clearRaceGhostAttempt()
       gameAudio.setMusicActive(true)
       explorationPaused = false
       mapOpen = false
-      coinRunState = createCoinRunState()
-      coinRunIsNewBest = false
+      resetCoinRunAttempt()
       resetExplorationEnvironment()
       explorationState = createExplorationFlightState({
         position: { ...position },
@@ -1590,6 +1902,10 @@ export function createRenderer(
             const touchSnapshot = touchInput.debugSnapshot()
             const cameraSnapshot = sandbox.debugSnapshot?.(flightState)
             const openWorldSnapshot = openWorld.debugSnapshot()
+            const debugCoinRegionId =
+              coinRunState.regionId ??
+              getCurrentRegion(explorationState.flight.position)?.id ??
+              null
 
             if (cameraSnapshot === undefined) {
               throw new Error('Missing development camera snapshot')
@@ -1633,6 +1949,21 @@ export function createRenderer(
                 checkpointCount: raceState.config.checkpointCount,
                 finalElapsedMs: raceState.finalElapsedMs,
                 bestTimeMs: raceState.persistent.bestTimeMs,
+                leagueResult: raceState.leagueResult,
+                raceTop10Ms: [
+                  ...raceState.persistent.skyLeague.raceTop10Ms,
+                ],
+                selectedMissionTop10:
+                  raceState.persistent.skyLeague.missionTop10[
+                    raceState.mission.selectedMissionId
+                  ]?.map((entry) => ({ ...entry })) ?? [],
+                ghost: {
+                  recorderSampleCount:
+                    raceGhostRecorder?.samples.length ?? 0,
+                  comparisonDurationMs:
+                    raceGhostComparison?.durationMs ?? null,
+                  liveDeltaMs: raceLiveDeltaMs,
+                },
                 mission: raceState.mission,
                 missionGrades: raceState.persistent.missionGrades,
                 outOfBoundsSeconds:
@@ -1676,6 +2007,24 @@ export function createRenderer(
                 coinBestTimesMs: {
                   ...raceState.persistent.coinBestTimesMs,
                 },
+                coinRunLeagueResult:
+                  coinRunLeagueResult === null
+                    ? null
+                    : { ...coinRunLeagueResult },
+                coinTop10Ms: [
+                  ...(debugCoinRegionId === null
+                    ? []
+                    : (raceState.persistent.skyLeague.coinTop10Ms[
+                        debugCoinRegionId
+                      ] ?? [])),
+                ],
+                ghost: {
+                  recorderSampleCount:
+                    coinGhostRecorder?.samples.length ?? 0,
+                  comparisonDurationMs:
+                    coinGhostComparison?.durationMs ?? null,
+                  liveDeltaMs: coinLiveDeltaMs,
+                },
                 coinVisual: coinCourseVisual.debugSnapshot(),
                 collision: {
                   ...explorationCollisionState,
@@ -1687,11 +2036,11 @@ export function createRenderer(
           qaExploreRegion: (regionId: OpenWorldRegionId): void => {
             const region = getRegionById(regionId)
             gameMode = 'explore'
+            clearRaceGhostAttempt()
             gameAudio.setMusicActive(true)
             explorationPaused = false
             mapOpen = false
-            coinRunState = createCoinRunState()
-            coinRunIsNewBest = false
+            resetCoinRunAttempt()
             resetExplorationEnvironment()
             explorationState = createExplorationFlightState({
               position: {
@@ -1834,13 +2183,13 @@ export function createRenderer(
             const coin = course.coins[index]
             if (coin === undefined) return
             gameMode = 'explore'
+            clearRaceGhostAttempt()
             gameAudio.setMusicActive(true)
             explorationPaused = false
             mapOpen = false
             resetExplorationEnvironment()
             if (index === 0) {
-              coinRunState = createCoinRunState()
-              coinRunIsNewBest = false
+              resetCoinRunAttempt()
             }
             const crossingDistance = coin.radius + 2
             const crossedPosition = {

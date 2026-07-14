@@ -27,6 +27,12 @@ const options = {
     bestTimeMs: 50_000,
     missionGrades: { 'first-skyknot': 'silver' as const },
     coinBestTimesMs: { 'festival-hub': 18_250 },
+    skyLeague: {
+      raceTop10Ms: [50_000],
+      coinTop10Ms: { 'festival-hub': [18_250] },
+      missionTop10: {},
+    },
+    ghosts: { race: null, coin: {}, mission: {} },
     exploration: {
       position: { x: 0, y: 18, z: 20 },
       headingRadians: 0,
@@ -53,6 +59,7 @@ function makeState(phase: RacePhase): RaceState {
       temporaryEffects: ['gate-wave'],
     },
     finalElapsedMs: phase === 'finished' ? 42_000 : null,
+    leagueResult: null,
     mission: {
       selectedMissionId: 'first-skyknot',
       status: phase === 'finished' ? 'finished' : 'active',
@@ -220,6 +227,19 @@ describe('race state', () => {
     expect(finished.phase).toBe('finished')
     expect(finished.finalElapsedMs).toBe(42_000)
     expect(finished.persistent.bestTimeMs).toBe(42_000)
+    expect(finished.persistent.skyLeague.raceTop10Ms).toEqual([
+      42_000,
+      50_000,
+    ])
+    expect(finished.leagueResult).toMatchObject({
+      race: { rank: 1, medal: 'gold', isNewBest: true },
+      mission: {
+        missionId: 'first-skyknot',
+        rank: 1,
+        medal: 'gold',
+        isNewBest: true,
+      },
+    })
     expect(finished.run).toBe(complete.run)
   })
 
@@ -231,6 +251,47 @@ describe('race state', () => {
     const finished = transitionRace(racing, { type: 'FINISH' })
 
     expect(finished.persistent.bestTimeMs).toBe(50_000)
+    expect(finished.persistent.skyLeague.raceTop10Ms).toEqual([
+      50_000,
+      55_000,
+    ])
+    expect(finished.leagueResult?.race).toMatchObject({
+      rank: 2,
+      medal: 'silver',
+      isNewBest: false,
+      inserted: true,
+    })
+  })
+
+  it('keeps failed missions off their board while retaining the race result', () => {
+    const base = makeState('racing')
+    const racing = {
+      ...withRun(base, {
+        elapsedMs: 45_000,
+        nextCheckpointIndex: 3,
+      }),
+      mission: {
+        ...base.mission,
+        selectedMissionId: 'clean-flight' as const,
+        attempt: {
+          ...base.mission.attempt,
+          elapsedMs: 45_000,
+          nextCheckpointIndex: 3,
+          collisionCount: 1,
+        },
+      },
+    }
+    const finished = transitionRace(racing, { type: 'FINISH' })
+
+    expect(finished.mission.result?.grade).toBe('failed')
+    expect(finished.persistent.skyLeague.raceTop10Ms).toEqual([
+      45_000,
+      50_000,
+    ])
+    expect(finished.persistent.skyLeague.missionTop10['clean-flight']).toBe(
+      undefined,
+    )
+    expect(finished.leagueResult?.mission).toBeNull()
   })
 
   it.each([0, Number.NaN, Number.POSITIVE_INFINITY])(
@@ -260,6 +321,7 @@ describe('race state', () => {
     expect(restarted.run.velocity).toEqual({ x: 0, y: 0, z: 0 })
     expect(restarted.run.temporaryEffects).toEqual([])
     expect(restarted.persistent).toEqual(paused.persistent)
+    expect(restarted.leagueResult).toBeNull()
   })
 
   it('retries a finished race with transient state reset and best time preserved', () => {
@@ -278,6 +340,7 @@ describe('race state', () => {
       temporaryEffects: [],
     })
     expect(retried.persistent).toEqual(finished.persistent)
+    expect(retried.leagueResult).toBeNull()
   })
 
   it('returns the same state for every unlisted event and phase pair', () => {

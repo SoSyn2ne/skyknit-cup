@@ -125,8 +125,28 @@ test('completes a mission, saves its grade, and returns to selection', async ({
     return raw === null ? null : (JSON.parse(raw) as unknown)
   })
   expect(stored).toMatchObject({
-    version: 7,
+    version: 8,
     missionGrades: { 'first-skyknot': 'gold' },
+    skyLeague: {
+      raceTop10Ms: [expect.any(Number)],
+      missionTop10: {
+        'first-skyknot': [
+          { elapsedMs: expect.any(Number), grade: 'gold' },
+        ],
+      },
+    },
+    ghosts: {
+      race: {
+        durationMs: expect.any(Number),
+        samples: expect.any(Array),
+      },
+      mission: {
+        'first-skyknot': {
+          durationMs: expect.any(Number),
+          samples: expect.any(Array),
+        },
+      },
+    },
   })
 
   await page.getByRole('button', { name: '미션 선택' }).click()

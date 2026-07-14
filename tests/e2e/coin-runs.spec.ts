@@ -101,11 +101,34 @@ test('freezes the run under the map and persists all three regional bests', asyn
     return raw === null ? null : JSON.parse(raw)
   })
   expect(saved).toMatchObject({
-    version: 7,
+    version: 8,
     coinBestTimesMs: {
       'festival-hub': expect.any(Number),
       'wind-canyon': expect.any(Number),
       'cloud-ruins': expect.any(Number),
+    },
+    skyLeague: {
+      coinTop10Ms: {
+        'festival-hub': [expect.any(Number)],
+        'wind-canyon': [expect.any(Number)],
+        'cloud-ruins': [expect.any(Number)],
+      },
+    },
+    ghosts: {
+      coin: {
+        'festival-hub': {
+          durationMs: expect.any(Number),
+          samples: expect.any(Array),
+        },
+        'wind-canyon': {
+          durationMs: expect.any(Number),
+          samples: expect.any(Array),
+        },
+        'cloud-ruins': {
+          durationMs: expect.any(Number),
+          samples: expect.any(Array),
+        },
+      },
     },
   })
 
