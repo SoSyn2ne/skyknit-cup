@@ -189,6 +189,7 @@ export interface FlightDebugSnapshot {
   }
   readonly exploration: {
     readonly movement: ExplorationFlightState['movement']
+    readonly landingPadId: ExplorationFlightState['landingPadId']
     readonly discoveredRegionIds: readonly OpenWorldRegionId[]
     readonly discoveredLandmarkIds: RaceState['persistent']['exploration']['discoveredLandmarkIds']
     readonly traversedWindZoneIds: RaceState['persistent']['exploration']['traversedWindZoneIds']
@@ -463,22 +464,38 @@ export function createRenderer(
       },
     )
     let gameMode: 'race' | 'explore' = recovery?.gameMode ?? 'race'
+    const landingPads = [
+      ...OPEN_WORLD_REGIONS.filter(
+        ({ id }) => id !== 'festival-hub',
+      ).map((region) => region.landingPad),
+      ...FESTIVAL_HUB_LANDING_PADS,
+    ]
     const savedExploration = raceState.persistent.exploration
-    const savedRegion = getCurrentRegion(savedExploration.position)
+    const savedLandingPadId =
+      savedExploration.movement === 'landed'
+        ? requestLanding(
+            createExplorationFlightState({
+              position: savedExploration.position,
+              headingRadians: savedExploration.headingRadians,
+              speed: 0,
+            }),
+            landingPads,
+          ).landingPadId
+        : null
+    const restoresLandedState = savedLandingPadId !== null
     let explorationState: ExplorationFlightState =
       recovery?.explorationState ??
       {
         ...createExplorationFlightState({
           position: savedExploration.position,
           headingRadians: savedExploration.headingRadians,
-          speed: savedExploration.movement === 'landed' ? 0 : 18,
+          speed: restoresLandedState ? 0 : 18,
         }),
-        movement: savedExploration.movement,
-        landingPadId:
-          savedExploration.movement === 'landed'
-            ? (savedRegion?.landingPad.id ?? null)
-            : null,
-        movementStart: { ...savedExploration.position },
+        movement: restoresLandedState ? 'landed' : 'airborne',
+        landingPadId: savedLandingPadId,
+        movementStart: restoresLandedState
+          ? { ...savedExploration.position }
+          : null,
       }
     let discoveredRegionIds = [
       ...raceState.persistent.exploration.discoveredRegionIds,
@@ -681,12 +698,6 @@ export function createRenderer(
       savePersistentSettings()
     }
 
-    const landingPads = [
-      ...OPEN_WORLD_REGIONS.filter(
-        ({ id }) => id !== 'festival-hub',
-      ).map((region) => region.landingPad),
-      ...FESTIVAL_HUB_LANDING_PADS,
-    ]
     const syncExplorationPersistence = (save = true): void => {
       raceState = {
         ...raceState,
@@ -756,6 +767,7 @@ export function createRenderer(
     }
 
     const performExplorationInteraction = (): void => {
+      if (explorationPaused || mapOpen) return
       if (isAtChallengeBeacon()) {
         startRaceFromExplore()
         return
@@ -791,6 +803,10 @@ export function createRenderer(
     const clearInputs = (): void => {
       keyboardInput.clear()
       touchInput.clear()
+    }
+    const toggleExplorationMap = (): void => {
+      mapOpen = !mapOpen
+      if (mapOpen) clearInputs()
     }
     const keyboardInput = new KeyboardInput(
       window,
@@ -900,9 +916,7 @@ export function createRenderer(
     pendingRaceHud = raceHud
     explorationHud = createExplorationHud(host, {
       interact: performExplorationInteraction,
-      toggleMap: () => {
-        mapOpen = !mapOpen
-      },
+      toggleMap: toggleExplorationMap,
       selectDestination: (id) => {
         destinationRegionId = id
         mapOpen = false
@@ -1135,16 +1149,19 @@ export function createRenderer(
           explorationPaused = !explorationPaused
           if (explorationPaused) clearInputs()
         }
-        if (actions.toggleMap && !explorationPaused) mapOpen = !mapOpen
+        if (actions.toggleMap && !explorationPaused) toggleExplorationMap()
         if (actions.interact && !explorationPaused) {
           performExplorationInteraction()
         }
       }
 
+      const explorationSimulationActive =
+        gameMode === 'explore' && !explorationPaused && !mapOpen
+
       for (let offset = 0; offset < consumed.steps; offset += 1) {
         const phaseAtStepStart = raceState.phase
 
-        if (gameMode === 'explore' && !explorationPaused) {
+        if (explorationSimulationActive) {
           if (discoveryNoticeRemainingSeconds > 0) {
             discoveryNoticeRemainingSeconds = Math.max(
               0,
@@ -1372,9 +1389,9 @@ export function createRenderer(
           flightState,
           visualSimulationSeconds,
           gameMode === 'explore'
-            ? explorationPaused
-              ? 0
-              : FIXED_STEP_SECONDS
+            ? explorationSimulationActive
+              ? FIXED_STEP_SECONDS
+              : 0
             : phaseAtStepStart === 'paused'
               ? 0
               : FIXED_STEP_SECONDS,
@@ -1395,7 +1412,8 @@ export function createRenderer(
         )
         const wingAudioActive =
           gameMode === 'explore'
-            ? !explorationPaused && explorationState.movement !== 'landed'
+            ? explorationSimulationActive &&
+              explorationState.movement !== 'landed'
             : phaseAtStepStart === 'racing'
         if (sandboxStep.wingDownstrokeStarted && wingAudioActive) {
           gameAudio.playWingFlap()
@@ -1403,13 +1421,13 @@ export function createRenderer(
       }
 
       gameAudio.setBoosting(
-        (gameMode === 'explore' && !explorationPaused && flightState.isBoosting) ||
+        (explorationSimulationActive && flightState.isBoosting) ||
           (gameMode === 'race' &&
             raceState.phase === 'racing' &&
             flightState.isBoosting),
       )
       gameAudio.setAmbientWind(
-        gameMode === 'explore' && !explorationPaused
+        explorationSimulationActive
           ? 0.12 + activeWindStrength * 0.88
           : 0,
       )
@@ -1423,7 +1441,7 @@ export function createRenderer(
       openWorldActivities.update(
         visualSimulationSeconds,
         openWorldSnapshot.loadedRegionIds,
-        gameMode === 'explore' && !explorationPaused,
+        explorationSimulationActive,
       )
       coinCourseVisual.update(
         coinRunState,
@@ -1489,6 +1507,7 @@ export function createRenderer(
           coinRun: coinRunState,
           coinBestTimesMs: raceState.persistent.coinBestTimesMs,
           coinRunIsNewBest,
+          selectedMissionId: raceState.mission.selectedMissionId,
           journey: {
             ...journey,
           publicLandmarkCount: publicFestivalLandmarkCount(),
@@ -1504,9 +1523,9 @@ export function createRenderer(
       host.dataset.gameMode = gameMode
       touchControls.update(
         gameMode === 'explore'
-          ? explorationPaused
-            ? 'paused'
-            : 'racing'
+          ? explorationSimulationActive
+            ? 'racing'
+            : 'paused'
           : raceState.phase,
         gameMode,
       )
@@ -1638,6 +1657,7 @@ export function createRenderer(
               },
               exploration: {
                 movement: explorationState.movement,
+                landingPadId: explorationState.landingPadId,
                 discoveredRegionIds: [...discoveredRegionIds],
                 discoveredLandmarkIds: [...discoveredLandmarkIds],
                 traversedWindZoneIds: [...traversedWindZoneIds],

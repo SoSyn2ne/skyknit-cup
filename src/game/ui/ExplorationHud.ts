@@ -2,6 +2,10 @@ import type { ExplorationMovement } from '../exploration/explorationFlight'
 import type { CoinRunState } from '../collectibles/coinRun'
 import type { CoinBestTimes } from '../persistence/records'
 import {
+  MISSION_CATALOG,
+  type MissionId,
+} from '../missions/missionRules'
+import {
   FESTIVAL_HUB_LANDMARKS,
   FESTIVAL_HUB_WIND_ZONES,
   type FestivalDiscoveryStep,
@@ -32,6 +36,7 @@ export interface ExplorationHudView {
   readonly coinRun: CoinRunState
   readonly coinBestTimesMs: Readonly<CoinBestTimes>
   readonly coinRunIsNewBest: boolean
+  readonly selectedMissionId: MissionId
   readonly journey: FestivalJourneyHudView
   readonly discoveryNotice: string | null
 }
@@ -85,12 +90,16 @@ export function formatFestivalJourneyLine(
 export function formatFestivalMapProgress(
   journey: FestivalJourneyHudView,
   coinBestTimeMs: number | undefined,
+  selectedMissionId: MissionId,
 ): string {
   const coinRecord =
     coinBestTimeMs === undefined
       ? '미기록'
       : formatCoinRunTime(coinBestTimeMs)
-  return `축제 여정 · 랜드마크 ${journey.publicLandmarkCount}/4 · 상승기류 ${journey.windZoneCount}/3 · 비밀 ${journey.secretDiscovered ? '발견' : '미발견'} · 동전 최고 ${coinRecord}`
+  const selectedMission =
+    MISSION_CATALOG.find(({ id }) => id === selectedMissionId) ??
+    MISSION_CATALOG[0]
+  return `축제 여정 · 랜드마크 ${journey.publicLandmarkCount}/4 · 상승기류 ${journey.windZoneCount}/3 · 비밀 ${journey.secretDiscovered ? '발견' : '미발견'} · 동전 최고 ${coinRecord} · 선택 미션 ${selectedMission.name} · 왕관 레이스 아치에서 도전`
 }
 
 export function formatFestivalDiscoveryNotice(
@@ -340,13 +349,14 @@ export function createExplorationHud(
         view.movement,
         view.canLand,
       )
-      context.hidden = label === null || view.paused
+      context.hidden = label === null || view.paused || view.mapOpen
       context.textContent = label ?? ''
       context.setAttribute('aria-label', label ?? '상황 동작')
       map.hidden = !view.mapOpen || view.paused
       festivalProgress.textContent = formatFestivalMapProgress(
         view.journey,
         view.coinBestTimesMs['festival-hub'],
+        view.selectedMissionId,
       )
       mapButton.setAttribute('aria-expanded', String(view.mapOpen))
       for (const [id, regionButton] of regionButtons) {

@@ -81,9 +81,10 @@ describe('exploration HUD formatting', () => {
           secretDiscovered: true,
         },
         65_432,
+        'golden-knot',
       ),
     ).toBe(
-      '축제 여정 · 랜드마크 3/4 · 상승기류 1/3 · 비밀 발견 · 동전 최고 1:05.432',
+      '축제 여정 · 랜드마크 3/4 · 상승기류 1/3 · 비밀 발견 · 동전 최고 1:05.432 · 선택 미션 황금 하늘매듭 · 왕관 레이스 아치에서 도전',
     )
     expect(
       formatFestivalMapProgress(
@@ -97,8 +98,30 @@ describe('exploration HUD formatting', () => {
           secretDiscovered: false,
         },
         undefined,
+        'first-skyknot',
       ),
-    ).toContain('비밀 미발견 · 동전 최고 미기록')
+    ).toContain(
+      '비밀 미발견 · 동전 최고 미기록 · 선택 미션 첫 하늘매듭 · 왕관 레이스 아치에서 도전',
+    )
+  })
+
+  it('adds the selected golden-knot mission and Crown Race Arch guidance to map progress', () => {
+    const progress = formatFestivalMapProgress(
+      {
+        completedSteps: 4,
+        totalSteps: 5,
+        nextObjectiveId: 'race-mission',
+        isComplete: false,
+        publicLandmarkCount: 4,
+        windZoneCount: 3,
+        secretDiscovered: true,
+      },
+      65_432,
+      'golden-knot',
+    )
+
+    expect(progress).toContain('선택 미션 황금 하늘매듭')
+    expect(progress).toContain('왕관 레이스 아치에서 도전')
   })
 
   it.each([

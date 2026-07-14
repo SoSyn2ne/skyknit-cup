@@ -24,6 +24,12 @@ const FESTIVAL_LANDING_PADS = [
   'festival-grotto-pad',
 ] as const
 
+const FESTIVAL_LANDING_PAD_POSITIONS = {
+  'festival-hub-pad': { x: 0, z: -40 },
+  'festival-tower-pad': { x: -24, z: -62 },
+  'festival-grotto-pad': { x: -42, z: -12 },
+} as const
+
 function isJourneyEvidenceProject(projectName: string): boolean {
   return projectName === 'desktop' || projectName === 'touch-minimum'
 }
@@ -164,15 +170,25 @@ test('runs festival discovery, wind, collision, and recovery without changing ra
         const exploration = window.__DRAGON_RACE_TEST__?.snapshot()?.exploration
         return {
           mapOpen: exploration?.mapOpen ?? false,
-          landmarks: exploration?.discoveredLandmarkIds ?? [],
+          discoveredWindLoom:
+            exploration?.discoveredLandmarkIds.includes('wind-loom') ?? false,
         }
       }),
     )
     .toMatchObject({
       mapOpen: true,
-      landmarks: expect.arrayContaining(['wind-loom']),
+      discoveredWindLoom: false,
     })
   await page.getByRole('button', { name: '군도 지도 열기' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.__DRAGON_RACE_TEST__?.snapshot()?.exploration
+            .discoveredLandmarkIds ?? [],
+      ),
+    )
+    .toContain('wind-loom')
 
   await page.evaluate(() => window.__DRAGON_RACE_TEST__?.loseContext())
   await expect(page.getByRole('alert')).toBeVisible()
@@ -342,6 +358,141 @@ test('cycles every Festival Hub landing pad before entering the selected golden-
       selectedMissionId: 'golden-knot',
       status: 'active',
     })
+})
+
+test('restores takeoff at every saved Festival Hub landing pad', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'single persistence contract')
+  test.setTimeout(45_000)
+
+  await page.goto('/?qaCourse=1')
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  const contextAction = page.locator('[data-explore-context]')
+
+  for (const landingPadId of FESTIVAL_LANDING_PADS) {
+    const expected = FESTIVAL_LANDING_PAD_POSITIONS[landingPadId]
+    await page.evaluate(
+      (id) => window.__DRAGON_RACE_TEST__?.qaExploreLandingPad(id),
+      landingPadId,
+    )
+    await contextAction.click()
+    await expect
+      .poll(async () => (await readSnapshot(page))?.exploration.movement)
+      .toBe('landed')
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const raw = localStorage.getItem('skyknit-cup:settings')
+          if (raw === null) return null
+          const document = JSON.parse(raw) as {
+            exploration?: {
+              movement?: string
+              position?: { x?: number; z?: number }
+            }
+          }
+          return {
+            movement: document.exploration?.movement,
+            x: document.exploration?.position?.x,
+            z: document.exploration?.position?.z,
+          }
+        }),
+      )
+      .toEqual({ movement: 'landed', x: expected.x, z: expected.z })
+
+    await page.reload()
+    await page.getByRole('button', { name: '하늘 탐험' }).click()
+    await expect
+      .poll(async () => (await readSnapshot(page))?.exploration.movement)
+      .toBe('landed')
+    expect((await readSnapshot(page))?.exploration.landingPadId).toBe(
+      landingPadId,
+    )
+    await contextAction.click()
+    await expect
+      .poll(async () => (await readSnapshot(page))?.exploration.movement, {
+        timeout: 500,
+      })
+      .toBe('taking-off')
+    const position = (await readSnapshot(page))?.flight.position
+    expect(
+      Math.hypot(
+        (position?.x ?? Number.POSITIVE_INFINITY) - expected.x,
+        (position?.z ?? Number.POSITIVE_INFINITY) - expected.z,
+      ),
+    ).toBeLessThan(0.1)
+    await expect
+      .poll(async () => (await readSnapshot(page))?.exploration.movement)
+      .toBe('airborne')
+  }
+})
+
+test('freezes flight and discovery progress while the Festival map is open', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'single simulation contract')
+
+  await page.goto('/?qaCourse=1')
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await page.getByRole('button', { name: '군도 지도 열기' }).click()
+  await page.evaluate(() =>
+    window.__DRAGON_RACE_TEST__?.qaExploreLandmark('sunweave-spire'),
+  )
+  const before = await readSnapshot(page)
+
+  await page.keyboard.down('ArrowUp')
+  await page.waitForTimeout(350)
+  await page.keyboard.up('ArrowUp')
+  const after = await readSnapshot(page)
+
+  expect(after?.exploration.mapOpen).toBe(true)
+  expect(after?.flight.position).toEqual(before?.flight.position)
+  expect(after?.exploration.collision).toEqual(before?.exploration.collision)
+  expect(after?.exploration.discoveredRegionIds).toEqual(
+    before?.exploration.discoveredRegionIds,
+  )
+  expect(after?.exploration.discoveredLandmarkIds).not.toContain(
+    'sunweave-spire',
+  )
+  expect(after?.exploration.traversedWindZoneIds).not.toContain(
+    'spire-spiral',
+  )
+})
+
+test('blocks landing controls beneath the open Festival map', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'single interaction contract')
+
+  await page.goto('/?qaCourse=1')
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await page.evaluate(() =>
+    window.__DRAGON_RACE_TEST__?.qaExploreLandingPad('festival-tower-pad'),
+  )
+  const contextAction = page.locator('[data-explore-context]')
+  await expect(contextAction).toHaveText('착륙')
+  await page.getByRole('button', { name: '군도 지도 열기' }).click()
+  await expect(contextAction).toBeHidden()
+
+  await page.keyboard.press('KeyE')
+  await page.waitForTimeout(150)
+  expect((await readSnapshot(page))?.exploration.movement).toBe('airborne')
+})
+
+test('shows the selected race mission guidance inside the Festival map', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'single map guidance contract')
+
+  await page.goto('/?qaCourse=1')
+  await page
+    .locator('[data-mission-select="true"]')
+    .selectOption('golden-knot')
+  await page.getByRole('button', { name: '하늘 탐험' }).click()
+  await page.getByRole('button', { name: '군도 지도 열기' }).click()
+  await expect(page.locator('[data-explore-festival-progress]')).toContainText(
+    '선택 미션 황금 하늘매듭 · 왕관 레이스 아치에서 도전',
+  )
 })
 
 test('preserves the completed Festival Hub journey across reload and WebGL recovery', async ({
