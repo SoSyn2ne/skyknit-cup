@@ -13,6 +13,35 @@ async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
   })
 }
 
+test('keeps BGM inactive when context recovery happens before first flight', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await page.goto('/')
+  await expect.poll(async () => (await readSnapshot(page))?.audio).toMatchObject({
+    musicActive: false,
+    bgmCreated: false,
+    bgmPlaying: false,
+  })
+
+  await page.evaluate(() => window.__DRAGON_RACE_TEST__?.loseContext())
+  await expect(page.locator('#app')).toHaveAttribute(
+    'data-state',
+    'renderer-error',
+  )
+  await page.getByRole('button', { name: '다시 시도' }).click()
+
+  await expect(page.locator('#app')).toHaveAttribute(
+    'data-state',
+    'renderer-ready',
+  )
+  await expect.poll(async () => (await readSnapshot(page))?.audio).toMatchObject({
+    musicActive: false,
+    bgmCreated: false,
+    bgmPlaying: false,
+  })
+})
+
 test('recovers from WebGL context loss without resetting progress', async ({
   page,
 }, testInfo) => {

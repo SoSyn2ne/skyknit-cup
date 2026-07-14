@@ -40,6 +40,7 @@ import {
   type ExplorationFlightState,
 } from './exploration/explorationFlight'
 import {
+  isFlightStartCode,
   KeyboardInput,
   type KeyboardStateSnapshot,
 } from './input/KeyboardInput'
@@ -202,6 +203,7 @@ export interface RendererRecoveryState {
   readonly mapOpen: boolean
   readonly coinRunState: CoinRunState
   readonly coinRunIsNewBest: boolean
+  readonly musicActive: boolean
   readonly musicPlaybackPositionSeconds: number
 }
 
@@ -434,8 +436,8 @@ export function createRenderer(
     if (gameMode === 'explore') {
       flightState = explorationState.flight
     }
-    gameAudio.setMusicActive(recovery !== undefined)
-    if (recovery !== undefined) {
+    gameAudio.setMusicActive(recovery?.musicActive ?? false)
+    if (recovery?.musicActive === true) {
       void gameAudio.unlock()
     }
     let outOfBoundsTracker: OutOfBoundsTracker = {
@@ -670,8 +672,18 @@ export function createRenderer(
     const inputController = new InputController(
       touchCapable ? 'touch' : 'keyboard',
     )
-    const touchInput = new TouchInput(() => {
+    const unlockAudioFromFlightGesture = (startsFlight: boolean): void => {
+      if (
+        startsFlight &&
+        gameMode === 'race' &&
+        raceState.phase === 'ready'
+      ) {
+        gameAudio.setMusicActive(true)
+      }
       void gameAudio.unlock()
+    }
+    const touchInput = new TouchInput(() => {
+      unlockAudioFromFlightGesture(true)
       inputController.activate('touch')
     })
     pendingTouchInput = touchInput
@@ -693,8 +705,8 @@ export function createRenderer(
           raceState = transitionRace(raceState, { type: 'PAUSE' })
         }
       },
-      () => {
-        void gameAudio.unlock()
+      (code) => {
+        unlockAudioFromFlightGesture(isFlightStartCode(code))
         inputController.activate('keyboard')
       },
     )
@@ -939,6 +951,7 @@ export function createRenderer(
     const handleContextLost = (event: Event): void => {
       event.preventDefault()
       renderer.setAnimationLoop(null)
+      const musicActive = gameAudio.debugSnapshot().musicActive
       gameAudio.setMusicActive(false)
       if (gameMode === 'explore') syncExplorationPersistence(false)
       onContextLost({
@@ -967,6 +980,7 @@ export function createRenderer(
         mapOpen,
         coinRunState: { ...coinRunState },
         coinRunIsNewBest,
+        musicActive,
         musicPlaybackPositionSeconds: gameAudio.getMusicPositionSeconds(),
       })
     }

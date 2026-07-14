@@ -50,6 +50,10 @@ export function isInteractiveKeyboardTarget(
   )
 }
 
+export function isFlightStartCode(code: string): boolean {
+  return SUPPORTED_CODES.has(code)
+}
+
 function axis(positive: boolean, negative: boolean): number {
   return Number(positive) - Number(negative)
 }
@@ -117,7 +121,7 @@ export class KeyboardState {
       return true
     }
 
-    if (!SUPPORTED_CODES.has(code)) {
+    if (!isFlightStartCode(code)) {
       return false
     }
 
@@ -132,7 +136,7 @@ export class KeyboardState {
       return true
     }
 
-    if (!SUPPORTED_CODES.has(code)) {
+    if (!isFlightStartCode(code)) {
       return false
     }
 

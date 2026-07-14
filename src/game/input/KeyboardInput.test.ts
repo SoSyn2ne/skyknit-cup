@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isFlightStartCode,
   isInteractiveKeyboardTarget,
   KeyboardInput,
   KeyboardState,
@@ -13,6 +14,13 @@ function createKeyboardEvent(type: 'keydown' | 'keyup', code: string): Event {
 }
 
 describe('keyboard flight input state', () => {
+  it('distinguishes flight-start controls from menu action keys', () => {
+    expect(isFlightStartCode('ArrowUp')).toBe(true)
+    expect(isFlightStartCode('Space')).toBe(true)
+    expect(isFlightStartCode('Enter')).toBe(false)
+    expect(isFlightStartCode('Escape')).toBe(false)
+  })
+
   it('leaves form controls to native keyboard interaction', () => {
     const formTarget = {
       closest: (selector: string) =>
