@@ -18,6 +18,11 @@ export interface ExplorationLandingPad {
   readonly radius: number
 }
 
+export interface ExplorationStepEnvironment {
+  readonly windVelocity?: Vec3Value
+  readonly speedMultiplier?: number
+}
+
 export type ExplorationMovement =
   | 'airborne'
   | 'landing'
@@ -249,6 +254,7 @@ export function stepExplorationFlight(
   input: ExplorationInput,
   dt: number,
   pads: readonly ExplorationLandingPad[],
+  environment: ExplorationStepEnvironment = {},
 ): ExplorationFlightState {
   if (!Number.isFinite(dt) || dt <= 0) {
     return state
@@ -264,6 +270,9 @@ export function stepExplorationFlight(
   }
 
   const brake = input.brake === true
+  const speedMultiplier = Number.isFinite(environment.speedMultiplier)
+    ? Math.min(1, Math.max(0, environment.speedMultiplier ?? 1))
+    : 1
   const stepped = stepFlight(
     state.flight,
     {
@@ -272,12 +281,14 @@ export function stepExplorationFlight(
       boost: !brake && input.boost,
     },
     dt,
+    speedMultiplier,
   )
-  const targetSpeed = brake
+  const unscaledTargetSpeed = brake
     ? 0
     : stepped.isBoosting
       ? EXPLORATION_TUNING.boostSpeed
       : EXPLORATION_TUNING.cruiseSpeed
+  const targetSpeed = unscaledTargetSpeed * speedMultiplier
   const speedRate = brake
     ? EXPLORATION_TUNING.brakePerSecond
     : stepped.isBoosting
@@ -289,12 +300,22 @@ export function stepExplorationFlight(
   )
   const forward = getForwardVector(stepped)
   const distance = speed * dt
+  const windVelocity = environment.windVelocity ?? { x: 0, y: 0, z: 0 }
   const flight: FlightState = {
     ...stepped,
     position: {
-      x: state.flight.position.x + forward.x * distance,
-      y: state.flight.position.y + forward.y * distance,
-      z: state.flight.position.z + forward.z * distance,
+      x:
+        state.flight.position.x +
+        forward.x * distance +
+        windVelocity.x * dt,
+      y:
+        state.flight.position.y +
+        forward.y * distance +
+        windVelocity.y * dt,
+      z:
+        state.flight.position.z +
+        forward.z * distance +
+        windVelocity.z * dt,
     },
     distanceTravelled: state.flight.distanceTravelled + distance,
     speed,

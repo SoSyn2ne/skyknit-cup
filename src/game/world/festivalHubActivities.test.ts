@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { COIN_PICKUP_RADIUS, getCoinCourse } from '../collectibles/coinCourses'
+import { findSweptSphereCollision } from '../collision/obstacleCollision'
+import { EXPLORATION_TUNING } from '../exploration/explorationFlight'
 import {
+  FESTIVAL_HUB_CHALLENGE_BEACON,
   FESTIVAL_HUB_COLLIDERS,
   FESTIVAL_HUB_LANDMARKS,
   FESTIVAL_HUB_LANDING_PADS,
@@ -82,6 +85,48 @@ describe('festival hub activity contract', () => {
       }
     }
   })
+
+  it('keeps every authored coin route segment flyable', () => {
+    const coins = getCoinCourse('festival-hub').coins
+    for (let index = 1; index < coins.length; index += 1) {
+      expect(
+        findSweptSphereCollision(
+          coins[index - 1].position,
+          coins[index].position,
+          COIN_PICKUP_RADIUS,
+          FESTIVAL_HUB_COLLIDERS,
+        ),
+      ).toBeNull()
+    }
+  })
+
+  it('keeps vertical landing approaches and the challenge beacon clear', () => {
+    for (const pad of FESTIVAL_HUB_LANDING_PADS) {
+      expect(
+        findSweptSphereCollision(
+          {
+            ...pad.position,
+            y: pad.position.y + EXPLORATION_TUNING.landingHeightWindow,
+          },
+          {
+            ...pad.position,
+            y: pad.position.y + EXPLORATION_TUNING.landedHeight,
+          },
+          1.2,
+          FESTIVAL_HUB_COLLIDERS,
+        ),
+      ).toBeNull()
+    }
+
+    expect(
+      findSweptSphereCollision(
+        FESTIVAL_HUB_CHALLENGE_BEACON.position,
+        FESTIVAL_HUB_CHALLENGE_BEACON.position,
+        1.2,
+        FESTIVAL_HUB_COLLIDERS,
+      ),
+    ).toBeNull()
+  })
 })
 
 describe('festival discovery and wind', () => {
@@ -122,6 +167,22 @@ describe('festival discovery and wind', () => {
     expect(second.progress.discoveredLandmarkIds).toEqual(
       first.progress.discoveredLandmarkIds,
     )
+
+    const zone = FESTIVAL_HUB_WIND_ZONES[0]
+    const windFirst = stepFestivalDiscovery(
+      first.progress,
+      { x: zone.center.x - zone.radius - 20, y: zone.center.y, z: zone.center.z },
+      { x: zone.center.x + zone.radius + 20, y: zone.center.y, z: zone.center.z },
+    )
+    const windSecond = stepFestivalDiscovery(
+      windFirst.progress,
+      zone.center,
+      zone.center,
+    )
+
+    expect(windFirst.newWindZoneIds).toEqual([zone.id])
+    expect(windSecond.newWindZoneIds).toEqual([])
+    expect(windSecond.progress.traversedWindZoneIds).toEqual([zone.id])
   })
 
   it('returns no wind outside every authored zone', () => {

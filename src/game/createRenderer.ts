@@ -39,6 +39,7 @@ import {
   stepExplorationFlight,
   type ExplorationFlightState,
 } from './exploration/explorationFlight'
+import { resolveExplorationObstacleCollision } from './exploration/explorationCollision'
 import {
   isFlightStartCode,
   KeyboardInput,
@@ -117,6 +118,17 @@ import {
   getRegionById,
   type OpenWorldRegionId,
 } from './world/openWorldRegions'
+import {
+  FESTIVAL_HUB_CHALLENGE_BEACON,
+  FESTIVAL_HUB_COLLIDERS,
+  FESTIVAL_HUB_LANDMARKS,
+  FESTIVAL_HUB_LANDING_PADS,
+  FESTIVAL_HUB_WIND_ZONES,
+  sampleFestivalWind,
+  stepFestivalDiscovery,
+  type FestivalHubLandmarkId,
+  type FestivalHubWindZoneId,
+} from './world/festivalHubActivities'
 
 export interface FlightDebugSnapshot {
   readonly gameMode: 'race' | 'explore'
@@ -169,6 +181,9 @@ export interface FlightDebugSnapshot {
   readonly exploration: {
     readonly movement: ExplorationFlightState['movement']
     readonly discoveredRegionIds: readonly OpenWorldRegionId[]
+    readonly discoveredLandmarkIds: RaceState['persistent']['exploration']['discoveredLandmarkIds']
+    readonly traversedWindZoneIds: RaceState['persistent']['exploration']['traversedWindZoneIds']
+    readonly activeWindZoneIds: RaceState['persistent']['exploration']['traversedWindZoneIds']
     readonly destinationRegionId: OpenWorldRegionId | null
     readonly loadedRegionIds: readonly OpenWorldRegionId[]
     readonly regionAssets: readonly OpenWorldRegionAssetSnapshot[]
@@ -178,6 +193,9 @@ export interface FlightDebugSnapshot {
     readonly coinRun: CoinRunState
     readonly coinBestTimesMs: RaceState['persistent']['coinBestTimesMs']
     readonly coinVisual: CoinCourseVisualSnapshot
+    readonly collision: CollisionState & {
+      readonly lastObstacleId: string | null
+    }
   }
 }
 
@@ -187,6 +205,9 @@ export interface RendererSession {
   qaPassCheckpoint?: () => void
   qaExploreRegion?: (regionId: OpenWorldRegionId) => void
   qaExploreChallenge?: () => void
+  qaExploreLandmark?: (landmarkId: FestivalHubLandmarkId) => void
+  qaExploreWindZone?: (windZoneId: FestivalHubWindZoneId) => void
+  qaExploreCollision?: () => void
   qaCollectCoin?: (regionId: OpenWorldRegionId, index: number) => void
   debugSnapshot?: () => FlightDebugSnapshot
   dispose: () => void
@@ -452,10 +473,20 @@ export function createRenderer(
     let respawnImmunitySeconds = 0
     let collisionState = createCollisionState()
     let lastObstacleId: string | null = null
+    let explorationCollisionState = createCollisionState()
+    let lastExplorationObstacleId: string | null = null
+    let activeWindZoneIds: RaceState['persistent']['exploration']['traversedWindZoneIds'] =
+      []
     let qaBoostRemainingSeconds = 0
     let qaCollisionFeedbackRemainingSeconds = 0
     let visualSimulationSeconds = recovery?.visualSimulationSeconds ?? 0
     let explorationSaveRemainingSeconds = 2
+
+    const resetExplorationEnvironment = (): void => {
+      explorationCollisionState = createCollisionState()
+      lastExplorationObstacleId = null
+      activeWindZoneIds = []
+    }
 
     const resetFlight = (): void => {
       flightState = createInitialFlightState({
@@ -608,7 +639,12 @@ export function createRenderer(
       savePersistentSettings()
     }
 
-    const landingPads = OPEN_WORLD_REGIONS.map((region) => region.landingPad)
+    const landingPads = [
+      ...OPEN_WORLD_REGIONS.filter(
+        ({ id }) => id !== 'festival-hub',
+      ).map((region) => region.landingPad),
+      ...FESTIVAL_HUB_LANDING_PADS,
+    ]
     const syncExplorationPersistence = (save = true): void => {
       raceState = {
         ...raceState,
@@ -632,17 +668,19 @@ export function createRenderer(
     }
 
     const isAtChallengeBeacon = (): boolean => {
-      const hub = getRegionById('festival-hub')
       return (
         Math.hypot(
-          explorationState.flight.position.x - (hub.center.x + 34),
-          explorationState.flight.position.z - (hub.center.z - 10),
-        ) <= 14
+          explorationState.flight.position.x -
+            FESTIVAL_HUB_CHALLENGE_BEACON.position.x,
+          explorationState.flight.position.z -
+            FESTIVAL_HUB_CHALLENGE_BEACON.position.z,
+        ) <= FESTIVAL_HUB_CHALLENGE_BEACON.radius
       )
     }
 
     const startRaceFromExplore = (): void => {
       syncExplorationPersistence()
+      resetExplorationEnvironment()
       gameMode = 'race'
       gameAudio.setMusicActive(true)
       coinRunState = createCoinRunState()
@@ -756,6 +794,7 @@ export function createRenderer(
       startExplore: () => {
         gameAudio.setMusicActive(true)
         void gameAudio.unlock()
+        resetExplorationEnvironment()
         gameMode = 'explore'
         explorationPaused = false
         mapOpen = false
@@ -822,6 +861,7 @@ export function createRenderer(
       setMusicVolume,
       returnToMissions: () => {
         syncExplorationPersistence()
+        resetExplorationEnvironment()
         gameMode = 'race'
         gameAudio.setMusicActive(true)
         coinRunState = createCoinRunState()
@@ -1056,12 +1096,44 @@ export function createRenderer(
           const previousExplorationPosition =
             explorationState.flight.position
           const movementBeforeStep = explorationState.movement
+          explorationCollisionState = stepCollisionState(
+            explorationCollisionState,
+            FIXED_STEP_SECONDS,
+          )
+          const windBeforeStep = sampleFestivalWind(
+            previousExplorationPosition,
+          )
           explorationState = stepExplorationFlight(
             explorationState,
             input,
             FIXED_STEP_SECONDS,
             landingPads,
+            {
+              windVelocity: windBeforeStep.velocity,
+              speedMultiplier: explorationCollisionState.speedMultiplier,
+            },
           )
+          const collision = resolveExplorationObstacleCollision(
+            explorationState,
+            previousExplorationPosition,
+            1.2,
+            FESTIVAL_HUB_COLLIDERS,
+          )
+          explorationState = collision.state
+          if (collision.obstacleId !== null) {
+            const application = applyObstacleCollision(
+              explorationCollisionState,
+              0,
+            )
+            explorationCollisionState = application.state
+            if (application.triggered) {
+              lastExplorationObstacleId = collision.obstacleId
+            }
+          }
+          activeWindZoneIds = [
+            ...sampleFestivalWind(explorationState.flight.position)
+              .activeZoneIds,
+          ]
           flightState = explorationState.flight
           if (
             !mapOpen &&
@@ -1076,6 +1148,19 @@ export function createRenderer(
                 FIXED_STEP_SECONDS * 1_000,
               ),
             )
+            const discovery = stepFestivalDiscovery(
+              { discoveredLandmarkIds, traversedWindZoneIds },
+              previousExplorationPosition,
+              explorationState.flight.position,
+            )
+            if (
+              discovery.newLandmarkIds.length > 0 ||
+              discovery.newWindZoneIds.length > 0
+            ) {
+              discoveredLandmarkIds.push(...discovery.newLandmarkIds)
+              traversedWindZoneIds.push(...discovery.newWindZoneIds)
+              syncExplorationPersistence()
+            }
           }
           const nextDiscovered = getDiscoveredRegionIds(
             explorationState.flight.position,
@@ -1212,7 +1297,9 @@ export function createRenderer(
               : FIXED_STEP_SECONDS,
           gameMode === 'explore' ? -1 : raceState.run.nextCheckpointIndex,
           Math.max(
-            collisionState.feedbackRemainingSeconds,
+            gameMode === 'explore'
+              ? explorationCollisionState.feedbackRemainingSeconds
+              : collisionState.feedbackRemainingSeconds,
             qaCollisionFeedbackRemainingSeconds,
           ),
           gameMode === 'explore'
@@ -1323,6 +1410,41 @@ export function createRenderer(
       renderer.render(scene, camera)
     })
 
+    const placeQaExploration = (
+      position: FlightState['position'],
+      headingRadians = 0,
+      speed = 0,
+    ): void => {
+      gameMode = 'explore'
+      gameAudio.setMusicActive(true)
+      explorationPaused = false
+      mapOpen = false
+      coinRunState = createCoinRunState()
+      coinRunIsNewBest = false
+      resetExplorationEnvironment()
+      explorationState = createExplorationFlightState({
+        position: { ...position },
+        headingRadians,
+        speed,
+      })
+      flightState = explorationState.flight
+      discoveredRegionIds = [
+        ...getDiscoveredRegionIds(
+          explorationState.flight.position,
+          discoveredRegionIds,
+        ),
+      ]
+      pendingRaceHud?.element.setAttribute('hidden', '')
+      if (pendingExplorationHud !== null) {
+        pendingExplorationHud.element.hidden = false
+      }
+      sandbox.resetCamera()
+      openWorld.update(
+        explorationState.flight.position,
+        visualSimulationSeconds,
+      )
+    }
+
     const developmentSession = import.meta.env.DEV
       ? {
           loseContext: (): void => {
@@ -1412,6 +1534,9 @@ export function createRenderer(
               exploration: {
                 movement: explorationState.movement,
                 discoveredRegionIds: [...discoveredRegionIds],
+                discoveredLandmarkIds: [...discoveredLandmarkIds],
+                traversedWindZoneIds: [...traversedWindZoneIds],
+                activeWindZoneIds: [...activeWindZoneIds],
                 destinationRegionId,
                 loadedRegionIds: openWorldSnapshot.loadedRegionIds,
                 regionAssets: openWorldSnapshot.regionAssets,
@@ -1423,6 +1548,10 @@ export function createRenderer(
                   ...raceState.persistent.coinBestTimesMs,
                 },
                 coinVisual: coinCourseVisual.debugSnapshot(),
+                collision: {
+                  ...explorationCollisionState,
+                  lastObstacleId: lastExplorationObstacleId,
+                },
               },
             }
           },
@@ -1434,6 +1563,7 @@ export function createRenderer(
             mapOpen = false
             coinRunState = createCoinRunState()
             coinRunIsNewBest = false
+            resetExplorationEnvironment()
             explorationState = createExplorationFlightState({
               position: {
                 x: region.landingPad.position.x,
@@ -1462,29 +1592,41 @@ export function createRenderer(
             syncExplorationPersistence()
           },
           qaExploreChallenge: (): void => {
-            const hub = getRegionById('festival-hub')
-            gameMode = 'explore'
-            gameAudio.setMusicActive(true)
-            explorationPaused = false
-            coinRunState = createCoinRunState()
-            coinRunIsNewBest = false
-            explorationState = createExplorationFlightState({
-              position: {
-                x: hub.center.x + 34,
-                y: hub.center.y + 12,
-                z: hub.center.z - 10,
-              },
-              headingRadians: 0,
-              speed: 0,
-            })
-            flightState = explorationState.flight
-            pendingRaceHud?.element.setAttribute('hidden', '')
-            if (pendingExplorationHud !== null) {
-              pendingExplorationHud.element.hidden = false
+            placeQaExploration(FESTIVAL_HUB_CHALLENGE_BEACON.position)
+          },
+          qaExploreLandmark: (
+            landmarkId: FestivalHubLandmarkId,
+          ): void => {
+            const landmark = FESTIVAL_HUB_LANDMARKS.find(
+              ({ id }) => id === landmarkId,
+            )
+            if (landmark !== undefined) {
+              placeQaExploration(landmark.position)
             }
-            openWorld.update(
-              explorationState.flight.position,
-              visualSimulationSeconds,
+          },
+          qaExploreWindZone: (
+            windZoneId: FestivalHubWindZoneId,
+          ): void => {
+            const windZone = FESTIVAL_HUB_WIND_ZONES.find(
+              ({ id }) => id === windZoneId,
+            )
+            if (windZone !== undefined) {
+              placeQaExploration(windZone.center)
+            }
+          },
+          qaExploreCollision: (): void => {
+            const obstacle = FESTIVAL_HUB_COLLIDERS.find(
+              ({ id }) => id === 'festival-tower-lower',
+            )
+            if (obstacle === undefined) return
+            placeQaExploration(
+              {
+                x: obstacle.center.x - obstacle.radius - 9,
+                y: obstacle.center.y,
+                z: obstacle.center.z,
+              },
+              Math.PI / 2,
+              30,
             )
           },
           qaCollectCoin: (
@@ -1498,6 +1640,7 @@ export function createRenderer(
             gameAudio.setMusicActive(true)
             explorationPaused = false
             mapOpen = false
+            resetExplorationEnvironment()
             if (index === 0) {
               coinRunState = createCoinRunState()
               coinRunIsNewBest = false

@@ -63,6 +63,71 @@ describe('exploration flight', () => {
     )
   })
 
+  it('adds authored wind velocity only while freely airborne', () => {
+    const initial = createExplorationFlightState({
+      position: { x: 0, y: 18, z: 0 },
+      speed: 18,
+    })
+    const input = { pitch: 0, yaw: 0, boost: false, brake: false }
+    const calm = stepExplorationFlight(initial, input, 0.5, [PAD])
+    const windy = stepExplorationFlight(initial, input, 0.5, [PAD], {
+      windVelocity: { x: 6, y: 4, z: -2 },
+    })
+
+    expect(windy.flight.position.x - calm.flight.position.x).toBeCloseTo(3)
+    expect(windy.flight.position.y - calm.flight.position.y).toBeCloseTo(2)
+    expect(windy.flight.position.z - calm.flight.position.z).toBeCloseTo(-1)
+    expect(windy.flight.distanceTravelled).toBe(calm.flight.distanceTravelled)
+  })
+
+  it.each(['landing', 'landed', 'taking-off'] as const)(
+    'does not let wind displace the dragon while %s',
+    (movement) => {
+      const base = createExplorationFlightState({
+        position: { x: 0, y: 10, z: -20 },
+        speed: 3,
+      })
+      const state = {
+        ...base,
+        movement,
+        landingPadId: PAD.id,
+        movementStart: { ...base.flight.position },
+      }
+      const calm = stepExplorationFlight(
+        state,
+        { pitch: 0, yaw: 0, boost: false, brake: false },
+        0.2,
+        [PAD],
+      )
+      const windy = stepExplorationFlight(
+        state,
+        { pitch: 0, yaw: 0, boost: false, brake: false },
+        0.2,
+        [PAD],
+        { windVelocity: { x: 100, y: 100, z: 100 } },
+      )
+
+      expect(windy).toEqual(calm)
+    },
+  )
+
+  it('applies collision recovery as an optional speed multiplier', () => {
+    const initial = createExplorationFlightState({
+      position: { x: 0, y: 18, z: 0 },
+      speed: 18,
+    })
+    const input = { pitch: 0, yaw: 0, boost: false, brake: false }
+    const calm = stepExplorationFlight(initial, input, 0.5, [PAD])
+    const slowed = stepExplorationFlight(initial, input, 0.5, [PAD], {
+      speedMultiplier: 0.45,
+    })
+
+    expect(slowed.flight.speed).toBeLessThan(calm.flight.speed)
+    expect(slowed.flight.distanceTravelled).toBeLessThan(
+      calm.flight.distanceTravelled,
+    )
+  })
+
   it('rejects landing outside the pad radius or altitude window', () => {
     const far = createExplorationFlightState({
       position: { x: 50, y: 10, z: -20 },

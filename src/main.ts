@@ -128,6 +128,11 @@ function startApplication(recovery?: RendererRecoveryState): void {
         qaExploreRegion: (regionId) =>
           rendererSession?.qaExploreRegion?.(regionId),
         qaExploreChallenge: () => rendererSession?.qaExploreChallenge?.(),
+        qaExploreLandmark: (landmarkId) =>
+          rendererSession?.qaExploreLandmark?.(landmarkId),
+        qaExploreWindZone: (windZoneId) =>
+          rendererSession?.qaExploreWindZone?.(windZoneId),
+        qaExploreCollision: () => rendererSession?.qaExploreCollision?.(),
         qaCollectCoin: (regionId, index) =>
           rendererSession?.qaCollectCoin?.(regionId, index),
         snapshot: () => rendererSession?.debugSnapshot?.() ?? null,
