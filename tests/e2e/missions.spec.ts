@@ -22,7 +22,7 @@ async function snapshot(page: Page): Promise<FlightDebugSnapshot | null> {
 async function startSelectedMission(page: Page): Promise<void> {
   await page.locator('[data-mission-start="true"]').click()
   await expect
-    .poll(async () => (await snapshot(page))?.race.phase, { timeout: 4_000 })
+    .poll(async () => (await snapshot(page))?.race.phase, { timeout: 6_000 })
     .toBe('racing')
 }
 

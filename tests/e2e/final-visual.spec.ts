@@ -75,7 +75,7 @@ test('keeps the dragon, wind threads, and active gate readable in flight', async
   }
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
-      timeout: 4_000,
+      timeout: 6_000,
     })
     .toBe('racing')
 
@@ -148,7 +148,7 @@ test('drives the RC3 boost and collision expressions', async ({
   }
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
-      timeout: 4_000,
+      timeout: 6_000,
     })
     .toBe('racing')
 

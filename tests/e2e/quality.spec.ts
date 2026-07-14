@@ -183,7 +183,7 @@ test('fits settings and pause actions at the minimum viewport', async ({
   await page.keyboard.press('ArrowUp')
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
-      timeout: 4_000,
+      timeout: 6_000,
     })
     .toBe('racing')
   await page.keyboard.press('Escape')

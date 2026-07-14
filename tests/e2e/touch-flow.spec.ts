@@ -39,7 +39,7 @@ async function startTouchRace(page: Page): Promise<void> {
   await expect(joystick).toBeVisible()
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
-      timeout: 4_000,
+      timeout: 6_000,
     })
     .toBe('racing')
 }

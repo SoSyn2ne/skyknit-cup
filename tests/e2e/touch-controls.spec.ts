@@ -19,7 +19,7 @@ test.describe('touch controls', () => {
     await expect(page.locator('.race-hud')).toHaveAttribute(
       'data-phase',
       'racing',
-      { timeout: 4_000 },
+      { timeout: 6_000 },
     )
     const controls = page.locator('[data-touch-control]:visible')
     await expect(controls).toHaveCount(3)

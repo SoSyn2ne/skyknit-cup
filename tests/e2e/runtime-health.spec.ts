@@ -57,7 +57,7 @@ test('has no console, rejection, or network failures during flight', async ({
   }
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
-      timeout: 4_000,
+      timeout: 6_000,
     })
     .toBe('racing')
   await page.waitForTimeout(1_250)

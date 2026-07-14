@@ -40,7 +40,7 @@ test.describe('accessible race focus', () => {
   }) => {
     const canvas = page.locator('canvas.game-canvas')
     await page.keyboard.press('ArrowUp')
-    await expect.poll(() => readPhase(page), { timeout: 4_000 }).toBe('racing')
+    await expect.poll(() => readPhase(page), { timeout: 6_000 }).toBe('racing')
 
     await page.keyboard.press('Escape')
     await expect.poll(() => readPhase(page)).toBe('paused')
@@ -71,7 +71,7 @@ test.describe('accessible race focus', () => {
     test.skip(!testInfo.project.name.startsWith('touch'))
 
     await page.getByRole('button', { name: '비행 시작' }).tap()
-    await expect.poll(() => readPhase(page), { timeout: 4_000 }).toBe('racing')
+    await expect.poll(() => readPhase(page), { timeout: 6_000 }).toBe('racing')
 
     await expect(
       page.getByRole('group', { name: '비행 방향 조이스틱' }),

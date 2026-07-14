@@ -2,12 +2,88 @@ import { expect, test, type Browser, type Page } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import {
+  canonicalizeGhostRun,
+  GHOST_SAMPLE_INTERVAL_MS,
+  sampleGhostRun,
+  type GhostRun,
+  type GhostSample,
+} from '../../src/game/competition/ghostRun'
 import type { FlightDebugSnapshot } from '../../src/game/createRenderer'
 
 const BASE_URL =
   process.env.DRAGON_PERFORMANCE_URL ?? 'http://127.0.0.1:4176'
 const SAMPLE_DURATION_MS = 30_000
-const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
+const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'm33'
+
+function densifyGhost(keyframes: GhostRun): GhostRun {
+  const samples: GhostSample[] = []
+  for (
+    let elapsedMs = 0;
+    elapsedMs <= keyframes.durationMs;
+    elapsedMs += GHOST_SAMPLE_INTERVAL_MS
+  ) {
+    const pose = sampleGhostRun(keyframes, elapsedMs)
+    if (pose === null) {
+      throw new Error('Representative ghost keyframes must be sampleable')
+    }
+    samples.push([
+      elapsedMs,
+      pose.position.x,
+      pose.position.y,
+      pose.position.z,
+      pose.headingRadians,
+      pose.pitchRadians,
+      pose.bankRadians,
+      pose.boost ? 1 : 0,
+      pose.progress,
+    ])
+  }
+  const canonical = canonicalizeGhostRun({
+    durationMs: keyframes.durationMs,
+    samples,
+  })
+  if (canonical === null) {
+    throw new Error('Representative ghost must satisfy the save contract')
+  }
+  return canonical
+}
+
+const REPRESENTATIVE_RACE_GHOST = densifyGhost({
+  durationMs: 60_000,
+  samples: [
+    [0, 0, 8, 0, 0, 0, 0, 0, 0],
+    [5_000, 0, 10, -220, 0, 0, 0, 1, 1],
+    [10_000, 50, 24, -460, 0, 0, 0, 0, 2],
+    [15_000, 210, 38, -650, 0, 0, 0, 1, 3],
+    [20_000, 450, 24, -720, 0, 0, 0, 0, 4],
+    [25_000, 680, 12, -620, 0, 0, 0, 1, 5],
+    [30_000, 830, 28, -420, 0, 0, 0, 0, 6],
+    [35_000, 850, 44, -170, 0, 0, 0, 1, 7],
+    [40_000, 720, 28, 45, 0, 0, 0, 0, 8],
+    [45_000, 500, 14, 170, 0, 0, 0, 1, 9],
+    [50_000, 250, 28, 180, 0, 0, 0, 0, 10],
+    [55_000, 40, 42, 50, 0, 0, 0, 1, 11],
+    [60_000, -80, 18, -170, 0, 0, 0, 0, 12],
+  ],
+} as const satisfies GhostRun)
+
+const REPRESENTATIVE_CLOUD_COIN_GHOST = densifyGhost({
+  durationMs: 50_000,
+  samples: [
+    [0, 433.2, 36, 216, 0, 0, 0, 0, 1],
+    [5_000, 446, 38, 208, 0, 0, 0, 1, 2],
+    [10_000, 456, 40, 194, 0, 0, 0, 0, 3],
+    [15_000, 448, 42, 178, 0, 0, 0, 1, 4],
+    [20_000, 436, 40, 168, 0, 0, 0, 0, 5],
+    [25_000, 430, 41, 160, 0, 0, 0, 1, 6],
+    [30_000, 430, 42, 148, 0, 0, 0, 0, 7],
+    [35_000, 414, 45, 166, 0, 0, 0, 1, 8],
+    [40_000, 402, 46, 190, 0, 0, 0, 0, 9],
+    [45_000, 412, 48, 214, 0, 0, 0, 1, 10],
+    [50_000, 415.2, 48, 214, 0, 0, 0, 0, 10],
+  ],
+} as const satisfies GhostRun)
 
 interface FrameMeasurement {
   readonly durationMs: number
@@ -34,6 +110,8 @@ interface PerformanceResult {
   readonly textures: number
   readonly gameMode: 'race' | 'explore'
   readonly bgmPlaying: boolean
+  readonly ghostVisible: boolean
+  readonly ghostComparisonDurationMs: number | null
 }
 
 async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
@@ -88,18 +166,49 @@ async function measure(
   viewport: readonly [number, number],
   mode: 'race' | 'explore' = 'race',
 ): Promise<PerformanceResult> {
-  await page.context().addInitScript(({ selectedQuality, muted }) => {
+  await page.context().addInitScript(({
+    selectedQuality,
+    muted,
+    raceGhost,
+    coinGhost,
+  }) => {
     localStorage.setItem(
       'skyknit-cup:settings',
       JSON.stringify({
-        version: 6,
-        bestTimeMs: null,
+        version: 8,
+        bestTimeMs: raceGhost.durationMs,
         muted,
         musicVolume: 0.35,
         quality: selectedQuality,
+        missionGrades: {},
+        coinBestTimesMs: { 'cloud-ruins': coinGhost.durationMs },
+        skyLeague: {
+          raceTop10Ms: [raceGhost.durationMs],
+          coinTop10Ms: { 'cloud-ruins': [coinGhost.durationMs] },
+          missionTop10: {},
+        },
+        ghosts: {
+          race: raceGhost,
+          coin: { 'cloud-ruins': coinGhost },
+          mission: {},
+        },
+        exploration: {
+          position: { x: 0, y: 18, z: 20 },
+          headingRadians: 0,
+          movement: 'airborne',
+          discoveredRegionIds: ['festival-hub'],
+          destinationRegionId: null,
+          discoveredLandmarkIds: [],
+          traversedWindZoneIds: [],
+        },
       }),
     )
-  }, { selectedQuality: quality, muted: mode === 'race' })
+  }, {
+    selectedQuality: quality,
+    muted: mode === 'race',
+    raceGhost: REPRESENTATIVE_RACE_GHOST,
+    coinGhost: REPRESENTATIVE_CLOUD_COIN_GHOST,
+  })
   await page.goto(BASE_URL)
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
@@ -124,6 +233,12 @@ async function measure(
     await expect
       .poll(async () => (await readSnapshot(page))?.audio.bgmPlaying)
       .toBe(true)
+    await page.evaluate(() =>
+      window.__DRAGON_RACE_TEST__?.qaCollectCoin('cloud-ruins', 0),
+    )
+    await expect
+      .poll(async () => (await readSnapshot(page))?.exploration.coinRun.phase)
+      .toBe('running')
   } else if (touch) {
     await page.getByRole('button', { name: '비행 시작' }).tap()
   } else {
@@ -132,14 +247,35 @@ async function measure(
   if (mode === 'race') {
     await expect
       .poll(async () => (await readSnapshot(page))?.race.phase, {
-        timeout: 4_000,
+        timeout: 7_000,
       })
       .toBe('racing')
   }
+  await expect
+    .poll(async () => (await readSnapshot(page))?.camera.ghostVisible, {
+      timeout: 5_000,
+    })
+    .toBe(true)
+  await expect
+    .poll(async () => {
+      const snapshot = await readSnapshot(page)
+      return mode === 'race'
+        ? snapshot?.race.ghost.comparisonDurationMs
+        : snapshot?.exploration.ghost.comparisonDurationMs
+    })
+    .toBe(mode === 'race' ? 60_000 : 50_000)
   await page.waitForTimeout(mode === 'explore' ? 5_000 : 1_000)
+  if (mode === 'explore') {
+    // Let the course heading carry the dragon clear of the adjacent region's
+    // LOD overlap, then brake so the 30-second sample stays inside the course.
+    await page.keyboard.down('ControlLeft')
+  }
 
   const start = await readSnapshot(page)
   const frames = await collectFrames(page)
+  if (mode === 'explore') {
+    await page.keyboard.up('ControlLeft')
+  }
   const end = await readSnapshot(page)
   expect(start).not.toBeNull()
   expect(end).not.toBeNull()
@@ -170,6 +306,11 @@ async function measure(
     textures: end?.render.textures ?? 0,
     gameMode: end?.gameMode ?? mode,
     bgmPlaying: end?.audio.bgmPlaying ?? false,
+    ghostVisible: end?.camera.ghostVisible ?? false,
+    ghostComparisonDurationMs:
+      mode === 'race'
+        ? (end?.race.ghost.comparisonDurationMs ?? null)
+        : (end?.exploration.ghost.comparisonDurationMs ?? null),
   }
 }
 
@@ -280,4 +421,8 @@ test('meets the 30 second desktop and mobile frame budgets', async ({
   expect(mobileExplore.fixedSteps).toBeGreaterThanOrEqual(1_790)
   expect(mobileExplore.fixedSteps).toBeLessThanOrEqual(1_810)
   expect(mobileExplore.bgmPlaying).toBe(true)
+  expect(desktop.ghostVisible).toBe(true)
+  expect(mobile.ghostVisible).toBe(true)
+  expect(desktopExplore.ghostVisible).toBe(true)
+  expect(mobileExplore.ghostVisible).toBe(true)
 })

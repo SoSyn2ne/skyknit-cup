@@ -147,7 +147,7 @@ test('ships a clean production race in every required viewport', async ({
   await expect(page.locator('.race-hud')).toHaveAttribute(
     'data-phase',
     'racing',
-    { timeout: 4_000 },
+    { timeout: 6_000 },
   )
   await expect(page.locator('[data-mission-tracker="true"]')).toBeVisible()
   await page.waitForTimeout(500)

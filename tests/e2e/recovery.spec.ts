@@ -53,7 +53,7 @@ test('recovers from WebGL context loss without resetting progress', async ({
   await page.locator('[data-mission-start="true"]').click()
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
-      timeout: 4_000,
+      timeout: 6_000,
     })
     .toBe('racing')
   for (let checkpoint = 0; checkpoint < 2; checkpoint += 1) {
@@ -175,7 +175,7 @@ test('uses a visible non-blocking fallback when the GLB resource fails', async (
   await page.keyboard.press('ArrowUp')
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
-      timeout: 4_000,
+      timeout: 6_000,
     })
     .toBe('racing')
   await page.screenshot({

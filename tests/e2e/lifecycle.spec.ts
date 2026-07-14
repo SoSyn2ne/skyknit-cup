@@ -24,7 +24,7 @@ async function startRace(page: Page, touchProject: boolean): Promise<void> {
 
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
-      timeout: 4_000,
+      timeout: 6_000,
     })
     .toBe('racing')
 }

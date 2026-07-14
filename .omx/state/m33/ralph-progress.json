@@ -1,0 +1,29 @@
+{
+  "scope": "m33",
+  "active": true,
+  "phase": "final-verification",
+  "visual_verdict": {
+    "iteration": 4,
+    "score": 95,
+    "threshold": 90,
+    "passed": true,
+    "verdict": "pass",
+    "category_match": true,
+    "reasoning": "All five result viewports preserve the M32 hierarchy while adding rank, medal, Top 10, and visible retry controls. The final 320x568 exploration view keeps the completed coin card, expanded leaderboard, journey, context row, and 44px touch controls within the viewport. A live replay capture confirms the full 18-mesh dragon GLB remains recognizable in translucent teal and gold without shadows.",
+    "differences": [
+      "The result panel is necessarily denser than M32 because it adds two league placements and a leaderboard toggle.",
+      "The portrait exploration HUD now uses four explicit vertical tracks so the taller competition card cannot overlap the context action or journey.",
+      "The ghost keeps the detailed player silhouette but uses translucent normal blending and no shadow, making it distinct without the fallback silhouette artifacts."
+    ],
+    "suggestions": [
+      "Keep the compact two-column minimum-portrait layout unchanged.",
+      "Keep the mobile context, coin, destination, and journey tracks separated when adding future HUD rows.",
+      "Retain normal blending for the ghost; additive blending washed out the teal and gold silhouette."
+    ],
+    "next_actions": [
+      "Rerun the complete E2E suite after the mobile track and poll-timeout fixes.",
+      "Run the full 10-minute Sky League soak.",
+      "Publish the milestone report and human playtest handoff."
+    ]
+  }
+}
