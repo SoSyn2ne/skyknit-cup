@@ -50,6 +50,8 @@ function makeState(phase: RacePhase): RaceState {
         movement: 'airborne',
         discoveredRegionIds: ['festival-hub'],
         destinationRegionId: null,
+        discoveredLandmarkIds: [],
+        traversedWindZoneIds: [],
       },
     },
     config: {

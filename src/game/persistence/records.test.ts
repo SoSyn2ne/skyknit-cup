@@ -35,7 +35,7 @@ describe('versioned game settings', () => {
     expect(readSettings(new MemoryStorage())).toEqual(DEFAULT_SETTINGS)
   })
 
-  it('round-trips settings, exploration, and coin records in version 6', () => {
+  it('round-trips settings, exploration discoveries, and coin records in version 7', () => {
     const storage = new MemoryStorage()
     const settings = {
       bestTimeMs: 123_456,
@@ -56,15 +56,100 @@ describe('versioned game settings', () => {
         movement: 'airborne' as const,
         discoveredRegionIds: ['festival-hub', 'cloud-ruins'] as const,
         destinationRegionId: 'cloud-ruins' as const,
+        discoveredLandmarkIds: [
+          'dawnwing-airfield',
+          'whispering-grotto',
+        ] as const,
+        traversedWindZoneIds: ['harbor-lift'] as const,
       },
     }
 
     expect(saveSettings(storage, settings)).toBe(true)
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 6,
+      version: 7,
       ...settings,
     })
     expect(readSettings(storage)).toEqual(settings)
+  })
+
+  it('migrates version 6 without losing audio, race, mission, coin, or exploration progress', () => {
+    const storage = new MemoryStorage()
+    storage.values.set(
+      SETTINGS_KEY,
+      JSON.stringify({
+        version: 6,
+        bestTimeMs: 123_000,
+        muted: true,
+        musicVolume: 0.55,
+        quality: 'high',
+        missionGrades: { 'first-skyknot': 'gold' },
+        coinBestTimesMs: { 'festival-hub': 18_200 },
+        exploration: {
+          position: { x: 14, y: 22, z: -38 },
+          headingRadians: 0.8,
+          movement: 'airborne',
+          discoveredRegionIds: ['festival-hub'],
+          destinationRegionId: 'wind-canyon',
+        },
+      }),
+    )
+
+    expect(readSettings(storage)).toEqual({
+      bestTimeMs: 123_000,
+      muted: true,
+      musicVolume: 0.55,
+      quality: 'high',
+      missionGrades: { 'first-skyknot': 'gold' },
+      coinBestTimesMs: { 'festival-hub': 18_200 },
+      exploration: {
+        position: { x: 14, y: 22, z: -38 },
+        headingRadians: 0.8,
+        movement: 'airborne',
+        discoveredRegionIds: ['festival-hub'],
+        destinationRegionId: 'wind-canyon',
+        discoveredLandmarkIds: [],
+        traversedWindZoneIds: [],
+      },
+    })
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
+      version: 7,
+      bestTimeMs: 123_000,
+      musicVolume: 0.55,
+      missionGrades: { 'first-skyknot': 'gold' },
+      coinBestTimesMs: { 'festival-hub': 18_200 },
+    })
+  })
+
+  it('keeps unique known landmark and wind-zone ids from version 7', () => {
+    const storage = new MemoryStorage()
+    storage.values.set(
+      SETTINGS_KEY,
+      JSON.stringify({
+        version: 7,
+        exploration: {
+          ...DEFAULT_SETTINGS.exploration,
+          discoveredLandmarkIds: [
+            'dawnwing-airfield',
+            'unknown-landmark',
+            'dawnwing-airfield',
+            'whispering-grotto',
+          ],
+          traversedWindZoneIds: [
+            'harbor-lift',
+            'unknown-wind',
+            'harbor-lift',
+          ],
+        },
+      }),
+    )
+
+    expect(readSettings(storage).exploration).toMatchObject({
+      discoveredLandmarkIds: [
+        'dawnwing-airfield',
+        'whispering-grotto',
+      ],
+      traversedWindZoneIds: ['harbor-lift'],
+    })
   })
 
   it('migrates version 5 without losing progress and defaults BGM volume', () => {
@@ -75,6 +160,11 @@ describe('versioned game settings', () => {
       movement: 'airborne' as const,
       discoveredRegionIds: ['festival-hub', 'cloud-ruins'] as const,
       destinationRegionId: 'cloud-ruins' as const,
+    }
+    const migratedExploration = {
+      ...exploration,
+      discoveredLandmarkIds: [],
+      traversedWindZoneIds: [],
     }
     storage.values.set(
       SETTINGS_KEY,
@@ -96,16 +186,16 @@ describe('versioned game settings', () => {
       quality: 'high',
       missionGrades: { 'first-skyknot': 'silver' },
       coinBestTimesMs: { 'festival-hub': 17_200 },
-      exploration,
+      exploration: migratedExploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 6,
+      version: 7,
       bestTimeMs: 42_500,
       muted: true,
       musicVolume: 0.35,
       missionGrades: { 'first-skyknot': 'silver' },
       coinBestTimesMs: { 'festival-hub': 17_200 },
-      exploration,
+      exploration: migratedExploration,
     })
   })
 
@@ -147,7 +237,7 @@ describe('versioned game settings', () => {
       exploration: DEFAULT_SETTINGS.exploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 6,
+      version: 7,
       bestTimeMs: 51_234,
       muted: false,
       musicVolume: 0.35,
@@ -184,7 +274,7 @@ describe('versioned game settings', () => {
       exploration: DEFAULT_SETTINGS.exploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 6,
+      version: 7,
       bestTimeMs: 42_000,
       muted: true,
       musicVolume: 0.35,
@@ -200,7 +290,7 @@ describe('versioned game settings', () => {
     storage.values.set(SETTINGS_KEY, JSON.stringify({ version: 3 }))
 
     expect(readSettings(storage)).toEqual(DEFAULT_SETTINGS)
-    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(6)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(7)
   })
 
   it('migrates version 4 exploration and fills empty coin records', () => {
@@ -212,6 +302,11 @@ describe('versioned game settings', () => {
       discoveredRegionIds: ['festival-hub', 'cloud-ruins'],
       destinationRegionId: 'cloud-ruins',
     }
+    const migratedExploration = {
+      ...exploration,
+      discoveredLandmarkIds: [],
+      traversedWindZoneIds: [],
+    }
     storage.values.set(
       SETTINGS_KEY,
       JSON.stringify({ version: 4, exploration }),
@@ -219,12 +314,12 @@ describe('versioned game settings', () => {
 
     expect(readSettings(storage)).toEqual({
       ...DEFAULT_SETTINGS,
-      exploration,
+      exploration: migratedExploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 6,
+      version: 7,
       coinBestTimesMs: {},
-      exploration,
+      exploration: migratedExploration,
     })
   })
 
@@ -232,7 +327,7 @@ describe('versioned game settings', () => {
     'not json',
     '{}',
     '{"version":1,"bestTimeMs":50000}',
-    '{"version":7,"bestTimeMs":50000}',
+    '{"version":8,"bestTimeMs":50000}',
     '{"version":3,"bestTimeMs":0,"muted":"yes","quality":"ultra"}',
   ])('uses safe values for a damaged or unsupported document: %s', (value) => {
     const storage = new MemoryStorage()

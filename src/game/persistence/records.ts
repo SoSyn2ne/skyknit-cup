@@ -9,6 +9,12 @@ import {
   isOpenWorldRegionId,
   type OpenWorldRegionId,
 } from '../world/openWorldRegions'
+import {
+  isFestivalHubLandmarkId,
+  isFestivalHubWindZoneId,
+  type FestivalHubLandmarkId,
+  type FestivalHubWindZoneId,
+} from '../world/festivalHubActivities'
 
 export interface RecordStorage {
   getItem(key: string): string | null
@@ -25,6 +31,8 @@ export interface ExplorationProgress {
   readonly movement: 'airborne' | 'landed'
   readonly discoveredRegionIds: readonly OpenWorldRegionId[]
   readonly destinationRegionId: OpenWorldRegionId | null
+  readonly discoveredLandmarkIds: readonly FestivalHubLandmarkId[]
+  readonly traversedWindZoneIds: readonly FestivalHubWindZoneId[]
 }
 
 export interface GameSettings {
@@ -38,7 +46,7 @@ export interface GameSettings {
 }
 
 interface StoredSettings extends GameSettings {
-  readonly version: 6
+  readonly version: 7
 }
 
 interface LegacyStoredRecord {
@@ -62,6 +70,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
     movement: 'airborne',
     discoveredRegionIds: ['festival-hub'],
     destinationRegionId: null,
+    discoveredLandmarkIds: [],
+    traversedWindZoneIds: [],
   },
 }
 
@@ -75,6 +85,12 @@ function freshDefaults(): GameSettings {
       position: { ...DEFAULT_SETTINGS.exploration.position },
       discoveredRegionIds: [
         ...DEFAULT_SETTINGS.exploration.discoveredRegionIds,
+      ],
+      discoveredLandmarkIds: [
+        ...DEFAULT_SETTINGS.exploration.discoveredLandmarkIds,
+      ],
+      traversedWindZoneIds: [
+        ...DEFAULT_SETTINGS.exploration.traversedWindZoneIds,
       ],
     },
   }
@@ -166,6 +182,24 @@ function parseExploration(value: unknown): ExplorationProgress {
     isOpenWorldRegionId(value.destinationRegionId)
       ? value.destinationRegionId
       : null
+  const discoveredLandmarkIds =
+    'discoveredLandmarkIds' in value &&
+    Array.isArray(value.discoveredLandmarkIds)
+      ? [
+          ...new Set(
+            value.discoveredLandmarkIds.filter(isFestivalHubLandmarkId),
+          ),
+        ]
+      : defaults.discoveredLandmarkIds
+  const traversedWindZoneIds =
+    'traversedWindZoneIds' in value &&
+    Array.isArray(value.traversedWindZoneIds)
+      ? [
+          ...new Set(
+            value.traversedWindZoneIds.filter(isFestivalHubWindZoneId),
+          ),
+        ]
+      : defaults.traversedWindZoneIds
 
   return {
     position,
@@ -173,6 +207,8 @@ function parseExploration(value: unknown): ExplorationProgress {
     movement,
     discoveredRegionIds,
     destinationRegionId,
+    discoveredLandmarkIds,
+    traversedWindZoneIds,
   }
 }
 
@@ -188,7 +224,8 @@ function parseSettings(
       parsed.version !== 3 &&
       parsed.version !== 4 &&
       parsed.version !== 5 &&
-      parsed.version !== 6)
+      parsed.version !== 6 &&
+      parsed.version !== 7)
   ) {
     return null
   }
@@ -202,7 +239,7 @@ function parseSettings(
       ? parsed.muted
       : false
   const musicVolume =
-    parsed.version === 6 &&
+    parsed.version >= 6 &&
     'musicVolume' in parsed &&
     isMusicVolume(parsed.musicVolume)
       ? parsed.musicVolume
@@ -235,7 +272,7 @@ function parseSettings(
       coinBestTimesMs,
       exploration,
     },
-    shouldMigrate: parsed.version !== 6,
+    shouldMigrate: parsed.version !== 7,
   }
 }
 
@@ -277,6 +314,12 @@ function isValidSettings(settings: GameSettings): boolean {
     (settings.exploration.movement === 'airborne' ||
       settings.exploration.movement === 'landed') &&
     settings.exploration.discoveredRegionIds.every(isOpenWorldRegionId) &&
+    settings.exploration.discoveredLandmarkIds.every(
+      isFestivalHubLandmarkId,
+    ) &&
+    settings.exploration.traversedWindZoneIds.every(
+      isFestivalHubWindZoneId,
+    ) &&
     (settings.exploration.destinationRegionId === null ||
       isOpenWorldRegionId(settings.exploration.destinationRegionId))
   )
@@ -316,7 +359,7 @@ export function saveSettings(
   if (!isValidSettings(settings)) return false
 
   const stored: StoredSettings = {
-    version: 6,
+    version: 7,
     ...settings,
     missionGrades: { ...settings.missionGrades },
     coinBestTimesMs: { ...settings.coinBestTimesMs },
@@ -324,6 +367,12 @@ export function saveSettings(
       ...settings.exploration,
       position: { ...settings.exploration.position },
       discoveredRegionIds: [...settings.exploration.discoveredRegionIds],
+      discoveredLandmarkIds: [
+        ...settings.exploration.discoveredLandmarkIds,
+      ],
+      traversedWindZoneIds: [
+        ...settings.exploration.traversedWindZoneIds,
+      ],
     },
   }
   try {

@@ -33,6 +33,8 @@ const options = {
       movement: 'airborne' as const,
       discoveredRegionIds: ['festival-hub'] as const,
       destinationRegionId: null,
+      discoveredLandmarkIds: [] as const,
+      traversedWindZoneIds: [] as const,
     },
   },
 }

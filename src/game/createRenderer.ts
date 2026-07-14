@@ -427,6 +427,12 @@ export function createRenderer(
     let discoveredRegionIds = [
       ...raceState.persistent.exploration.discoveredRegionIds,
     ]
+    const discoveredLandmarkIds = [
+      ...raceState.persistent.exploration.discoveredLandmarkIds,
+    ]
+    const traversedWindZoneIds = [
+      ...raceState.persistent.exploration.traversedWindZoneIds,
+    ]
     let destinationRegionId =
       raceState.persistent.exploration.destinationRegionId
     let explorationPaused = recovery?.explorationPaused ?? false
@@ -617,6 +623,8 @@ export function createRenderer(
                 : 'airborne',
             discoveredRegionIds: [...discoveredRegionIds],
             destinationRegionId,
+            discoveredLandmarkIds: [...discoveredLandmarkIds],
+            traversedWindZoneIds: [...traversedWindZoneIds],
           },
         },
       }
