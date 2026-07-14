@@ -125,7 +125,7 @@ test('completes a mission, saves its grade, and returns to selection', async ({
     return raw === null ? null : (JSON.parse(raw) as unknown)
   })
   expect(stored).toMatchObject({
-    version: 6,
+    version: 7,
     missionGrades: { 'first-skyknot': 'gold' },
   })
 

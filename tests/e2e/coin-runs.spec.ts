@@ -101,7 +101,7 @@ test('freezes the run under the map and persists all three regional bests', asyn
     return raw === null ? null : JSON.parse(raw)
   })
   expect(saved).toMatchObject({
-    version: 6,
+    version: 7,
     coinBestTimesMs: {
       'festival-hub': expect.any(Number),
       'wind-canyon': expect.any(Number),
