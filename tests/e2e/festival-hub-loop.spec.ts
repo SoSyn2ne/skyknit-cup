@@ -84,6 +84,12 @@ test('runs festival discovery, wind, collision, and recovery without changing ra
   await page.getByRole('button', { name: '하늘 탐험' }).click()
 
   await page.getByRole('button', { name: '군도 지도 열기' }).click()
+  await expect(page.locator('[data-explore-festival-progress]')).toContainText(
+    '비밀 발견',
+  )
+  await page.screenshot({
+    path: `artifacts/browser-qa/${QA_SCOPE}/desktop-festival-map.png`,
+  })
   await page.evaluate(() =>
     window.__DRAGON_RACE_TEST__?.qaExploreLandmark('wind-loom'),
   )

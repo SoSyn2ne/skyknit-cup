@@ -1483,8 +1483,11 @@ export function createRenderer(
           coinRunIsNewBest,
           journey: {
             ...journey,
-            publicLandmarkCount: publicFestivalLandmarkCount(),
-            windZoneCount: traversedWindZoneIds.length,
+          publicLandmarkCount: publicFestivalLandmarkCount(),
+          windZoneCount: traversedWindZoneIds.length,
+          secretDiscovered: discoveredLandmarkIds.includes(
+            'whispering-grotto',
+          ),
           },
           discoveryNotice,
         })

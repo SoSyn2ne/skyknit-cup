@@ -14,6 +14,7 @@ import { formatMusicVolumePercent, formatRaceTime } from './RaceHud'
 export interface FestivalJourneyHudView extends FestivalJourney {
   readonly publicLandmarkCount: number
   readonly windZoneCount: number
+  readonly secretDiscovered: boolean
 }
 
 export interface ExplorationHudView {
@@ -79,6 +80,17 @@ export function formatFestivalJourneyLine(
     case null:
       return `${progress} · 축제 여정 완료`
   }
+}
+
+export function formatFestivalMapProgress(
+  journey: FestivalJourneyHudView,
+  coinBestTimeMs: number | undefined,
+): string {
+  const coinRecord =
+    coinBestTimeMs === undefined
+      ? '미기록'
+      : formatCoinRunTime(coinBestTimeMs)
+  return `축제 여정 · 랜드마크 ${journey.publicLandmarkCount}/4 · 상승기류 ${journey.windZoneCount}/3 · 비밀 ${journey.secretDiscovered ? '발견' : '미발견'} · 동전 최고 ${coinRecord}`
 }
 
 export function formatFestivalDiscoveryNotice(
@@ -226,6 +238,9 @@ export function createExplorationHud(
   mapTitle.textContent = '하늘 군도'
   const mapHint = document.createElement('p')
   mapHint.textContent = '목적지를 선택하세요.'
+  const festivalProgress = document.createElement('p')
+  festivalProgress.className = 'exploration-hud__festival-progress'
+  festivalProgress.dataset.exploreFestivalProgress = 'true'
   const mapRegions = document.createElement('div')
   mapRegions.className = 'exploration-hud__map-regions'
   const regionButtons = new Map<OpenWorldRegionId, HTMLButtonElement>()
@@ -243,7 +258,14 @@ export function createExplorationHud(
     actions.selectDestination(null),
   )
   const returnButton = button('미션 선택으로', 'exploration-hud__return', actions.returnToMissions)
-  map.append(mapTitle, mapHint, mapRegions, clearDestination, returnButton)
+  map.append(
+    mapTitle,
+    mapHint,
+    festivalProgress,
+    mapRegions,
+    clearDestination,
+    returnButton,
+  )
 
   const paused = document.createElement('section')
   paused.className = 'exploration-hud__paused'
@@ -322,6 +344,10 @@ export function createExplorationHud(
       context.textContent = label ?? ''
       context.setAttribute('aria-label', label ?? '상황 동작')
       map.hidden = !view.mapOpen || view.paused
+      festivalProgress.textContent = formatFestivalMapProgress(
+        view.journey,
+        view.coinBestTimesMs['festival-hub'],
+      )
       mapButton.setAttribute('aria-expanded', String(view.mapOpen))
       for (const [id, regionButton] of regionButtons) {
         const entry = OPEN_WORLD_REGIONS.find((candidate) => candidate.id === id)

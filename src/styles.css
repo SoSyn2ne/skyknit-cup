@@ -748,6 +748,16 @@ button {
   color: var(--sky-haze);
 }
 
+.exploration-hud__map .exploration-hud__festival-progress {
+  margin-top: -4px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  color: var(--cloud);
+  background: color-mix(in srgb, var(--sky-zenith) 26%, transparent);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
 .exploration-hud__map-regions {
   display: grid;
   gap: 8px;

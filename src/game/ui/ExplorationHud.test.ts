@@ -5,6 +5,7 @@ import {
   formatExploreDistance,
   formatFestivalDiscoveryNotice,
   formatFestivalJourneyLine,
+  formatFestivalMapProgress,
   getExploreContextLabel,
 } from './ExplorationHud'
 import type { FestivalJourneyObjectiveId } from '../world/festivalHubActivities'
@@ -47,6 +48,7 @@ describe('exploration HUD formatting', () => {
           isComplete: nextObjectiveId === null,
           publicLandmarkCount: 2,
           windZoneCount,
+          secretDiscovered: false,
         }),
       ).toBe(expected)
     },
@@ -61,8 +63,42 @@ describe('exploration HUD formatting', () => {
         isComplete: false,
         publicLandmarkCount: 0,
         windZoneCount: 0,
+        secretDiscovered: true,
       }),
     ).toBe('여정 1/5 · 다음: 랜드마크 0/4 발견')
+  })
+
+  it('summarizes Festival Hub progress and records inside the map', () => {
+    expect(
+      formatFestivalMapProgress(
+        {
+          completedSteps: 2,
+          totalSteps: 5,
+          nextObjectiveId: 'wind-zones',
+          isComplete: false,
+          publicLandmarkCount: 3,
+          windZoneCount: 1,
+          secretDiscovered: true,
+        },
+        65_432,
+      ),
+    ).toBe(
+      '축제 여정 · 랜드마크 3/4 · 상승기류 1/3 · 비밀 발견 · 동전 최고 1:05.432',
+    )
+    expect(
+      formatFestivalMapProgress(
+        {
+          completedSteps: 0,
+          totalSteps: 5,
+          nextObjectiveId: 'landmarks',
+          isComplete: false,
+          publicLandmarkCount: 0,
+          windZoneCount: 0,
+          secretDiscovered: false,
+        },
+        undefined,
+      ),
+    ).toContain('비밀 미발견 · 동전 최고 미기록')
   })
 
   it.each([
