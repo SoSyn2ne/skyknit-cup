@@ -157,3 +157,87 @@ test('completes a mission, saves its grade, and returns to selection', async ({
   await expect(page.locator('.race-hud__mission-best')).toContainText('골드')
   await capture(page, testInfo.project.name, 'mission-selection-return')
 })
+
+test('changes the selected mission from the Escape pause dialog with the keyboard', async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.startsWith('desktop'))
+  await page.goto('/?qaCourse=1')
+  await expect(page.locator('#app')).toHaveAttribute(
+    'data-state',
+    'renderer-ready',
+  )
+
+  const missionSelect = page.locator('[data-mission-select="true"]')
+  await missionSelect.selectOption('clean-flight')
+  await startSelectedMission(page)
+  await page.keyboard.press('Escape')
+  await expect
+    .poll(async () => (await snapshot(page))?.race.phase)
+    .toBe('paused')
+
+  const pauseDialog = page.getByRole('dialog', {
+    name: '바람길 일시정지',
+  })
+  const changeMission = pauseDialog.getByRole('button', {
+    name: '미션 변경',
+  })
+  await expect(changeMission).toBeVisible()
+  await changeMission.focus()
+  await expect(changeMission).toBeFocused()
+  await page.keyboard.press('Enter')
+
+  await expect
+    .poll(async () => (await snapshot(page))?.race)
+    .toMatchObject({
+      phase: 'ready',
+      mission: {
+        selectedMissionId: 'clean-flight',
+        status: 'idle',
+      },
+      elapsedMs: 0,
+      nextCheckpointIndex: 0,
+    })
+  await expect(missionSelect).toBeVisible()
+  await expect(missionSelect).toBeFocused()
+  await missionSelect.selectOption('time-trial')
+  await expect
+    .poll(async () => (await snapshot(page))?.race)
+    .toMatchObject({
+      phase: 'ready',
+      mission: {
+        selectedMissionId: 'time-trial',
+        status: 'idle',
+      },
+    })
+})
+
+test('keeps mission change visible in the pause dialog at every required viewport', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/?qaCourse=1')
+  await expect(page.locator('#app')).toHaveAttribute(
+    'data-state',
+    'renderer-ready',
+  )
+  await startSelectedMission(page)
+
+  if (testInfo.project.name.startsWith('touch')) {
+    await page.getByRole('button', { name: '일시정지' }).tap()
+  } else {
+    await page.keyboard.press('Escape')
+  }
+
+  const pauseDialog = page.getByRole('dialog', {
+    name: '바람길 일시정지',
+  })
+  const changeMission = pauseDialog.getByRole('button', {
+    name: '미션 변경',
+  })
+  await expect(changeMission).toBeVisible()
+  await expect(changeMission).toBeInViewport()
+  const box = await changeMission.boundingBox()
+  expect(box?.width ?? 0).toBeGreaterThanOrEqual(44)
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+  await capture(page, testInfo.project.name, 'pause-mission-change')
+})

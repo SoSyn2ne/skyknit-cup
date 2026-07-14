@@ -372,6 +372,7 @@ describe('race state', () => {
       'racing:FINISH',
       'paused:RESUME',
       'paused:RESTART',
+      'paused:RETURN_TO_READY',
       'finished:RETRY',
       'finished:RETURN_TO_READY',
     ])
@@ -638,5 +639,31 @@ describe('race state', () => {
     expect(ready.persistent.missionGrades).toEqual(
       finished.persistent.missionGrades,
     )
+  })
+
+  it('returns a paused mission attempt to ready selection without starting a new race', () => {
+    const paused = makeState('paused')
+    const ready = transitionRace(paused, { type: 'RETURN_TO_READY' })
+
+    expect(ready).toMatchObject({
+      phase: 'ready',
+      pausedFrom: null,
+      run: {
+        countdownRemainingMs: 3_000,
+        elapsedMs: 0,
+        nextCheckpointIndex: 0,
+      },
+      mission: {
+        selectedMissionId: 'first-skyknot',
+        status: 'idle',
+        attempt: {
+          elapsedMs: 0,
+          nextCheckpointIndex: 0,
+          finished: false,
+        },
+        result: null,
+      },
+    })
+    expect(ready.persistent).toBe(paused.persistent)
   })
 })

@@ -1087,6 +1087,20 @@ button {
   margin-top: 22px;
 }
 
+.race-hud[data-phase='paused'] .race-hud__panel {
+  width: min(600px, calc(100% - 32px));
+}
+
+.race-hud[data-phase='paused'] .race-hud__actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.race-hud[data-phase='paused'] .race-hud__actions button {
+  min-width: 0;
+  padding-inline: 12px;
+}
+
 .race-hud[data-phase='finished'] .race-hud__actions {
   position: sticky;
   z-index: 1;
@@ -1492,6 +1506,14 @@ button {
 
   .race-hud__actions button {
     width: 100%;
+  }
+
+  .race-hud[data-phase='paused'] .race-hud__panel {
+    width: calc(100% - 16px);
+  }
+
+  .race-hud[data-phase='paused'] .race-hud__actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .race-hud__mission-picker {

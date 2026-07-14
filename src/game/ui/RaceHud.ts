@@ -644,8 +644,9 @@ export function createRaceHud(
       } else if (view.phase === 'paused') {
         title.textContent = '바람길 일시정지'
         detail.textContent = '타이머와 비행 진행이 그대로 멈췄습니다.'
+        chooseMission.textContent = '미션 변경'
         clearResult()
-        showOnly(resume, respawn, restart)
+        showOnly(resume, respawn, restart, chooseMission)
       } else if (view.phase === 'finished') {
         if (phaseChanged) {
           setLeagueCategory('race')
@@ -656,6 +657,7 @@ export function createRaceHud(
           view.mission.result?.success === true
             ? `${missionDefinition?.name ?? '미션'} 성공 · 더 높은 등급에 도전해 보세요.`
             : `${missionDefinition?.name ?? '미션'} 실패 · 조건을 확인하고 다시 도전하세요.`
+        chooseMission.textContent = '미션 선택'
         updateResult(view)
         updateLeaderboard(view)
         showOnly(retry, chooseMission)
@@ -666,6 +668,11 @@ export function createRaceHud(
           resume.focus({ preventScroll: true })
         } else if (view.phase === 'finished') {
           retry.focus({ preventScroll: true })
+        } else if (
+          view.phase === 'ready' &&
+          (previousPhase === 'paused' || previousPhase === 'finished')
+        ) {
+          missionSelect.focus({ preventScroll: true })
         } else if (
           view.phase === 'countdown' ||
           view.phase === 'racing'

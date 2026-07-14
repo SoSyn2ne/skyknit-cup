@@ -20,6 +20,7 @@ Use this exact transition table for the Milestone 0 state tests:
 | `countdown` | `PAUSE` | none | `paused` | set `pausedFrom=countdown`; preserve remaining countdown |
 | `racing` | `PAUSE` | none | `paused` | set `pausedFrom=racing`; preserve elapsed time and race state |
 | `paused` | `RESUME` | `pausedFrom` exists | `pausedFrom` | continue the exact remaining countdown or race state; never restart it |
+| `paused` | `RETURN_TO_READY` | none | `ready` | abandon the current run; reset transient race and mission attempt state; preserve mission choice, settings, grades, and records |
 | `racing` | `FINISH` | all checkpoints passed in order | `finished` | freeze final elapsed time; update best only when valid |
 | `paused` | `RESTART` | none | `countdown` | reset transient race state and start a fresh 3-second countdown |
 | `finished` | `RETRY` | none | `countdown` | reset transient race state and start a fresh 3-second countdown |

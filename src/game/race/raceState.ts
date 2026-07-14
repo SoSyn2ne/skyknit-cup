@@ -368,7 +368,10 @@ export function transitionRace(
     return startFreshCountdown(state)
   }
 
-  if (state.phase === 'finished' && event.type === 'RETURN_TO_READY') {
+  if (
+    (state.phase === 'paused' || state.phase === 'finished') &&
+    event.type === 'RETURN_TO_READY'
+  ) {
     return {
       ...state,
       phase: 'ready',

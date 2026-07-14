@@ -1,0 +1,49 @@
+{
+  "scope": "pause-mission-change",
+  "active": false,
+  "phase": "completed",
+  "completed_at": "2026-07-14T17:13:27.8469087+09:00",
+  "reported_reference": "C:/Users/eum0742/AppData/Local/Temp/codex-clipboard-4e3f55a2-5d05-47d3-8a4a-aa66ca76e27e.png",
+  "acceptance": [
+    "Escape pause dialog exposes a mission change action.",
+    "Mission change abandons only the current attempt and returns to the existing ready mission picker.",
+    "The prior mission choice and persistent records/settings remain intact.",
+    "Keyboard focus moves to the mission picker after returning.",
+    "The four pause actions remain readable in all five required viewports."
+  ],
+  "tdd_red": {
+    "unit": "paused RETURN_TO_READY remained paused with an active 42000ms attempt",
+    "e2e": "Escape pause dialog did not contain an accessible mission change button"
+  },
+  "visual_verdict": {
+    "iteration": 1,
+    "score": 96,
+    "threshold": 90,
+    "passed": true,
+    "verdict": "pass",
+    "category_match": true,
+    "reasoning": "The mission-change action preserves the Skyknot pause-dialog hierarchy and styling across all five viewports. All four actions are balanced and usable without overlap, clipping, or overflow.",
+    "differences": [
+      "The four-button desktop row is denser than the prior three-button row but remains evenly sized and readable.",
+      "At 320px the final description syllable wraps onto its own line.",
+      "Portrait layouts use a balanced 2x2 action grid without cropping."
+    ],
+    "suggestions": [
+      "Keep the current equal-width action grid and touch target sizes.",
+      "Treat the 320px description orphan as optional future typography polish."
+    ],
+    "next_actions": []
+  },
+  "automated_verification": {
+    "unit": "41 files, 427 tests passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "audit": "0 vulnerabilities",
+    "build": "passed with the existing Vite chunk-size warning",
+    "mission_e2e": "17 passed, 3 expected keyboard-only touch skips",
+    "minimum_pause_e2e": "1 passed, 4 expected project skips",
+    "production_e2e": "5 required viewports passed",
+    "visual_verdict": "96/100 pass",
+    "independent_verifier": "pass"
+  }
+}
