@@ -1,0 +1,9 @@
+{
+  "active": true,
+  "phase": "planning",
+  "task": "progressive mission unlocks",
+  "started_at": "2026-07-14T23:41:11Z",
+  "context_snapshot": ".omx/context/mission-progression-20260714T234111Z.md",
+  "spec": ".omx/plans/autopilot-spec.md",
+  "implementation_plan": ".omx/plans/autopilot-impl.md"
+}
