@@ -1,6 +1,6 @@
 # 하늘매듭배 구현 계획
 
-> 상태: **RC7.1 / 비행 오디오 감각 보정 자동 검증 완료 / 실기기·사람 청취 테스트 대기**
+> 상태: **RC8 / Milestone 32 오픈월드 수직 슬라이스 승인 / 구현 중**
 >
 > 선행 문서: `docs/PRODUCT_GOAL.md`
 
@@ -589,6 +589,25 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 - 날갯짓은 활성 비행 중 한 하강 박자당 한 번만 울리고 준비·일시정지·음소거 중에는 울리지 않는다.
 - 돌풍은 상승 에지당 한 번만 울리며 고음 단일 발진음 없이 0.5초 이상의 공기성 노이즈 감쇠를 가진다.
 - test, typecheck, lint, build와 실제 브라우저 오디오 디버그 스냅샷에서 오류 0을 확인한다.
+
+### Milestone 32: 축제 중심섬 오픈월드 수직 슬라이스
+
+**상태: 구현 중 — 2026-07-14**
+
+**결과물**
+- `.omx/plans/prd-m32-open-world-vertical-slice.md`, `.omx/plans/test-spec-m32-open-world-vertical-slice.md`
+- 다섯 project-authored 랜드마크와 세 착륙장을 가진 축제 중심섬 high/low GLB
+- 세 상승기류, 탐험 충돌, 비밀 장소와 v7 발견 기록
+- 기존 동전 기록전·레이스 미션을 연결하는 탐험 HUD/지도 여정
+- BGM을 보존하는 저비용 탐험 환경음
+- `docs/MILESTONE_32_OPEN_WORLD_VERTICAL_SLICE_REPORT.md`, `docs/M32_OPEN_WORLD_PLAYTEST_HANDOFF.md`
+
+**완료 조건**
+- GLB 필수 노드, 12 primitives, 8 materials, high 60k/low 25k triangle와 LOD/dispose 계약을 자동 검사한다.
+- 고속 충돌·발견, 상승기류 힘, 다중 착륙, 동전 접근선, v7 마이그레이션과 오디오 수명주기를 실패 테스트부터 구현한다.
+- 키보드와 터치가 탐험 진입부터 랜드마크·상승기류·비밀 장소·동전·착륙·비콘 미션까지 진행한다.
+- 다섯 뷰포트 nonblank/시간 변화, console/page/network 오류 0, `visual-verdict >= 90`을 증명한다.
+- 30초 네 성능 프로필, 10분 탐험 soak, 120 draw calls와 전체 gzip 10MiB 예산을 통과한다.
 
 ## 테스트 매트릭스
 
