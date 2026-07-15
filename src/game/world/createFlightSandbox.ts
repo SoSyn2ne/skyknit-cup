@@ -2,6 +2,11 @@ import * as THREE from 'three'
 
 import type { GhostPose } from '../competition/ghostRun'
 import {
+  DEFAULT_CHARACTER_LOADOUT,
+  normalizeCharacterLoadout,
+  type CharacterLoadout,
+} from '../customization/characterCatalog'
+import {
   getForwardVector,
   type FlightState,
 } from '../flight/flightModel'
@@ -91,6 +96,10 @@ export interface FlightSandbox {
     readonly diameterCss: number
   }
   resetCamera: () => void
+  setCharacterPreviewActive: (active: boolean) => void
+  setCharacterLoadout: (
+    loadout: CharacterLoadout,
+  ) => Promise<'fallback' | 'glb'>
   setQuality: (quality: RenderQualityBudget) => void
   dispose: () => void
   debugSnapshot?: (flight: FlightState) => FlightSandboxDebugSnapshot
@@ -200,6 +209,16 @@ const COMPACT_PORTRAIT_READY_CAMERA: ReadyCameraFraming = Object.freeze({
   fov: 64,
 })
 
+const PORTRAIT_WORKSHOP_CAMERA: ReadyCameraFraming = Object.freeze({
+  ...PORTRAIT_READY_CAMERA,
+  lookHeight: -8,
+})
+
+const COMPACT_PORTRAIT_WORKSHOP_CAMERA: ReadyCameraFraming = Object.freeze({
+  ...COMPACT_PORTRAIT_READY_CAMERA,
+  lookHeight: -19,
+})
+
 export function getReadyCameraFraming(
   viewportWidth: number,
   viewportHeight: number,
@@ -219,6 +238,18 @@ export function getReadyCameraFraming(
   return safeHeight <= 600
     ? COMPACT_PORTRAIT_READY_CAMERA
     : PORTRAIT_READY_CAMERA
+}
+
+export function getCharacterWorkshopCameraFraming(
+  viewportWidth: number,
+  viewportHeight: number,
+): ReadyCameraFraming {
+  const readyFraming = getReadyCameraFraming(viewportWidth, viewportHeight)
+  if (readyFraming.mode === 'portrait') return PORTRAIT_WORKSHOP_CAMERA
+  if (readyFraming.mode === 'compact-portrait') {
+    return COMPACT_PORTRAIT_WORKSHOP_CAMERA
+  }
+  return readyFraming
 }
 
 
@@ -497,15 +528,32 @@ export function createFlightSandbox(
   palette: FlightSandboxPalette,
   initialQuality: RenderQualityBudget,
   course: readonly CourseCheckpoint[] = SKYKNOT_COURSE,
+  initialCharacterLoadout: CharacterLoadout = DEFAULT_CHARACTER_LOADOUT,
 ): FlightSandbox {
-  const dragon = createDragonVisual(palette)
+  const normalizedInitialLoadout = normalizeCharacterLoadout(
+    initialCharacterLoadout,
+  )
+  const usesDefaultInitialCharacter =
+    normalizedInitialLoadout.characterId ===
+      DEFAULT_CHARACTER_LOADOUT.characterId &&
+    normalizedInitialLoadout.paletteId ===
+      DEFAULT_CHARACTER_LOADOUT.paletteId &&
+    normalizedInitialLoadout.accessoryId ===
+      DEFAULT_CHARACTER_LOADOUT.accessoryId
+  let dragon = usesDefaultInitialCharacter
+    ? createDragonVisual(palette)
+    : createDragonVisual(palette, { loadout: normalizedInitialLoadout })
+  const initialDragonReady = dragon.ready
   dragon.setShadows(initialQuality.shadows)
+  let activeCharacterLoadout = normalizedInitialLoadout
+  let characterLoadRequestId = 0
   let ghostDragon: DragonVisual | null = null
   let dragonPose = createDragonPoseState()
   let ghostDragonPose = createDragonPoseState()
   let ghostVisible = false
   let lastGhostElapsedMs = -1
   let characterAnimationSeconds = 0
+  let lastDragonFlight: FlightState | null = null
   let quality = initialQuality
   const world = createWorld(scene, camera, palette, quality)
   const gates = course.map((checkpoint, index) =>
@@ -606,6 +654,7 @@ export function createFlightSandbox(
   const threadSegmentScale = new THREE.Vector3()
   const threadSegmentMatrix = new THREE.Matrix4()
   let cameraInitialized = false
+  let characterPreviewActive = false
   let currentActiveGateIndex = 0
   let passWaveAgeSeconds = GATE_PASS_WAVE_SECONDS
   let collisionCameraShakeDistance = 0
@@ -822,6 +871,7 @@ export function createFlightSandbox(
     fixedDt: number,
     collisionFeedbackSeconds: number,
   ): boolean => {
+    lastDragonFlight = flight
     const previousWingFlapRadians = dragonPose.wingFlapRadians
     if (fixedDt > 0) {
       characterAnimationSeconds += fixedDt
@@ -860,7 +910,19 @@ export function createFlightSandbox(
     }
 
     if (ghostDragon === null) {
-      ghostDragon = createDragonVisual(palette, { appearance: 'ghost' })
+      const usesDefaultCharacter =
+        activeCharacterLoadout.characterId ===
+          DEFAULT_CHARACTER_LOADOUT.characterId &&
+        activeCharacterLoadout.paletteId ===
+          DEFAULT_CHARACTER_LOADOUT.paletteId &&
+        activeCharacterLoadout.accessoryId ===
+          DEFAULT_CHARACTER_LOADOUT.accessoryId
+      ghostDragon = usesDefaultCharacter
+        ? createDragonVisual(palette, { appearance: 'ghost' })
+        : createDragonVisual(palette, {
+            appearance: 'ghost',
+            loadout: activeCharacterLoadout,
+          })
       ghostDragon.setShadows(false)
       ghostDragon.movementRoot.visible = false
       scene.add(ghostDragon.movementRoot)
@@ -910,10 +972,14 @@ export function createFlightSandbox(
     collisionFeedbackSeconds: number,
     presentation: 'ready' | 'countdown' | 'race' | 'explore',
   ): void => {
-    const readyFraming = getReadyCameraFraming(
-      window.innerWidth,
-      window.innerHeight,
-    )
+    const readyFraming = characterPreviewActive
+      ? getCharacterWorkshopCameraFraming(
+          window.innerWidth,
+          window.innerHeight,
+        )
+      : getReadyCameraFraming(window.innerWidth, window.innerHeight)
+    const useReadyFraming =
+      characterPreviewActive || presentation === 'ready'
     getForward(flight, forward)
     getRight(flight, right)
     dragonPosition.set(
@@ -921,7 +987,7 @@ export function createFlightSandbox(
       flight.position.y,
       flight.position.z,
     )
-    if (presentation === 'ready') {
+    if (useReadyFraming) {
       targetCameraPosition
         .copy(dragonPosition)
         .addScaledVector(forward, -readyFraming.backDistance)
@@ -952,7 +1018,7 @@ export function createFlightSandbox(
       cameraPosition.copy(targetCameraPosition)
       lookPosition.copy(targetLookPosition)
       camera.fov =
-        presentation === 'ready' ? readyFraming.fov : CAMERA_DEFAULT_FOV
+        useReadyFraming ? readyFraming.fov : CAMERA_DEFAULT_FOV
       cameraInitialized = true
     } else if (fixedDt > 0) {
       stepCriticalSpring(
@@ -989,7 +1055,7 @@ export function createFlightSandbox(
 
     if (fixedDt > 0) {
       const targetFov =
-        presentation === 'ready'
+        useReadyFraming
           ? readyFraming.fov
           : flight.isBoosting && !reducedMotion()
           ? CAMERA_BOOST_FOV
@@ -1001,8 +1067,68 @@ export function createFlightSandbox(
     camera.updateProjectionMatrix()
   }
 
+  const setCharacterLoadout = async (
+    loadout: CharacterLoadout,
+  ): Promise<'fallback' | 'glb'> => {
+    if (disposed) return 'fallback'
+
+    const requestId = ++characterLoadRequestId
+    const normalizedLoadout = normalizeCharacterLoadout(loadout)
+    const candidate = createDragonVisual(palette, {
+      loadout: normalizedLoadout,
+    })
+    candidate.setShadows(quality.shadows)
+
+    let candidateSource: 'fallback' | 'glb'
+    try {
+      candidateSource = await candidate.ready
+    } catch {
+      candidate.dispose()
+      return 'fallback'
+    }
+
+    if (
+      disposed ||
+      requestId !== characterLoadRequestId ||
+      candidateSource === 'fallback'
+    ) {
+      candidate.dispose()
+      return candidateSource
+    }
+
+    const previousDragon = dragon
+    candidate.movementRoot.position.copy(previousDragon.movementRoot.position)
+    candidate.movementRoot.quaternion.copy(
+      previousDragon.movementRoot.quaternion,
+    )
+    candidate.movementRoot.scale.copy(previousDragon.movementRoot.scale)
+    candidate.setShadows(quality.shadows)
+    if (lastDragonFlight !== null) {
+      candidate.update(lastDragonFlight, dragonPose)
+    }
+
+    scene.add(candidate.movementRoot)
+    for (const ring of boostRings) candidate.movementRoot.add(ring)
+    candidate.movementRoot.add(speedStreaks)
+    dragon = candidate
+    activeCharacterLoadout = normalizedLoadout
+
+    scene.remove(previousDragon.movementRoot)
+    previousDragon.dispose()
+
+    if (ghostDragon !== null) {
+      scene.remove(ghostDragon.movementRoot)
+      ghostDragon.dispose()
+      ghostDragon = null
+      ghostVisible = false
+      lastGhostElapsedMs = -1
+    }
+
+    return candidateSource
+  }
+
   return {
-    ready: dragon.ready,
+    ready: initialDragonReady,
     step: (
       flight,
       simulationSeconds,
@@ -1084,6 +1210,14 @@ export function createFlightSandbox(
       cameraVelocity.set(0, 0, 0)
       lookVelocity.set(0, 0, 0)
     },
+    setCharacterPreviewActive: (active) => {
+      if (characterPreviewActive === active) return
+      characterPreviewActive = active
+      cameraInitialized = false
+      cameraVelocity.set(0, 0, 0)
+      lookVelocity.set(0, 0, 0)
+    },
+    setCharacterLoadout,
     setQuality: (nextQuality) => {
       quality = nextQuality
       world.setQuality(nextQuality)
@@ -1101,6 +1235,7 @@ export function createFlightSandbox(
     dispose: () => {
       if (disposed) return
       disposed = true
+      characterLoadRequestId += 1
       scene.remove(dragon.movementRoot)
       dragon.dispose()
       if (ghostDragon !== null) {

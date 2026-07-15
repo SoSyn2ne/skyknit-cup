@@ -2,6 +2,15 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 import {
+  CHARACTER_ACCESSORIES,
+  CHARACTER_CATALOG,
+  CHARACTER_PALETTES,
+  normalizeCharacterLoadout,
+  type CharacterAccessoryDefinition,
+  type CharacterLoadout,
+  type CharacterPaletteDefinition,
+} from '../customization/characterCatalog'
+import {
   getVisualPitchRadians,
   type FlightState,
 } from '../flight/flightModel'
@@ -18,6 +27,7 @@ export type DragonAppearance = 'player' | 'ghost'
 
 export interface CreateDragonOptions {
   readonly appearance?: DragonAppearance
+  readonly loadout?: CharacterLoadout
 }
 
 export const GHOST_DRAGON_VISUAL_SPEC = Object.freeze({
@@ -29,6 +39,7 @@ export const GHOST_DRAGON_VISUAL_SPEC = Object.freeze({
 
 export interface DragonDebugSnapshot {
   readonly appearance: DragonAppearance
+  readonly loadout: CharacterLoadout
   readonly source: 'fallback' | 'glb'
   readonly meshCount: number
   readonly tailSegmentCount: number
@@ -76,6 +87,134 @@ function captureMaterialStates(
     emissive: material.emissive.clone(),
     emissiveIntensity: material.emissiveIntensity,
   }))
+}
+
+type CharacterMaterialRole = 'body' | 'membrane' | 'glow'
+
+function getCharacterMaterialRole(
+  object: THREE.Object3D,
+  material: THREE.Material,
+): CharacterMaterialRole | null {
+  const roleName = `${object.name} ${material.name}`
+  if (/glow|rune|emissive/i.test(roleName)) return 'glow'
+  if (/membrane|wing|feather|fin|gold/i.test(roleName)) {
+    return 'membrane'
+  }
+  if (/body|ember|hide|fur|scale|plumage/i.test(roleName)) return 'body'
+  return null
+}
+
+function setTintableMaterialColor(
+  material: THREE.Material,
+  color: THREE.ColorRepresentation,
+): void {
+  if (
+    material instanceof THREE.MeshStandardMaterial ||
+    material instanceof THREE.MeshBasicMaterial ||
+    material instanceof THREE.MeshLambertMaterial ||
+    material instanceof THREE.MeshPhongMaterial ||
+    material instanceof THREE.MeshToonMaterial ||
+    material instanceof THREE.MeshMatcapMaterial
+  ) {
+    material.color.set(color)
+  }
+}
+
+function applyCharacterPalette(
+  root: THREE.Object3D,
+  palette: CharacterPaletteDefinition,
+): void {
+  const replacements = new Map<
+    THREE.Material,
+    Map<CharacterMaterialRole, THREE.Material>
+  >()
+
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material]
+    const tintedMaterials = materials.map((source) => {
+      const role = getCharacterMaterialRole(object, source)
+      if (role === null) return source
+
+      let roleReplacements = replacements.get(source)
+      if (roleReplacements === undefined) {
+        roleReplacements = new Map()
+        replacements.set(source, roleReplacements)
+      }
+      const existing = roleReplacements.get(role)
+      if (existing !== undefined) return existing
+
+      const replacement = source.clone()
+      replacement.name = source.name
+      const color = palette[role]
+      setTintableMaterialColor(replacement, color)
+      if (
+        role === 'glow' &&
+        (replacement instanceof THREE.MeshStandardMaterial ||
+          replacement instanceof THREE.MeshLambertMaterial ||
+          replacement instanceof THREE.MeshPhongMaterial ||
+          replacement instanceof THREE.MeshToonMaterial)
+      ) {
+        replacement.emissive.set(color)
+        replacement.emissiveIntensity = Math.max(
+          replacement.emissiveIntensity,
+          0.72,
+        )
+      }
+      replacement.needsUpdate = true
+      roleReplacements.set(role, replacement)
+      return replacement
+    })
+
+    object.material = Array.isArray(object.material)
+      ? tintedMaterials
+      : (tintedMaterials[0] ?? object.material)
+  })
+
+  const attachedMaterials = new Set<THREE.Material>()
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material]
+    for (const material of materials) attachedMaterials.add(material)
+  })
+  for (const source of replacements.keys()) {
+    if (!attachedMaterials.has(source)) source.dispose()
+  }
+}
+
+function resolveAssetUrl(modelPath: string): string {
+  const baseUrl = import.meta.env.BASE_URL.endsWith('/')
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`
+  return `${baseUrl}${modelPath.replace(/^\/+/, '')}`
+}
+
+function attachAccessory(
+  characterRoot: THREE.Object3D,
+  accessoryRoot: THREE.Object3D,
+  accessory: CharacterAccessoryDefinition,
+): boolean {
+  const anchor =
+    accessory.anchor === 'head'
+      ? characterRoot.getObjectByName('AccessorySocket_Head') ??
+        characterRoot.getObjectByName('HeadRig')
+      : accessory.anchor === 'tail'
+        ? characterRoot.getObjectByName('AccessorySocket_Tail') ??
+          characterRoot.getObjectByName('TailRig_5')
+        : undefined
+  if (anchor === undefined) return false
+
+  accessoryRoot.name =
+    accessory.id === 'wind-goggles'
+      ? 'M37_WindGogglesAsset'
+      : 'M37_FestivalRibbonAsset'
+  anchor.add(accessoryRoot)
+  return true
 }
 
 function ghostUsesGold(
@@ -371,6 +510,16 @@ export function createDragon(
   options: CreateDragonOptions = {},
 ): DragonVisual {
   const appearance = options.appearance ?? 'player'
+  const loadout = normalizeCharacterLoadout(options.loadout)
+  const character =
+    CHARACTER_CATALOG.find((entry) => entry.id === loadout.characterId) ??
+    CHARACTER_CATALOG[0]
+  const characterPalette =
+    CHARACTER_PALETTES.find((entry) => entry.id === loadout.paletteId) ??
+    CHARACTER_PALETTES[0]
+  const accessory =
+    CHARACTER_ACCESSORIES.find((entry) => entry.id === loadout.accessoryId) ??
+    CHARACTER_ACCESSORIES[0]
   const isGhost = appearance === 'ghost'
   const movementRoot = new THREE.Group()
   movementRoot.name = isGhost
@@ -400,47 +549,73 @@ export function createDragon(
     new URLSearchParams(window.location.search).get('forceDragonFailure') ===
       '1'
   const loader = new GLTFLoader()
-  const ready = (forceFallback
-    ? Promise.resolve({ scene: null })
-    : loader.loadAsync(
-        `${import.meta.env.BASE_URL}assets/models/skyknit-dragon.glb`,
-      ))
-    .then((gltf) => {
-      if (gltf.scene === null) {
-        return 'fallback' as const
-      }
+  const ready = (async (): Promise<'fallback' | 'glb'> => {
+    if (forceFallback) return 'fallback'
+
+    let characterAsset: THREE.Object3D | null = null
+    let accessoryAsset: THREE.Object3D | null = null
+    try {
+      const gltf = await loader.loadAsync(resolveAssetUrl(character.modelPath))
+      characterAsset = gltf.scene
       if (disposed) {
-        disposeObject(gltf.scene)
-        return 'fallback' as const
+        disposeObject(characterAsset)
+        return 'fallback'
       }
-      if (isGhost) applyGhostAppearance(gltf.scene, palette)
-      const loadedRig = collectRig(gltf.scene)
 
+      applyCharacterPalette(characterAsset, characterPalette)
+
+      if (accessory.modelPath !== null) {
+        const accessoryGltf = await loader.loadAsync(
+          resolveAssetUrl(accessory.modelPath),
+        )
+        accessoryAsset = accessoryGltf.scene
+        if (disposed) {
+          disposeObject(characterAsset)
+          disposeObject(accessoryAsset)
+          return 'fallback'
+        }
+        if (!attachAccessory(characterAsset, accessoryAsset, accessory)) {
+          disposeObject(characterAsset)
+          disposeObject(accessoryAsset)
+          return 'fallback'
+        }
+      }
+
+      if (isGhost) applyGhostAppearance(characterAsset, palette)
+      const loadedRig = collectRig(characterAsset)
       if (loadedRig === null) {
-        disposeObject(gltf.scene)
-        return 'fallback' as const
+        disposeObject(characterAsset)
+        return 'fallback'
       }
 
-      gltf.scene.name = isGhost
+      characterAsset.name = isGhost
         ? 'M33_SkyLeagueGhostDragonAsset'
-        : 'M3_SkyknotDragonAsset'
-      gltf.scene.scale.setScalar(0.34)
-      gltf.scene.position.set(0, -1.32, 0.08)
-      setObjectShadows(gltf.scene, shadowsEnabled)
-      poseRoot.add(gltf.scene)
-      loadedAsset = gltf.scene
+        : loadout.characterId === 'sunrise-dragon'
+          ? 'M3_SkyknotDragonAsset'
+          : `M37_${loadout.characterId}_Asset`
+      characterAsset.scale.setScalar(0.34)
+      characterAsset.position.set(0, -1.32, 0.08)
+      setObjectShadows(characterAsset, shadowsEnabled)
+      poseRoot.add(characterAsset)
+      loadedAsset = characterAsset
       fallback.root.visible = false
       rig = loadedRig
       source = 'glb'
       meshCount = 0
-      gltf.scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          meshCount += 1
-        }
+      characterAsset.traverse((object) => {
+        if (object instanceof THREE.Mesh) meshCount += 1
       })
       return source
-    })
-    .catch(() => 'fallback' as const)
+    } catch {
+      if (characterAsset !== null && characterAsset !== loadedAsset) {
+        disposeObject(characterAsset)
+      }
+      if (accessoryAsset !== null && accessoryAsset.parent === null) {
+        disposeObject(accessoryAsset)
+      }
+      return 'fallback'
+    }
+  })()
 
   return {
     movementRoot,
@@ -498,6 +673,7 @@ export function createDragon(
     },
     debugSnapshot: () => ({
       appearance,
+      loadout: { ...loadout },
       source,
       meshCount,
       tailSegmentCount: rig.tail.length,

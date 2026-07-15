@@ -33,6 +33,7 @@ class TestElement {
   replaceChildrenCalls = 0
   focusCalls = 0
   parent: TestElement | null = null
+  readonly listeners = new Map<string, (() => void)[]>()
 
   append(...elements: TestElement[]): void {
     for (const element of elements) {
@@ -55,7 +56,15 @@ class TestElement {
     this.attributes.delete(name)
   }
 
-  addEventListener(): void {}
+  addEventListener(type: string, listener: () => void): void {
+    const listeners = this.listeners.get(type) ?? []
+    listeners.push(listener)
+    this.listeners.set(type, listeners)
+  }
+
+  dispatch(type: string): void {
+    for (const listener of this.listeners.get(type) ?? []) listener()
+  }
 
   focus(): void {
     this.focusCalls += 1
@@ -303,6 +312,7 @@ describe('Sky League HUD formatting', () => {
         respawn: noop,
         retry: noop,
         nextMission: noop,
+        openCharacterWorkshop: noop,
         toggleMute: noop,
         setMusicVolume: noop,
         setQuality: noop,
@@ -379,6 +389,7 @@ describe('Sky League HUD formatting', () => {
         respawn: noop,
         retry: noop,
         nextMission: noop,
+        openCharacterWorkshop: noop,
         toggleMute: noop,
         setMusicVolume: noop,
         setQuality: noop,
@@ -471,6 +482,7 @@ describe('Sky League HUD formatting', () => {
         respawn: noop,
         retry: noop,
         nextMission: noop,
+        openCharacterWorkshop: noop,
         toggleMute: noop,
         setMusicVolume: noop,
         setQuality: noop,
@@ -514,6 +526,84 @@ describe('Sky League HUD formatting', () => {
           'race-hud__detail',
         ).textContent,
       ).toContain('모든 미션')
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, 'document')
+      } else {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      }
+    }
+  })
+
+  it('shows an accessible character workshop opener in ready and pause only', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    )
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: () => new TestElement(),
+      } as unknown as Document,
+    })
+
+    try {
+      const host = new TestElement()
+      let openCalls = 0
+      const noop = (): void => {}
+      const hud = createRaceHud(host as unknown as HTMLElement, {
+        start: noop,
+        startExplore: noop,
+        selectMission: noop,
+        returnToMissionSelection: noop,
+        resume: noop,
+        restart: noop,
+        respawn: noop,
+        retry: noop,
+        nextMission: noop,
+        openCharacterWorkshop: () => {
+          openCalls += 1
+        },
+        toggleMute: noop,
+        setMusicVolume: noop,
+        setQuality: noop,
+      })
+      const finished = createFinishedRaceHudView()
+      const ready: RaceHudView = {
+        ...finished,
+        phase: 'ready',
+        finalElapsedMs: null,
+        mission: {
+          ...finished.mission,
+          selectedMissionId: 'first-skyknot',
+          status: 'idle',
+          result: null,
+        },
+        missionGrades: {},
+      }
+
+      hud.update(ready)
+      const opener = findByDataset(
+        hud.element as unknown as TestElement,
+        'characterWorkshopOpen',
+        'true',
+      )
+      expect(opener.textContent).toBe('캐릭터 꾸미기')
+      expect(opener.attributes.get('aria-label')).toBe('캐릭터 꾸미기')
+      expect(opener.className).toContain('race-hud__character-workshop')
+      expect(opener.hidden).toBe(false)
+      opener.dispatch('click')
+      expect(openCalls).toBe(1)
+
+      hud.update({
+        ...ready,
+        phase: 'paused',
+        mission: { ...ready.mission, status: 'active' },
+      } as RaceHudView)
+      expect(opener.hidden).toBe(false)
+
+      hud.update(finished)
+      expect(opener.hidden).toBe(true)
     } finally {
       if (previousDocument === undefined) {
         Reflect.deleteProperty(globalThis, 'document')

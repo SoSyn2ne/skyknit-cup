@@ -59,6 +59,7 @@ export interface RaceHudActions {
   readonly respawn: () => void
   readonly retry: () => void
   readonly nextMission: () => void
+  readonly openCharacterWorkshop: (opener: HTMLElement) => void
   readonly toggleMute: () => void
   readonly setMusicVolume: (volume: number) => void
   readonly setQuality: (quality: RaceQuality) => void
@@ -323,7 +324,20 @@ export function createRaceHud(
   const qualityStatus = document.createElement('small')
   qualityStatus.setAttribute('aria-live', 'polite')
   qualityLabel.append(qualityLabelText, quality, qualityStatus)
-  settings.append(mute, musicVolumeLabel, qualityLabel)
+  const characterWorkshop = createButton('캐릭터 꾸미기', () => {
+    actions.openCharacterWorkshop(characterWorkshop)
+  })
+  characterWorkshop.className = 'race-hud__character-workshop'
+  characterWorkshop.dataset.characterWorkshopOpen = 'true'
+  characterWorkshop.setAttribute('aria-label', '캐릭터 꾸미기')
+  characterWorkshop.title = '캐릭터 꾸미기'
+  characterWorkshop.hidden = true
+  settings.append(
+    mute,
+    musicVolumeLabel,
+    qualityLabel,
+    characterWorkshop,
+  )
   const actionsRow = document.createElement('div')
   actionsRow.className = 'race-hud__actions'
 
@@ -684,6 +698,8 @@ export function createRaceHud(
       qualityStatus.textContent = `현재 ${
         view.resolvedQuality === 'low' ? '낮음' : '높음'
       }`
+      characterWorkshop.hidden =
+        view.phase !== 'ready' && view.phase !== 'paused'
 
       if (view.phase === 'paused' || view.phase === 'finished') {
         panel.setAttribute('role', 'dialog')

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getCharacterWorkshopCameraFraming,
   getReadyCameraFraming,
   WIND_THREAD_VISUAL_SPEC,
 } from './createFlightSandbox'
@@ -29,6 +30,26 @@ describe('ready camera framing', () => {
   it('falls back to the desktop framing for invalid viewport dimensions', () => {
     expect(getReadyCameraFraming(0, Number.NaN)).toEqual(
       getReadyCameraFraming(1_440, 900),
+    )
+  })
+
+  it('keeps landscape framing but pitches portrait previews below the creature', () => {
+    expect(getCharacterWorkshopCameraFraming(844, 390)).toEqual(
+      getReadyCameraFraming(844, 390),
+    )
+
+    const portraitReady = getReadyCameraFraming(390, 844)
+    const portraitWorkshop = getCharacterWorkshopCameraFraming(390, 844)
+    const compactReady = getReadyCameraFraming(320, 568)
+    const compactWorkshop = getCharacterWorkshopCameraFraming(320, 568)
+
+    expect(portraitWorkshop.mode).toBe('portrait')
+    expect(compactWorkshop.mode).toBe('compact-portrait')
+    expect(portraitWorkshop.lookHeight).toBeLessThan(
+      portraitReady.lookHeight,
+    )
+    expect(compactWorkshop.lookHeight).toBeLessThan(
+      compactReady.lookHeight,
     )
   })
 })

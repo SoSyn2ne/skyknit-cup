@@ -1,0 +1,29 @@
+{
+  "scope": "m37-character-workshop",
+  "iteration": 4,
+  "generated_screenshot": "artifacts/browser-qa/m37-character-workshop/desktop-griffin-preview.png",
+  "reference_images": [
+    "artifacts/browser-qa/m36-progressive-missions-full/desktop-ready-character.png"
+  ],
+  "score": 93,
+  "threshold": 90,
+  "passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "The workshop layout matches the established dark translucent race panel and gold accent language.",
+    "The griffin and manta now keep clear body and wing separation while retaining their selected palette identity.",
+    "Landscape layouts leave the creature readable beside the workshop.",
+    "Portrait and minimum-height layouts now place the creature fully above the bottom sheet with a clear silhouette."
+  ],
+  "suggestions": [
+    "Keep the authored vertex-color multiplication in future palette work.",
+    "Keep the workshop-only camera mode isolated from race and exploration framing."
+  ],
+  "reasoning": "The panel, materials, and silhouettes are coherent across all five viewports, and the dedicated portrait framing now preserves a usable live preview without changing the flight camera.",
+  "next_actions": [
+    "Run the complete focused browser suite after the camera change.",
+    "Verify console, draw-call, and frame-rate budgets.",
+    "Run independent code and completion review."
+  ]
+}

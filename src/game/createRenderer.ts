@@ -98,6 +98,11 @@ import {
 } from './race/raceRuntime'
 import { createRaceHud, type RaceHud } from './ui/RaceHud'
 import {
+  createCharacterWorkshop,
+  type CharacterWorkshop,
+  type CharacterLoadout,
+} from './ui/CharacterWorkshop'
+import {
   createBoostGauge,
   isBoostGaugeVisible,
   type BoostGauge,
@@ -196,6 +201,7 @@ export interface FlightDebugSnapshot {
     readonly leagueResult: RaceState['leagueResult']
     readonly raceTop10Ms: readonly number[]
     readonly selectedMissionTop10: RaceState['persistent']['skyLeague']['missionTop10'][keyof RaceState['persistent']['skyLeague']['missionTop10']]
+    readonly characterLoadout: CharacterLoadout
     readonly ghost: {
       readonly recorderSampleCount: number
       readonly comparisonDurationMs: number | null
@@ -391,6 +397,7 @@ export function createRenderer(
   let pendingTouchInput: TouchInput | null = null
   let pendingTouchControls: TouchControls | null = null
   let pendingRaceHud: RaceHud | null = null
+  let pendingCharacterWorkshop: CharacterWorkshop | null = null
   let pendingExplorationHud: ExplorationHud | null = null
   let pendingBoostGauge: BoostGauge | null = null
   let pendingOpenWorld: OpenWorldVisual | null = null
@@ -485,6 +492,8 @@ export function createRenderer(
       camera,
       palette,
       renderQuality,
+      SKYKNOT_COURSE,
+      storedSettings.characterLoadout,
     )
     const openWorld = createOpenWorld(scene, {
       qualityTier: renderQuality.tier,
@@ -1151,7 +1160,7 @@ export function createRenderer(
     resourceNotice.setAttribute('role', 'status')
     resourceNotice.setAttribute('aria-live', 'polite')
     resourceNotice.textContent =
-      '정밀 모델을 불러오지 못해 기본 드래곤으로 비행합니다.'
+      '정밀 캐릭터 모델을 불러오지 못해 간소화 모델로 비행합니다.'
     resourceNotice.hidden = true
     host.append(resourceNotice)
     void sandbox.ready.then((source) => {
@@ -1162,6 +1171,36 @@ export function createRenderer(
     const touchControls = createTouchControls(host, touchInput)
     pendingTouchControls = touchControls
     let explorationHud: ExplorationHud | null = null
+    let characterPreviewRequestId = 0
+    const previewCharacter = (loadout: CharacterLoadout): void => {
+      const requestId = ++characterPreviewRequestId
+      resourceNotice.hidden = true
+      void sandbox.setCharacterLoadout(loadout).then((source) => {
+        if (disposed || requestId !== characterPreviewRequestId) return
+        resourceNotice.textContent =
+          source === 'fallback'
+            ? '선택한 모델을 불러오지 못해 현재 캐릭터를 유지합니다.'
+            : ''
+        resourceNotice.hidden = source !== 'fallback'
+      })
+    }
+    const characterWorkshop = createCharacterWorkshop(host, {
+      preview: previewCharacter,
+      apply: (loadout) => {
+        raceState = transitionRace(raceState, {
+          type: 'SET_CHARACTER_LOADOUT',
+          loadout,
+        })
+        savePersistentSettings()
+        sandbox.setCharacterPreviewActive(false)
+        if (pendingRaceHud !== null) pendingRaceHud.element.hidden = false
+      },
+      cancel: () => {
+        sandbox.setCharacterPreviewActive(false)
+        if (pendingRaceHud !== null) pendingRaceHud.element.hidden = false
+      },
+    })
+    pendingCharacterWorkshop = characterWorkshop
     const raceHud = createRaceHud(host, {
       start: () => {
         gameMode = 'race'
@@ -1234,6 +1273,18 @@ export function createRenderer(
           clearRaceGhostAttempt()
           resetFlight()
         }
+      },
+      openCharacterWorkshop: (opener) => {
+        if (raceState.phase !== 'ready' && raceState.phase !== 'paused') {
+          return
+        }
+        clearInputs()
+        sandbox.setCharacterPreviewActive(true)
+        if (pendingRaceHud !== null) pendingRaceHud.element.hidden = true
+        characterWorkshop.open(
+          raceState.persistent.characterLoadout,
+          opener,
+        )
       },
       toggleMute,
       setMusicVolume,
@@ -2073,6 +2124,9 @@ export function createRenderer(
                   raceState.persistent.skyLeague.missionTop10[
                     raceState.mission.selectedMissionId
                   ]?.map((entry) => ({ ...entry })) ?? [],
+                characterLoadout: {
+                  ...raceState.persistent.characterLoadout,
+                },
                 ghost: {
                   recorderSampleCount:
                     raceGhostRecorder?.samples.length ?? 0,
@@ -2378,6 +2432,7 @@ export function createRenderer(
         if (gameMode === 'explore') syncExplorationPersistence()
         keyboardInput.dispose()
         touchControls.dispose()
+        characterWorkshop.dispose()
         raceHud.dispose()
         explorationHud?.dispose()
         boostGauge.dispose()
@@ -2413,6 +2468,7 @@ export function createRenderer(
       pendingTouchInput?.dispose()
     }
     pendingRaceHud?.dispose()
+    pendingCharacterWorkshop?.dispose()
     pendingExplorationHud?.dispose()
     pendingBoostGauge?.dispose()
     pendingOpenWorld?.dispose()
