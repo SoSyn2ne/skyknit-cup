@@ -18,6 +18,8 @@ import {
   GHOST_DRAGON_VISUAL_SPEC,
   type DragonPalette,
 } from './createDragon'
+import { createInitialFlightState } from '../flight/flightModel'
+import type { DragonPoseState } from './dragonPose'
 
 const PALETTE: DragonPalette = {
   ink: '#171820',
@@ -32,17 +34,30 @@ const DEFAULT_LOADOUT = {
   accessoryId: 'none',
 } as const
 
-const GRIFFIN_LOADOUT = {
-  characterId: 'storm-griffin',
+const PHOENIX_LOADOUT = {
+  characterId: 'ember-phoenix',
   paletteId: 'moonlight',
   accessoryId: 'wind-goggles',
 } as const
 
-const MANTA_LOADOUT = {
-  characterId: 'cloud-manta',
+const WHITE_TIGER_LOADOUT = {
+  characterId: 'storm-white-tiger',
   paletteId: 'storm',
   accessoryId: 'festival-ribbon',
 } as const
+
+const GUARDIAN_TEST_POSE = {
+  shoulderBankRadians: 0.16,
+  bodyBankRadians: 0.11,
+  headPitchRadians: 0.3,
+  wingFoldRadians: 0.1,
+  wingFlapRadians: 0.2,
+  tailYawRadians: [0.2, 0.16, 0.12, 0.08, 0.04],
+  recoilRadians: 0,
+  breathScale: 1.02,
+  blinkAmount: 0,
+  jawOpenRadians: 0.08,
+} satisfies DragonPoseState
 
 function createValidDragonAsset(): THREE.Group {
   const scene = new THREE.Group()
@@ -283,7 +298,7 @@ describe('Sky League ghost dragon appearance', () => {
   })
 })
 
-describe('Milestone 37 character visual contract', () => {
+describe('Milestone 38 guardian visual contract', () => {
   beforeEach(() => {
     loaderMock.loadAsync.mockReset()
     vi.stubGlobal('window', { location: { search: '' } })
@@ -301,10 +316,10 @@ describe('Milestone 37 character visual contract', () => {
     const dragons = [
       createDragon(PALETTE, { loadout: DEFAULT_LOADOUT }),
       createDragon(PALETTE, {
-        loadout: { ...GRIFFIN_LOADOUT, accessoryId: 'none' },
+        loadout: { ...PHOENIX_LOADOUT, accessoryId: 'none' },
       }),
       createDragon(PALETTE, {
-        loadout: { ...MANTA_LOADOUT, accessoryId: 'none' },
+        loadout: { ...WHITE_TIGER_LOADOUT, accessoryId: 'none' },
       }),
     ]
 
@@ -315,8 +330,8 @@ describe('Milestone 37 character visual contract', () => {
 
     expect(requestedUrls).toEqual([
       expect.stringMatching(/assets\/models\/characters\/skyknit-dragon\.glb$/),
-      expect.stringMatching(/assets\/models\/characters\/skyknit-griffin\.glb$/),
-      expect.stringMatching(/assets\/models\/characters\/skyknit-manta\.glb$/),
+      expect.stringMatching(/assets\/models\/characters\/skyknit-phoenix\.glb$/),
+      expect.stringMatching(/assets\/models\/characters\/skyknit-white-tiger\.glb$/),
     ])
     expect(new Set(requestedUrls).size).toBe(3)
   })
@@ -387,6 +402,110 @@ describe('Milestone 37 character visual contract', () => {
     expect(sourceDisposals).toEqual({ body: 1, wing: 1, glow: 1 })
   })
 
+  it('preserves the white tiger fur identity when applying a palette', async () => {
+    const asset = createRoleCharacterAsset()
+    asset.sourceMaterials.body.color.set('#f2f2ee')
+    loaderMock.loadAsync.mockResolvedValue({ scene: asset.scene })
+
+    const tiger = createDragon(PALETTE, {
+      loadout: {
+        characterId: 'storm-white-tiger',
+        paletteId: 'sunrise',
+        accessoryId: 'none',
+      },
+    })
+
+    await expect(tiger.ready).resolves.toBe('glb')
+    const body = tiger.movementRoot.getObjectByName(
+      'Dragon_Body',
+    ) as THREE.Mesh
+    const material = body.material as THREE.MeshStandardMaterial
+    const expected = new THREE.Color('#f2f2ee').lerp(
+      new THREE.Color('#d94a32'),
+      0.18,
+    )
+    expect(material.color.r).toBeCloseTo(expected.r, 5)
+    expect(material.color.g).toBeCloseTo(expected.g, 5)
+    expect(material.color.b).toBeCloseTo(expected.b, 5)
+  })
+
+  it('applies species motion profiles without changing the shared flight state', async () => {
+    loaderMock.loadAsync.mockImplementation(async () => ({
+      scene: createValidDragonAsset(),
+    }))
+    const flight = createInitialFlightState({
+      position: { x: 7, y: 11, z: -3 },
+      headingRadians: 0.4,
+    })
+    const flightBefore = structuredClone(flight)
+    const dragon = createDragon(PALETTE, { loadout: DEFAULT_LOADOUT })
+    const phoenix = createDragon(PALETTE, {
+      loadout: { ...PHOENIX_LOADOUT, accessoryId: 'none' },
+    })
+    const tiger = createDragon(PALETTE, {
+      loadout: { ...WHITE_TIGER_LOADOUT, accessoryId: 'none' },
+    })
+
+    await Promise.all([dragon.ready, phoenix.ready, tiger.ready])
+    dragon.update(flight, GUARDIAN_TEST_POSE)
+    phoenix.update(flight, GUARDIAN_TEST_POSE)
+    tiger.update(flight, GUARDIAN_TEST_POSE)
+
+    const dragonWing = dragon.movementRoot.getObjectByName('WingRig_L')
+    const phoenixWing = phoenix.movementRoot.getObjectByName('WingRig_L')
+    const tigerWing = tiger.movementRoot.getObjectByName('WingRig_L')
+    const dragonHead = dragon.movementRoot.getObjectByName('HeadRig')
+    const phoenixHead = phoenix.movementRoot.getObjectByName('HeadRig')
+    const tigerHead = tiger.movementRoot.getObjectByName('HeadRig')
+    const dragonTail = dragon.movementRoot.getObjectByName('TailRig_1')
+    const phoenixTail = phoenix.movementRoot.getObjectByName('TailRig_1')
+    const tigerTail = tiger.movementRoot.getObjectByName('TailRig_1')
+    const dragonPoseRoot = dragon.movementRoot.getObjectByName(
+      'M3_DragonPoseRoot',
+    )
+    const phoenixPoseRoot = phoenix.movementRoot.getObjectByName(
+      'M3_DragonPoseRoot',
+    )
+    const tigerPoseRoot = tiger.movementRoot.getObjectByName(
+      'M3_DragonPoseRoot',
+    )
+    const dragonBody = dragon.movementRoot.getObjectByName('DragonRoot')
+    const phoenixBody = phoenix.movementRoot.getObjectByName('DragonRoot')
+    const tigerBody = tiger.movementRoot.getObjectByName('DragonRoot')
+
+    expect(dragonWing?.rotation.z).toBeCloseTo(0.3, 5)
+    expect(phoenixWing?.rotation.z).toBeCloseTo(0.318, 5)
+    expect(tigerWing?.rotation.z).toBeCloseTo(0.274, 5)
+    expect(dragonHead?.rotation.x).toBeCloseTo(0.3, 5)
+    expect(phoenixHead?.rotation.x).toBeCloseTo(0.24, 5)
+    expect(tigerHead?.rotation.x).toBeCloseTo(0.18, 5)
+    expect(dragonTail?.rotation.y).toBeCloseTo(0.2, 5)
+    expect(phoenixTail?.rotation.y).toBeCloseTo(0.25, 5)
+    expect(tigerTail?.rotation.y).toBeCloseTo(0.18, 5)
+    expect(dragonPoseRoot?.position.y).toBeCloseTo(0.016, 5)
+    expect(phoenixPoseRoot?.position.y).toBeCloseTo(0.0072, 5)
+    expect(tigerPoseRoot?.position.y).toBeCloseTo(0.00288, 5)
+    expect(dragonPoseRoot?.scale.y).toBeCloseTo(1.02, 5)
+    expect(phoenixPoseRoot?.scale.y).toBeCloseTo(1.0156, 5)
+    expect(tigerPoseRoot?.scale.y).toBeCloseTo(1.008, 5)
+    expect(
+      (dragonPoseRoot?.rotation.z ?? 0) +
+        (dragonBody?.rotation.z ?? 0),
+    ).toBeCloseTo(0.11, 5)
+    expect(
+      (phoenixPoseRoot?.rotation.z ?? 0) +
+        (phoenixBody?.rotation.z ?? 0),
+    ).toBeCloseTo(0.099, 5)
+    expect(
+      (tigerPoseRoot?.rotation.z ?? 0) +
+        (tigerBody?.rotation.z ?? 0),
+    ).toBeCloseTo(0.0495, 5)
+    expect(dragon.movementRoot.position.toArray()).toEqual([7, 11, -3])
+    expect(phoenix.movementRoot.position.toArray()).toEqual([7, 11, -3])
+    expect(tiger.movementRoot.position.toArray()).toEqual([7, 11, -3])
+    expect(flight).toEqual(flightBefore)
+  })
+
   it('loads no accessory asset for the none selection', async () => {
     loaderMock.loadAsync.mockResolvedValue({
       scene: createValidDragonAsset(),
@@ -411,7 +530,7 @@ describe('Milestone 37 character visual contract', () => {
         : createValidDragonAsset(),
     }))
 
-    const dragon = createDragon(PALETTE, { loadout: GRIFFIN_LOADOUT })
+    const dragon = createDragon(PALETTE, { loadout: PHOENIX_LOADOUT })
 
     await expect(dragon.ready).resolves.toBe('glb')
     const goggles = dragon.movementRoot.getObjectByName(
@@ -433,7 +552,7 @@ describe('Milestone 37 character visual contract', () => {
         : createValidDragonAsset(),
     }))
 
-    const dragon = createDragon(PALETTE, { loadout: MANTA_LOADOUT })
+    const dragon = createDragon(PALETTE, { loadout: WHITE_TIGER_LOADOUT })
 
     await expect(dragon.ready).resolves.toBe('glb')
     const ribbon = dragon.movementRoot.getObjectByName(
@@ -457,11 +576,11 @@ describe('Milestone 37 character visual contract', () => {
         : createValidDragonAsset(),
     }))
 
-    const dragon = createDragon(PALETTE, { loadout: GRIFFIN_LOADOUT })
+    const dragon = createDragon(PALETTE, { loadout: PHOENIX_LOADOUT })
 
     await expect(dragon.ready).resolves.toBe('glb')
     expect(dragon.debugSnapshot()).toMatchObject({
-      loadout: GRIFFIN_LOADOUT,
+      loadout: PHOENIX_LOADOUT,
       source: 'glb',
     })
   })

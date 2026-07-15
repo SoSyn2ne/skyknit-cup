@@ -44,7 +44,7 @@ function makeState(phase: RacePhase): RaceState {
       musicVolume: 0.35,
       quality: 'low',
       characterLoadout: {
-        characterId: 'storm-griffin',
+        characterId: 'ember-phoenix',
         paletteId: 'moonlight',
         accessoryId: 'festival-ribbon',
       },

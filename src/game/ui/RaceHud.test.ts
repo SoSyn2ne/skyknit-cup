@@ -313,6 +313,7 @@ describe('Sky League HUD formatting', () => {
         retry: noop,
         nextMission: noop,
         openCharacterWorkshop: noop,
+        openStoryPrologue: noop,
         toggleMute: noop,
         setMusicVolume: noop,
         setQuality: noop,
@@ -390,6 +391,7 @@ describe('Sky League HUD formatting', () => {
         retry: noop,
         nextMission: noop,
         openCharacterWorkshop: noop,
+        openStoryPrologue: noop,
         toggleMute: noop,
         setMusicVolume: noop,
         setQuality: noop,
@@ -483,6 +485,7 @@ describe('Sky League HUD formatting', () => {
         retry: noop,
         nextMission: noop,
         openCharacterWorkshop: noop,
+        openStoryPrologue: noop,
         toggleMute: noop,
         setMusicVolume: noop,
         setQuality: noop,
@@ -564,6 +567,7 @@ describe('Sky League HUD formatting', () => {
         openCharacterWorkshop: () => {
           openCalls += 1
         },
+        openStoryPrologue: noop,
         toggleMute: noop,
         setMusicVolume: noop,
         setQuality: noop,
@@ -601,6 +605,97 @@ describe('Sky League HUD formatting', () => {
         mission: { ...ready.mission, status: 'active' },
       } as RaceHudView)
       expect(opener.hidden).toBe(false)
+
+      hud.update(finished)
+      expect(opener.hidden).toBe(true)
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, 'document')
+      } else {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      }
+    }
+  })
+
+  it('offers the opening story in ready and pause without replacing the pause flow', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    )
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: () => new TestElement(),
+      } as unknown as Document,
+    })
+
+    try {
+      const host = new TestElement()
+      let openCalls = 0
+      const noop = (): void => {}
+      const hud = createRaceHud(host as unknown as HTMLElement, {
+        start: noop,
+        startExplore: noop,
+        selectMission: noop,
+        returnToMissionSelection: noop,
+        resume: noop,
+        restart: noop,
+        respawn: noop,
+        retry: noop,
+        nextMission: noop,
+        openCharacterWorkshop: noop,
+        openStoryPrologue: () => {
+          openCalls += 1
+        },
+        toggleMute: noop,
+        setMusicVolume: noop,
+        setQuality: noop,
+      })
+      const finished = createFinishedRaceHudView()
+      const ready: RaceHudView = {
+        ...finished,
+        phase: 'ready',
+        finalElapsedMs: null,
+        mission: {
+          ...finished.mission,
+          selectedMissionId: 'first-skyknot',
+          status: 'idle',
+          result: null,
+        },
+        missionGrades: {},
+      }
+
+      hud.update(ready)
+      const root = hud.element as unknown as TestElement
+      const opener = findByDataset(root, 'storyPrologueOpen', 'true')
+      const storyHook = findByClass(root, 'race-hud__story-hook')
+      const liveDelta = findByDataset(root, 'raceDelta', 'true')
+
+      expect(storyHook.textContent).toBe(
+        '끊어진 첫 매듭을 잇고, 세 군도의 새벽을 되돌리세요.',
+      )
+      expect(storyHook.hidden).toBe(false)
+      expect(opener.textContent).toBe('서막 보기')
+      expect(opener.attributes.get('aria-label')).toBe(
+        '첫 하늘매듭 서막 보기',
+      )
+      expect(opener.hidden).toBe(false)
+      expect(liveDelta.textContent).toBe('메아리 없음')
+      expect(liveDelta.attributes.get('aria-label')).toBe(
+        '비행의 메아리와 기록 차이',
+      )
+      opener.dispatch('click')
+      expect(openCalls).toBe(1)
+
+      hud.update({
+        ...ready,
+        phase: 'paused',
+        mission: { ...ready.mission, status: 'active' },
+      } as RaceHudView)
+      expect(opener.hidden).toBe(false)
+      expect(storyHook.hidden).toBe(true)
+      expect(findByText(root, '계속 날기').hidden).toBe(false)
+      expect(findByText(root, '미션 변경')).toBeDefined()
 
       hud.update(finished)
       expect(opener.hidden).toBe(true)

@@ -103,6 +103,10 @@ import {
   type CharacterLoadout,
 } from './ui/CharacterWorkshop'
 import {
+  createStoryPrologue,
+  type StoryPrologue,
+} from './ui/StoryPrologue'
+import {
   createBoostGauge,
   isBoostGaugeVisible,
   type BoostGauge,
@@ -398,6 +402,7 @@ export function createRenderer(
   let pendingTouchControls: TouchControls | null = null
   let pendingRaceHud: RaceHud | null = null
   let pendingCharacterWorkshop: CharacterWorkshop | null = null
+  let pendingStoryPrologue: StoryPrologue | null = null
   let pendingExplorationHud: ExplorationHud | null = null
   let pendingBoostGauge: BoostGauge | null = null
   let pendingOpenWorld: OpenWorldVisual | null = null
@@ -1206,6 +1211,12 @@ export function createRenderer(
       },
     })
     pendingCharacterWorkshop = characterWorkshop
+    const storyPrologue = createStoryPrologue(host, {
+      close: () => {
+        if (pendingRaceHud !== null) pendingRaceHud.element.hidden = false
+      },
+    })
+    pendingStoryPrologue = storyPrologue
     const raceHud = createRaceHud(host, {
       start: () => {
         gameMode = 'race'
@@ -1290,6 +1301,14 @@ export function createRenderer(
           raceState.persistent.characterLoadout,
           opener,
         )
+      },
+      openStoryPrologue: (opener) => {
+        if (raceState.phase !== 'ready' && raceState.phase !== 'paused') {
+          return
+        }
+        clearInputs()
+        if (pendingRaceHud !== null) pendingRaceHud.element.hidden = true
+        storyPrologue.open(opener)
       },
       toggleMute,
       setMusicVolume,
@@ -2438,6 +2457,7 @@ export function createRenderer(
         keyboardInput.dispose()
         touchControls.dispose()
         characterWorkshop.dispose()
+        storyPrologue.dispose()
         raceHud.dispose()
         explorationHud?.dispose()
         boostGauge.dispose()
@@ -2474,6 +2494,7 @@ export function createRenderer(
     }
     pendingRaceHud?.dispose()
     pendingCharacterWorkshop?.dispose()
+    pendingStoryPrologue?.dispose()
     pendingExplorationHud?.dispose()
     pendingBoostGauge?.dispose()
     pendingOpenWorld?.dispose()

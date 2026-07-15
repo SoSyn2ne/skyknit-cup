@@ -60,6 +60,7 @@ export interface RaceHudActions {
   readonly retry: () => void
   readonly nextMission: () => void
   readonly openCharacterWorkshop: (opener: HTMLElement) => void
+  readonly openStoryPrologue: (opener: HTMLElement) => void
   readonly toggleMute: () => void
   readonly setMusicVolume: (volume: number) => void
   readonly setQuality: (quality: RaceQuality) => void
@@ -188,7 +189,8 @@ export function createRaceHud(
   const liveDelta = document.createElement('small')
   liveDelta.className = 'race-hud__delta'
   liveDelta.dataset.raceDelta = 'true'
-  liveDelta.textContent = '기준 없음'
+  liveDelta.setAttribute('aria-label', '비행의 메아리와 기록 차이')
+  liveDelta.textContent = '메아리 없음'
   timerBlock.append(timerLabel, timer, liveDelta)
 
   const gateBlock = document.createElement('div')
@@ -227,8 +229,24 @@ export function createRaceHud(
   const title = document.createElement('h1')
   title.id = 'race-hud-title'
   panel.setAttribute('aria-labelledby', title.id)
+  const storyPrologue = createButton('서막 보기', () => {
+    actions.openStoryPrologue(storyPrologue)
+  })
+  storyPrologue.className = 'race-hud__story-open'
+  storyPrologue.dataset.storyPrologueOpen = 'true'
+  storyPrologue.setAttribute('aria-label', '첫 하늘매듭 서막 보기')
+  storyPrologue.title = '서막 · 끊어진 첫 매듭'
+  storyPrologue.hidden = true
+  const heading = document.createElement('div')
+  heading.className = 'race-hud__heading'
+  heading.append(title, storyPrologue)
   const detail = document.createElement('p')
   detail.className = 'race-hud__detail'
+  const storyHook = document.createElement('p')
+  storyHook.className = 'race-hud__story-hook'
+  storyHook.textContent =
+    '끊어진 첫 매듭을 잇고, 세 군도의 새벽을 되돌리세요.'
+  storyHook.hidden = true
   const missionPicker = document.createElement('div')
   missionPicker.className = 'race-hud__mission-picker'
   const missionLabel = document.createElement('label')
@@ -394,8 +412,9 @@ export function createRaceHud(
   )
   panel.append(
     eyebrow,
-    title,
+    heading,
     detail,
+    storyHook,
     missionPicker,
     settings,
     result,
@@ -636,7 +655,7 @@ export function createRaceHud(
         view.phase !== 'countdown' && view.phase !== 'racing'
       liveDelta.textContent =
         view.liveDeltaMs === null
-          ? '기준 없음'
+          ? '메아리 없음'
           : formatGhostDelta(view.liveDeltaMs)
       gate.textContent = `${Math.min(
         view.nextCheckpointIndex,
@@ -700,6 +719,9 @@ export function createRaceHud(
       }`
       characterWorkshop.hidden =
         view.phase !== 'ready' && view.phase !== 'paused'
+      storyPrologue.hidden =
+        view.phase !== 'ready' && view.phase !== 'paused'
+      storyHook.hidden = view.phase !== 'ready'
 
       if (view.phase === 'paused' || view.phase === 'finished') {
         panel.setAttribute('role', 'dialog')

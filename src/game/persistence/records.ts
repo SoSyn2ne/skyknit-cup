@@ -81,8 +81,10 @@ export interface CoinCompetitionResult {
   readonly placement: SkyLeagueRecordResult
 }
 
+const SETTINGS_VERSION = 10
+
 interface StoredSettings extends GameSettings {
-  readonly version: 9
+  readonly version: typeof SETTINGS_VERSION
 }
 
 interface LegacyStoredRecord {
@@ -508,6 +510,24 @@ function characterLoadoutMatches(
   )
 }
 
+function isSupportedSettingsVersion(value: unknown): value is
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6
+  | 7
+  | 8
+  | 9
+  | 10 {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 2 &&
+    value <= SETTINGS_VERSION
+  )
+}
+
 function parseSettings(
   raw: string,
 ): { readonly settings: GameSettings; readonly shouldMigrate: boolean } | null {
@@ -516,14 +536,7 @@ function parseSettings(
     typeof parsed !== 'object' ||
     parsed === null ||
     !('version' in parsed) ||
-    (parsed.version !== 2 &&
-      parsed.version !== 3 &&
-      parsed.version !== 4 &&
-      parsed.version !== 5 &&
-      parsed.version !== 6 &&
-      parsed.version !== 7 &&
-      parsed.version !== 8 &&
-      parsed.version !== 9)
+    !isSupportedSettingsVersion(parsed.version)
   ) {
     return null
   }
@@ -606,7 +619,7 @@ function parseSettings(
       exploration,
     },
     shouldMigrate:
-      parsed.version !== 9 ||
+      parsed.version !== SETTINGS_VERSION ||
       !characterLoadoutMatches(rawCharacterLoadout, characterLoadout) ||
       !hasCanonicalFestivalDiscoveries(rawExploration, exploration) ||
       !isCanonicalSkyLeagueRecords(rawSkyLeague) ||
@@ -717,7 +730,7 @@ export function saveSettings(
   if (!isValidSettings(settings)) return false
 
   const stored: StoredSettings = {
-    version: 9,
+    version: SETTINGS_VERSION,
     ...settings,
     characterLoadout: { ...settings.characterLoadout },
     missionGrades: { ...settings.missionGrades },

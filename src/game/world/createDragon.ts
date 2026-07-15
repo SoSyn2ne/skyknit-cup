@@ -8,6 +8,7 @@ import {
   normalizeCharacterLoadout,
   type CharacterAccessoryDefinition,
   type CharacterLoadout,
+  type CharacterMotionProfile,
   type CharacterPaletteDefinition,
 } from '../customization/characterCatalog'
 import {
@@ -79,6 +80,52 @@ interface MaterialState {
   readonly emissiveIntensity: number
 }
 
+interface GuardianMotionProfile {
+  readonly wingFlapScale: number
+  readonly wingFoldScale: number
+  readonly headPitchScale: number
+  readonly tailYawScale: number
+  readonly jawScale: number
+  readonly bodyBobScale: number
+  readonly breathScale: number
+  readonly bankScale: number
+}
+
+const GUARDIAN_MOTION_PROFILES: Readonly<
+  Record<CharacterMotionProfile, GuardianMotionProfile>
+> = Object.freeze({
+  dragon: Object.freeze({
+    wingFlapScale: 1,
+    wingFoldScale: 1,
+    headPitchScale: 1,
+    tailYawScale: 1,
+    jawScale: 1,
+    bodyBobScale: 1,
+    breathScale: 1,
+    bankScale: 1,
+  }),
+  avian: Object.freeze({
+    wingFlapScale: 1.18,
+    wingFoldScale: 0.82,
+    headPitchScale: 0.8,
+    tailYawScale: 1.25,
+    jawScale: 0.65,
+    bodyBobScale: 0.45,
+    breathScale: 0.78,
+    bankScale: 0.9,
+  }),
+  feline: Object.freeze({
+    wingFlapScale: 0.92,
+    wingFoldScale: 0.9,
+    headPitchScale: 0.6,
+    tailYawScale: 0.9,
+    jawScale: 0.8,
+    bodyBobScale: 0.18,
+    breathScale: 0.4,
+    bankScale: 0.45,
+  }),
+})
+
 function captureMaterialStates(
   materials: Iterable<THREE.MeshStandardMaterial>,
 ): readonly MaterialState[] {
@@ -107,6 +154,7 @@ function getCharacterMaterialRole(
 function setTintableMaterialColor(
   material: THREE.Material,
   color: THREE.ColorRepresentation,
+  strength = 1,
 ): void {
   if (
     material instanceof THREE.MeshStandardMaterial ||
@@ -116,13 +164,14 @@ function setTintableMaterialColor(
     material instanceof THREE.MeshToonMaterial ||
     material instanceof THREE.MeshMatcapMaterial
   ) {
-    material.color.set(color)
+    material.color.lerp(new THREE.Color(color), strength)
   }
 }
 
 function applyCharacterPalette(
   root: THREE.Object3D,
   palette: CharacterPaletteDefinition,
+  bodyTintStrength: number,
 ): void {
   const replacements = new Map<
     THREE.Material,
@@ -150,7 +199,11 @@ function applyCharacterPalette(
       const replacement = source.clone()
       replacement.name = source.name
       const color = palette[role]
-      setTintableMaterialColor(replacement, color)
+      setTintableMaterialColor(
+        replacement,
+        color,
+        role === 'body' ? bodyTintStrength : 1,
+      )
       if (
         role === 'glow' &&
         (replacement instanceof THREE.MeshStandardMaterial ||
@@ -520,6 +573,7 @@ export function createDragon(
   const accessory =
     CHARACTER_ACCESSORIES.find((entry) => entry.id === loadout.accessoryId) ??
     CHARACTER_ACCESSORIES[0]
+  const motionProfile = GUARDIAN_MOTION_PROFILES[character.motionProfile]
   const isGhost = appearance === 'ghost'
   const movementRoot = new THREE.Group()
   movementRoot.name = isGhost
@@ -562,7 +616,11 @@ export function createDragon(
         return 'fallback'
       }
 
-      applyCharacterPalette(characterAsset, characterPalette)
+      applyCharacterPalette(
+        characterAsset,
+        characterPalette,
+        character.bodyTintStrength,
+      )
 
       if (accessory.modelPath !== null) {
         const accessoryGltf = await loader.loadAsync(
@@ -632,23 +690,36 @@ export function createDragon(
       )
       movementRoot.rotation.y = -flight.headingRadians
       poseRoot.rotation.x = getVisualPitchRadians(flight) + pose.recoilRadians
-      poseRoot.rotation.z = pose.shoulderBankRadians
-      poseRoot.scale.set(1, pose.breathScale, 1)
+      poseRoot.position.y =
+        pose.wingFlapRadians * 0.08 * motionProfile.bodyBobScale
+      poseRoot.rotation.z =
+        pose.shoulderBankRadians * motionProfile.bankScale
+      poseRoot.scale.set(
+        1,
+        1 + (pose.breathScale - 1) * motionProfile.breathScale,
+        1,
+      )
       rig.bodyRoot.rotation.z =
-        pose.bodyBankRadians - pose.shoulderBankRadians
-      rig.head.rotation.x = pose.headPitchRadians
+        (pose.bodyBankRadians - pose.shoulderBankRadians) *
+        motionProfile.bankScale
+      rig.head.rotation.x =
+        pose.headPitchRadians * motionProfile.headPitchScale
       if (rig.jaw !== null) {
-        rig.jaw.rotation.x = pose.jawOpenRadians
+        rig.jaw.rotation.x = pose.jawOpenRadians * motionProfile.jawScale
       }
       for (const eye of rig.eyes) {
         eye.scale.y = Math.max(0.08, 1 - pose.blinkAmount * 0.92)
       }
 
-      rig.leftWing.rotation.z = pose.wingFlapRadians + pose.wingFoldRadians
-      rig.rightWing.rotation.z = -pose.wingFlapRadians - pose.wingFoldRadians
+      const wingRotation =
+        pose.wingFlapRadians * motionProfile.wingFlapScale +
+        pose.wingFoldRadians * motionProfile.wingFoldScale
+      rig.leftWing.rotation.z = wingRotation
+      rig.rightWing.rotation.z = -wingRotation
 
       for (const [index, tail] of rig.tail.entries()) {
-        tail.rotation.y = pose.tailYawRadians[index] ?? 0
+        tail.rotation.y =
+          (pose.tailYawRadians[index] ?? 0) * motionProfile.tailYawScale
       }
 
       const feedbackActive = pose.recoilRadians < -0.01

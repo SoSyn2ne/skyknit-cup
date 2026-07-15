@@ -1,7 +1,7 @@
 export const CHARACTER_IDS = Object.freeze([
   'sunrise-dragon',
-  'storm-griffin',
-  'cloud-manta',
+  'ember-phoenix',
+  'storm-white-tiger',
 ] as const)
 
 export const CHARACTER_PALETTE_IDS = Object.freeze([
@@ -20,6 +20,7 @@ export type CharacterId = (typeof CHARACTER_IDS)[number]
 export type CharacterPaletteId = (typeof CHARACTER_PALETTE_IDS)[number]
 export type CharacterAccessoryId =
   (typeof CHARACTER_ACCESSORY_IDS)[number]
+export type CharacterMotionProfile = 'dragon' | 'avian' | 'feline'
 
 export interface CharacterLoadout {
   readonly characterId: CharacterId
@@ -32,6 +33,8 @@ export interface CharacterDefinition {
   readonly label: string
   readonly description: string
   readonly modelPath: string
+  readonly motionProfile: CharacterMotionProfile
+  readonly bodyTintStrength: number
 }
 
 export interface CharacterPaletteDefinition {
@@ -58,20 +61,29 @@ export const CHARACTER_CATALOG: readonly CharacterDefinition[] =
     {
       id: 'sunrise-dragon',
       label: '해뜰녘 드래곤',
-      description: '힘찬 날개와 긴 꼬리를 지닌 하늘매듭배의 수호자',
+      description:
+        '첫 하늘매듭의 길을 기억하고 잠든 바람 관문을 깨우는 새벽의 수호자',
       modelPath: 'assets/models/characters/skyknit-dragon.glb',
+      motionProfile: 'dragon',
+      bodyTintStrength: 1,
     },
     {
-      id: 'storm-griffin',
-      label: '폭풍 그리핀',
-      description: '날카로운 부리와 깃털 날개가 돋보이는 바람 사냥꾼',
-      modelPath: 'assets/models/characters/skyknit-griffin.glb',
+      id: 'ember-phoenix',
+      label: '잿불 봉황',
+      description:
+        '구름 유적의 잿불에서 되살아나 흩어진 햇실 조각에 온기를 되돌리는 수호자',
+      modelPath: 'assets/models/characters/skyknit-phoenix.glb',
+      motionProfile: 'avian',
+      bodyTintStrength: 0.55,
     },
     {
-      id: 'cloud-manta',
-      label: '구름 하늘가오리',
-      description: '넓은 지느러미로 구름 사이를 미끄러지는 비행 생명체',
-      modelPath: 'assets/models/characters/skyknit-manta.glb',
+      id: 'storm-white-tiger',
+      label: '폭풍 백호',
+      description:
+        '큰 깃털 날개로 바람 협곡의 폭풍을 가르며 끊어진 매듭을 단단히 조이는 수호자',
+      modelPath: 'assets/models/characters/skyknit-white-tiger.glb',
+      motionProfile: 'feline',
+      bodyTintStrength: 0.18,
     },
   ])
 
@@ -131,6 +143,10 @@ export const DEFAULT_CHARACTER_LOADOUT: CharacterLoadout = Object.freeze({
 const CHARACTER_ID_SET = new Set<string>(CHARACTER_IDS)
 const PALETTE_ID_SET = new Set<string>(CHARACTER_PALETTE_IDS)
 const ACCESSORY_ID_SET = new Set<string>(CHARACTER_ACCESSORY_IDS)
+const LEGACY_CHARACTER_ID_REPLACEMENTS = Object.freeze({
+  'storm-griffin': 'ember-phoenix',
+  'cloud-manta': 'storm-white-tiger',
+} satisfies Readonly<Record<string, CharacterId>>)
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -152,6 +168,16 @@ export function isCharacterAccessoryId(
   return typeof value === 'string' && ACCESSORY_ID_SET.has(value)
 }
 
+function normalizeCharacterId(value: unknown): CharacterId {
+  if (isCharacterId(value)) return value
+  if (typeof value !== 'string') return DEFAULT_CHARACTER_LOADOUT.characterId
+  return (
+    LEGACY_CHARACTER_ID_REPLACEMENTS[
+      value as keyof typeof LEGACY_CHARACTER_ID_REPLACEMENTS
+    ] ?? DEFAULT_CHARACTER_LOADOUT.characterId
+  )
+}
+
 export function isCharacterLoadout(value: unknown): value is CharacterLoadout {
   return (
     isObjectRecord(value) &&
@@ -165,9 +191,7 @@ export function normalizeCharacterLoadout(value: unknown): CharacterLoadout {
   if (!isObjectRecord(value)) return DEFAULT_CHARACTER_LOADOUT
 
   return {
-    characterId: isCharacterId(value.characterId)
-      ? value.characterId
-      : DEFAULT_CHARACTER_LOADOUT.characterId,
+    characterId: normalizeCharacterId(value.characterId),
     paletteId: isCharacterPaletteId(value.paletteId)
       ? value.paletteId
       : DEFAULT_CHARACTER_LOADOUT.paletteId,

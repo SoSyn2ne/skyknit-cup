@@ -457,10 +457,53 @@ button {
   line-height: 1.15;
 }
 
+.race-hud__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.race-hud__heading h1 {
+  min-width: 0;
+}
+
+.race-hud__story-open {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--active) 54%, transparent);
+  border-radius: 6px;
+  color: var(--cloud);
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--rock) 72%, transparent);
+  cursor: pointer;
+}
+
+.race-hud__story-open:hover {
+  background: color-mix(in srgb, var(--rock) 48%, var(--active));
+}
+
+.race-hud__story-open:focus-visible {
+  outline: 3px solid var(--active);
+  outline-offset: 3px;
+}
+
 .race-hud__detail {
   margin: 12px 0 0;
   color: var(--sky-haze);
   line-height: 1.6;
+}
+
+.race-hud__story-hook {
+  margin: 10px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--active);
+  color: var(--cloud);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.45;
 }
 
 .race-hud__mission-picker {
@@ -678,6 +721,81 @@ button {
   outline-offset: 3px;
 }
 
+.story-prologue {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--ink) 64%, transparent);
+  pointer-events: auto;
+}
+
+.story-prologue__dialog {
+  width: min(620px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 26px;
+  border-left: 4px solid var(--active);
+  border-radius: 8px;
+  color: var(--cloud);
+  background: color-mix(in srgb, var(--ink) 94%, transparent);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 24%, transparent);
+}
+
+.story-prologue__eyebrow {
+  margin: 0 0 6px;
+  color: var(--active);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.story-prologue__dialog h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.2;
+}
+
+.story-prologue__story {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.story-prologue__story p {
+  margin: 0;
+  color: var(--sky-haze);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.story-prologue__dialog button {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 20px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--cloud) 54%, transparent);
+  border-radius: 6px;
+  color: var(--ink);
+  font-weight: 900;
+  background: var(--active);
+  cursor: pointer;
+}
+
+.story-prologue__dialog button:hover {
+  background: var(--wing-gold);
+}
+
+.story-prologue__dialog button:focus-visible {
+  outline: 3px solid var(--cloud);
+  outline-offset: 3px;
+}
+
 .character-workshop {
   position: absolute;
   z-index: 4;
@@ -720,6 +838,18 @@ button {
   color: var(--sky-haze);
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.character-workshop__guardian-description {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--active);
+  border-radius: 0 6px 6px 0;
+  color: var(--cloud);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.45;
+  background: color-mix(in srgb, var(--active) 10%, transparent);
 }
 
 .character-workshop__fields {
@@ -789,6 +919,21 @@ button {
 }
 
 @media (max-width: 600px) and (orientation: portrait) {
+  .story-prologue {
+    align-items: end;
+    padding: max(12px, env(safe-area-inset-top)) 0 0;
+  }
+
+  .story-prologue__dialog {
+    width: 100%;
+    padding: 20px max(16px, env(safe-area-inset-right))
+      max(20px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+    border-top: 4px solid var(--active);
+    border-left: 0;
+    border-radius: 10px 10px 0 0;
+  }
+
   .character-workshop {
     align-items: end;
     padding: max(8px, env(safe-area-inset-top)) 0 0;
@@ -811,6 +956,47 @@ button {
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
+  .story-prologue {
+    padding: max(8px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+
+  .story-prologue__dialog {
+    width: min(680px, 100%);
+    padding: 14px 18px;
+  }
+
+  .story-prologue__eyebrow {
+    margin-bottom: 2px;
+    font-size: 0.6875rem;
+  }
+
+  .story-prologue__dialog h2 {
+    font-size: 1.375rem;
+  }
+
+  .story-prologue__story {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+  }
+
+  .story-prologue__story p {
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+
+  .story-prologue__dialog button {
+    min-height: 44px;
+    margin-top: 12px;
+  }
+
+  .race-hud__story-hook {
+    display: none;
+  }
+
   .character-workshop {
     padding: max(8px, env(safe-area-inset-top))
       max(12px, env(safe-area-inset-right))
@@ -826,6 +1012,12 @@ button {
   .character-workshop__description {
     margin-top: 4px;
     font-size: 0.75rem;
+  }
+
+  .character-workshop__guardian-description {
+    margin-top: 6px;
+    padding: 6px 10px;
+    font-size: 0.6875rem;
   }
 
   .character-workshop__fields {

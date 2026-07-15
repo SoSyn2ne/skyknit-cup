@@ -546,7 +546,7 @@ describe('race state', () => {
     (phase) => {
       const state = makeState(phase)
       const loadout = {
-        characterId: 'cloud-manta' as const,
+        characterId: 'storm-white-tiger' as const,
         paletteId: 'moonlight' as const,
         accessoryId: 'festival-ribbon' as const,
       }
@@ -566,7 +566,7 @@ describe('race state', () => {
     const changed = transitionRace(state, {
       type: 'SET_CHARACTER_LOADOUT',
       loadout: {
-        characterId: 'storm-griffin',
+        characterId: 'ember-phoenix',
         paletteId: 'storm',
         accessoryId: 'wind-goggles',
       },
@@ -600,7 +600,7 @@ describe('race state', () => {
       transitionRace(state, {
         type: 'SET_CHARACTER_LOADOUT',
         loadout: {
-          characterId: 'storm-griffin',
+          characterId: 'ember-phoenix',
           paletteId: 'moonlight',
           accessoryId: 'wind-goggles',
         },

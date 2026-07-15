@@ -181,7 +181,7 @@ async function measure(
     localStorage.setItem(
       'skyknit-cup:settings',
       JSON.stringify({
-        version: 9,
+        version: 10,
         bestTimeMs: raceGhost.durationMs,
         muted,
         musicVolume: 0.35,
@@ -438,7 +438,7 @@ test('meets the 30 second desktop and mobile frame budgets', async ({
   expect(mobileExplore.ghostVisible).toBe(true)
 })
 
-test('keeps griffin and manta inside the 30 second character budgets', async ({
+test('keeps the phoenix and white tiger inside the 30 second guardian budgets', async ({
   browser,
 }) => {
   test.setTimeout(180_000)
@@ -446,12 +446,12 @@ test('keeps griffin and manta inside the 30 second character budgets', async ({
   const mobileViewport = [844, 390] as const
   const loadouts = [
     {
-      characterId: 'storm-griffin',
+      characterId: 'ember-phoenix',
       paletteId: 'moonlight',
       accessoryId: 'wind-goggles',
     },
     {
-      characterId: 'cloud-manta',
+      characterId: 'storm-white-tiger',
       paletteId: 'storm',
       accessoryId: 'festival-ribbon',
     },
@@ -498,7 +498,9 @@ test('keeps griffin and manta inside the 30 second character budgets', async ({
     expect(desktopHigh.medianFps).toBeGreaterThanOrEqual(55)
     expect(desktopHigh.minimumBucketFps).toBeGreaterThanOrEqual(50)
     expect(desktopHigh.drawCalls).toBeLessThanOrEqual(120)
+    expect(desktopHigh.triangles).toBeLessThanOrEqual(100_000)
     expect(mobileLow.medianFps).toBeGreaterThanOrEqual(30)
+    expect(mobileLow.triangles).toBeLessThanOrEqual(70_000)
     expect(desktopHigh.fixedSteps).toBeGreaterThanOrEqual(1_790)
     expect(desktopHigh.fixedSteps).toBeLessThanOrEqual(1_810)
     expect(mobileLow.fixedSteps).toBeGreaterThanOrEqual(1_790)

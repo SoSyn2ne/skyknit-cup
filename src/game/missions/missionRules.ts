@@ -43,32 +43,36 @@ export const MISSION_CATALOG: readonly MissionDefinition[] = [
   {
     id: 'first-skyknot',
     name: '첫 하늘매듭',
-    objective: '모든 바람 관문을 순서대로 통과해 완주하세요.',
+    objective: '잠든 바람 관문을 순서대로 깨워 첫 매듭의 길을 복원하세요.',
   },
   {
     id: 'boost-mastery',
     name: '돌풍 조율사',
-    objective: '돌풍을 세 번 이상 활성화하고 완주하세요.',
+    objective: '돌풍을 세 번 이상 일으켜 바람실에 힘을 더하고 완주하세요.',
   },
   {
     id: 'no-respawn',
     name: '끊기지 않는 매듭',
-    objective: '돌풍을 세 번 이상 활성화하고 리스폰 없이 완주하세요.',
+    objective:
+      '돌풍을 세 번 이상 일으키고 리스폰 없이 완주해 햇실 한 가닥을 끊김 없이 이으세요.',
   },
   {
     id: 'time-trial',
     name: '질풍 시간전',
-    objective: '돌풍 3회 이상, 리스폰 없이 3분 30초 안에 완주하세요.',
+    objective:
+      '햇실이 흐려지기 전, 돌풍 3회 이상과 무리스폰으로 3분 30초 안에 완주하세요.',
   },
   {
     id: 'clean-flight',
     name: '구름 한 점 없이',
-    objective: '시간·돌풍·무리스폰 조건을 지키며 충돌 없이 완주하세요.',
+    objective:
+      '시간·돌풍·무리스폰 조건을 지키고 충돌 없이 날아 햇실을 온전히 보존하세요.',
   },
   {
     id: 'golden-knot',
     name: '황금 하늘매듭',
-    objective: '3분 안에 충돌·리스폰 없이 돌풍을 5회 이상 쓰세요.',
+    objective:
+      '3분 안에 충돌·리스폰 없이 돌풍을 5회 이상 사용해 황금 매듭을 완성하세요.',
   },
 ]
 

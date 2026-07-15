@@ -204,7 +204,7 @@ describe('character workshop', () => {
     expect(findByText(root, '캐릭터 꾸미기')).toBeDefined()
     expect(findControlForLabel(root, '캐릭터 형태').children.map(
       (option) => option.value,
-    )).toEqual(['sunrise-dragon', 'storm-griffin', 'cloud-manta'])
+    )).toEqual(['sunrise-dragon', 'ember-phoenix', 'storm-white-tiger'])
     expect(findControlForLabel(root, '색상').children.map(
       (option) => option.value,
     )).toEqual(['sunrise', 'storm', 'moonlight'])
@@ -227,6 +227,33 @@ describe('character workshop', () => {
     expect(fakeDocument.activeElement).toBe(character)
   })
 
+  it('updates the guardian story while previewing a different silhouette', () => {
+    const { workshop, opener, preview, apply } = createWorkshopFixture()
+    workshop.open(committedLoadout, opener as unknown as HTMLElement)
+    const root = workshop.element as unknown as TestElement
+    const character = findControlForLabel(root, '캐릭터 형태')
+
+    const guardianDescription = findByText(
+      root,
+      '첫 하늘매듭의 길을 기억하고 잠든 바람 관문을 깨우는 새벽의 수호자',
+    )
+    expect(guardianDescription.attributes.get('aria-live')).toBe('polite')
+
+    character.value = 'ember-phoenix'
+    character.dispatch('change')
+
+    expect(findByText(
+      root,
+      '구름 유적의 잿불에서 되살아나 흩어진 햇실 조각에 온기를 되돌리는 수호자',
+    )).toBeDefined()
+    expect(preview).toHaveBeenCalledOnce()
+    expect(preview).toHaveBeenCalledWith({
+      ...committedLoadout,
+      characterId: 'ember-phoenix',
+    })
+    expect(apply).not.toHaveBeenCalled()
+  })
+
   it('previews the complete draft after each selector change', () => {
     const { workshop, opener, preview } = createWorkshopFixture()
     workshop.open(committedLoadout, opener as unknown as HTMLElement)
@@ -235,7 +262,7 @@ describe('character workshop', () => {
     const palette = findControlForLabel(root, '색상')
     const accessory = findControlForLabel(root, '장식')
 
-    character.value = 'storm-griffin'
+    character.value = 'ember-phoenix'
     character.dispatch('change')
     palette.value = 'moonlight'
     palette.dispatch('change')
@@ -243,14 +270,14 @@ describe('character workshop', () => {
     accessory.dispatch('change')
 
     expect(preview.mock.calls).toEqual([
-      [{ ...committedLoadout, characterId: 'storm-griffin' }],
+      [{ ...committedLoadout, characterId: 'ember-phoenix' }],
       [{
         ...committedLoadout,
-        characterId: 'storm-griffin',
+        characterId: 'ember-phoenix',
         paletteId: 'moonlight',
       }],
       [{
-        characterId: 'storm-griffin',
+        characterId: 'ember-phoenix',
         paletteId: 'moonlight',
         accessoryId: 'festival-ribbon',
       }],
@@ -262,14 +289,14 @@ describe('character workshop', () => {
     workshop.open(committedLoadout, opener as unknown as HTMLElement)
     const root = workshop.element as unknown as TestElement
     const character = findControlForLabel(root, '캐릭터 형태')
-    character.value = 'cloud-manta'
+    character.value = 'storm-white-tiger'
     character.dispatch('change')
 
     findByText(root, '적용').dispatch('click')
 
     expect(apply).toHaveBeenCalledWith({
       ...committedLoadout,
-      characterId: 'cloud-manta',
+      characterId: 'storm-white-tiger',
     })
     expect(root.hidden).toBe(true)
     expect(fakeDocument.activeElement).toBe(opener)

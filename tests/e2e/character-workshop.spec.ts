@@ -9,6 +9,73 @@ const DEFAULT_LOADOUT: CharacterLoadout = {
   accessoryId: 'none',
 }
 
+type LegacyGuardianId = 'storm-griffin' | 'cloud-manta'
+
+function createCompleteV9Fixture(characterId: LegacyGuardianId) {
+  const raceGhost = {
+    durationMs: 123_456,
+    samples: [
+      [0, 0, 18, 20, 0, 0, 0, 0, 0],
+      [123_456, 40, 22, -60, 0.5, 0.1, -0.2, 1, 11],
+    ],
+  }
+  const coinGhost = {
+    durationMs: 18_250,
+    samples: [
+      [0, 430, 31, 190, 1.25, 0, 0, 0, 0],
+      [18_250, 455, 36, 140, 1.5, 0.1, 0.2, 1, 10],
+    ],
+  }
+
+  return {
+    version: 9,
+    bestTimeMs: 123_456,
+    muted: true,
+    musicVolume: 0.62,
+    quality: 'high',
+    characterLoadout: {
+      characterId,
+      paletteId: 'moonlight',
+      accessoryId: 'festival-ribbon',
+    },
+    missionGrades: {
+      'first-skyknot': 'gold',
+      'boost-mastery': 'silver',
+    },
+    coinBestTimesMs: {
+      'festival-hub': 18_250,
+      'wind-canyon': 24_800,
+    },
+    skyLeague: {
+      raceTop10Ms: [123_456, 130_000],
+      coinTop10Ms: {
+        'festival-hub': [18_250, 20_000],
+        'wind-canyon': [24_800],
+      },
+      missionTop10: {
+        'first-skyknot': [{ elapsedMs: 123_456, grade: 'gold' }],
+      },
+    },
+    ghosts: {
+      race: raceGhost,
+      coin: { 'festival-hub': coinGhost },
+      mission: { 'first-skyknot': raceGhost },
+    },
+    exploration: {
+      position: { x: 430, y: 31, z: 190 },
+      headingRadians: 1.25,
+      movement: 'airborne',
+      discoveredRegionIds: ['festival-hub', 'cloud-ruins'],
+      destinationRegionId: 'cloud-ruins',
+      discoveredLandmarkIds: [
+        'dawnwing-airfield',
+        'whispering-grotto',
+      ],
+      traversedWindZoneIds: ['harbor-lift'],
+    },
+  }
+}
+
 async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
   return page.evaluate(() => window.__DRAGON_RACE_TEST__?.snapshot() ?? null)
 }
@@ -42,7 +109,76 @@ async function expectPortraitPreviewClearance(
   }
 }
 
-test('previews a flying creature safely inside every supported viewport', async ({
+for (const [legacyCharacterId, expectedCharacterId] of [
+  ['storm-griffin', 'ember-phoenix'],
+  ['cloud-manta', 'storm-white-tiger'],
+] as const) {
+  test(`migrates complete v9 ${legacyCharacterId} progress to ${expectedCharacterId}`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop')
+    const legacySettings = createCompleteV9Fixture(legacyCharacterId)
+    const expectedLoadout: CharacterLoadout = {
+      characterId: expectedCharacterId,
+      paletteId: 'moonlight',
+      accessoryId: 'festival-ribbon',
+    }
+    await page.addInitScript((settings) => {
+      localStorage.setItem('skyknit-cup:settings', JSON.stringify(settings))
+    }, legacySettings)
+
+    await page.goto('/')
+    await expect(page.locator('#app')).toHaveAttribute(
+      'data-state',
+      'renderer-ready',
+    )
+    await expect
+      .poll(async () => (await readSnapshot(page))?.camera.dragon.loadout)
+      .toEqual(expectedLoadout)
+
+    const snapshot = await readSnapshot(page)
+    expect(snapshot?.race.characterLoadout).toEqual(expectedLoadout)
+    expect(snapshot?.race.bestTimeMs).toBe(legacySettings.bestTimeMs)
+    expect(snapshot?.race.raceTop10Ms).toEqual(
+      legacySettings.skyLeague.raceTop10Ms,
+    )
+    expect(snapshot?.race.missionGrades).toEqual(
+      legacySettings.missionGrades,
+    )
+    expect(snapshot?.audio).toMatchObject({
+      muted: legacySettings.muted,
+      musicVolume: legacySettings.musicVolume,
+    })
+    expect(snapshot?.render.qualityPreference).toBe(legacySettings.quality)
+    expect(snapshot?.exploration).toMatchObject({
+      discoveredRegionIds: legacySettings.exploration.discoveredRegionIds,
+      discoveredLandmarkIds:
+        legacySettings.exploration.discoveredLandmarkIds,
+      traversedWindZoneIds:
+        legacySettings.exploration.traversedWindZoneIds,
+      destinationRegionId: legacySettings.exploration.destinationRegionId,
+      coinBestTimesMs: legacySettings.coinBestTimesMs,
+    })
+
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? '{}'),
+    )
+    expect(stored).toEqual({
+      ...legacySettings,
+      version: 10,
+      characterLoadout: expectedLoadout,
+    })
+
+    await page.getByRole('button', { name: '캐릭터 꾸미기' }).click()
+    await expect(page.getByLabel('캐릭터 형태')).toHaveValue(
+      expectedCharacterId,
+    )
+    await expect(page.getByLabel('색상')).toHaveValue('moonlight')
+    await expect(page.getByLabel('장식')).toHaveValue('festival-ribbon')
+  })
+}
+
+test('previews a guardian safely inside every supported viewport', async ({
   page,
 }, testInfo) => {
   await page.goto('/')
@@ -66,7 +202,7 @@ test('previews a flying creature safely inside every supported viewport', async 
   expect((await readSnapshot(page))?.race.phase).toBe('ready')
 
   const draft: CharacterLoadout = {
-    characterId: 'storm-griffin',
+    characterId: 'ember-phoenix',
     paletteId: 'moonlight',
     accessoryId: 'wind-goggles',
   }
@@ -107,7 +243,7 @@ test('previews a flying creature safely inside every supported viewport', async 
     const compactLoadouts: readonly CharacterLoadout[] = [
       DEFAULT_LOADOUT,
       {
-        characterId: 'cloud-manta',
+        characterId: 'storm-white-tiger',
         paletteId: 'storm',
         accessoryId: 'festival-ribbon',
       },
@@ -130,7 +266,7 @@ test('previews a flying creature safely inside every supported viewport', async 
   }
 
   await page.screenshot({
-    path: `artifacts/browser-qa/m37-character-workshop/${testInfo.project.name}-griffin-preview.png`,
+    path: `artifacts/browser-qa/m38-guardian-creatures/${testInfo.project.name}-phoenix-preview.png`,
   })
   await page.getByRole('button', { name: '돌아가기' }).click()
   await expect(dialog).toBeHidden()
@@ -161,7 +297,7 @@ test('ignores a stale initial model failure after a newer preview succeeds', asy
   await page.goto('/')
   await page.getByRole('button', { name: '캐릭터 꾸미기' }).click()
   await selectLoadout(page, {
-    characterId: 'storm-griffin',
+    characterId: 'ember-phoenix',
     paletteId: 'moonlight',
     accessoryId: 'wind-goggles',
   })
@@ -174,12 +310,12 @@ test('ignores a stale initial model failure after a newer preview succeeds', asy
   await expect(page.locator('.resource-notice')).toBeHidden()
 })
 
-test('persists an applied creature through reload, pause, and context recovery', async ({
+test('persists an applied guardian through reload, pause, and context recovery', async ({
   page,
 }, testInfo) => {
   await page.addInitScript(() => {
-    if (sessionStorage.getItem('m37-seeded') === 'true') return
-    sessionStorage.setItem('m37-seeded', 'true')
+    if (sessionStorage.getItem('m38-seeded') === 'true') return
+    sessionStorage.setItem('m38-seeded', 'true')
     localStorage.setItem(
       'skyknit-cup:settings',
       JSON.stringify({
@@ -194,13 +330,13 @@ test('persists an applied creature through reload, pause, and context recovery',
 
   await page.getByRole('button', { name: '캐릭터 꾸미기' }).click()
   const applied: CharacterLoadout = {
-    characterId: 'cloud-manta',
+    characterId: 'storm-white-tiger',
     paletteId: 'storm',
     accessoryId: 'festival-ribbon',
   }
   await selectLoadout(page, applied)
   await page.screenshot({
-    path: `artifacts/browser-qa/m37-character-workshop/${testInfo.project.name}-manta-preview.png`,
+    path: `artifacts/browser-qa/m38-guardian-creatures/${testInfo.project.name}-white-tiger-preview.png`,
   })
   await page.getByRole('button', { name: '적용' }).click()
 
@@ -208,7 +344,7 @@ test('persists an applied creature through reload, pause, and context recovery',
     JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? '{}'),
   )
   expect(stored).toMatchObject({
-    version: 9,
+    version: 10,
     bestTimeMs: 48_210,
     coinBestTimesMs: { 'festival-hub': 17_200 },
     missionGrades: { 'first-skyknot': 'gold' },
@@ -238,7 +374,7 @@ test('persists an applied creature through reload, pause, and context recovery',
   ).toBeVisible()
   await page.getByRole('button', { name: '캐릭터 꾸미기' }).click()
   await selectLoadout(page, {
-    characterId: 'storm-griffin',
+    characterId: 'ember-phoenix',
     paletteId: 'sunrise',
     accessoryId: 'none',
   })

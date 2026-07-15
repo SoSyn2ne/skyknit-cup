@@ -5,6 +5,7 @@ import {
   CHARACTER_CATALOG,
   CHARACTER_PALETTES,
   DEFAULT_CHARACTER_LOADOUT,
+  isCharacterId,
   normalizeCharacterLoadout,
 } from './characterCatalog'
 
@@ -21,9 +22,46 @@ describe('character customization catalog', () => {
   it('provides exactly the three approved creature silhouettes', () => {
     expect(CHARACTER_CATALOG.map((character) => character.id)).toEqual([
       'sunrise-dragon',
-      'storm-griffin',
-      'cloud-manta',
+      'ember-phoenix',
+      'storm-white-tiger',
     ])
+  })
+
+  it('gives every guardian a distinct model and cosmetic motion identity', () => {
+    expect(
+      CHARACTER_CATALOG.map(
+        ({ id, modelPath, motionProfile, bodyTintStrength }) => ({
+          id,
+          modelPath,
+          motionProfile,
+          bodyTintStrength,
+        }),
+      ),
+    ).toEqual([
+      {
+        id: 'sunrise-dragon',
+        modelPath: 'assets/models/characters/skyknit-dragon.glb',
+        motionProfile: 'dragon',
+        bodyTintStrength: 1,
+      },
+      {
+        id: 'ember-phoenix',
+        modelPath: 'assets/models/characters/skyknit-phoenix.glb',
+        motionProfile: 'avian',
+        bodyTintStrength: 0.55,
+      },
+      {
+        id: 'storm-white-tiger',
+        modelPath: 'assets/models/characters/skyknit-white-tiger.glb',
+        motionProfile: 'feline',
+        bodyTintStrength: 0.18,
+      },
+    ])
+  })
+
+  it('keeps retired ids out of the strict runtime catalog', () => {
+    expect(isCharacterId('storm-griffin')).toBe(false)
+    expect(isCharacterId('cloud-manta')).toBe(false)
   })
 
   it('provides exactly the three approved palettes', () => {
@@ -79,7 +117,7 @@ describe('character customization catalog', () => {
         accessoryId: 'wind-goggles',
       },
       expected: {
-        characterId: 'storm-griffin',
+        characterId: 'ember-phoenix',
         paletteId: 'sunrise',
         accessoryId: 'wind-goggles',
       },
@@ -91,7 +129,7 @@ describe('character customization catalog', () => {
         accessoryId: 'crown',
       },
       expected: {
-        characterId: 'cloud-manta',
+        characterId: 'storm-white-tiger',
         paletteId: 'storm',
         accessoryId: 'none',
       },

@@ -220,7 +220,8 @@ export function createExplorationHud(
   const coinDelta = document.createElement('span')
   coinDelta.className = 'exploration-hud__coin-delta'
   coinDelta.dataset.coinDelta = 'true'
-  coinDelta.textContent = '기준 없음'
+  coinDelta.setAttribute('aria-label', '비행의 메아리와 기록 차이')
+  coinDelta.textContent = '메아리 없음'
   const coinResult = document.createElement('span')
   coinResult.className = 'exploration-hud__coin-result'
   coinResult.dataset.coinResult = 'true'
@@ -446,7 +447,7 @@ export function createExplorationHud(
       coinDelta.hidden = view.coinRun.phase !== 'running'
       coinDelta.textContent =
         view.coinLiveDeltaMs === null
-          ? '기준 없음'
+          ? '메아리 없음'
           : formatGhostDelta(view.coinLiveDeltaMs)
       coinRun.dataset.phase = view.coinRun.phase
       coinRun.dataset.newBest = String(view.coinRunIsNewBest)

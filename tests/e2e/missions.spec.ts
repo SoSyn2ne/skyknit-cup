@@ -160,7 +160,7 @@ test('completes a mission, saves its grade, and advances to the unlocked next mi
     return raw === null ? null : (JSON.parse(raw) as unknown)
   })
   expect(stored).toMatchObject({
-    version: 9,
+    version: 10,
     missionGrades: { 'first-skyknot': 'gold' },
     skyLeague: {
       raceTop10Ms: [expect.any(Number)],

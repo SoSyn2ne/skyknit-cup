@@ -62,6 +62,17 @@ export function createCharacterWorkshop(
     characterSelect.append(option)
   }
 
+  const guardianDescription = document.createElement('p')
+  guardianDescription.className = 'character-workshop__guardian-description'
+  guardianDescription.setAttribute('aria-live', 'polite')
+
+  const updateGuardianDescription = (characterId: string): void => {
+    guardianDescription.textContent =
+      CHARACTER_CATALOG.find((character) => character.id === characterId)
+        ?.description ?? CHARACTER_CATALOG[0]?.description ?? ''
+  }
+  updateGuardianDescription(characterSelect.value)
+
   const paletteLabel = document.createElement('label')
   paletteLabel.htmlFor = `${idPrefix}-palette`
   paletteLabel.textContent = '색상'
@@ -105,7 +116,7 @@ export function createCharacterWorkshop(
   back.textContent = '돌아가기'
   actionRow.append(apply, back)
 
-  dialog.append(title, description, form, actionRow)
+  dialog.append(title, description, guardianDescription, form, actionRow)
   root.append(dialog)
   host.append(root)
 
@@ -134,6 +145,7 @@ export function createCharacterWorkshop(
 
   characterSelect.addEventListener('change', () => {
     if (draftLoadout === null) return
+    updateGuardianDescription(characterSelect.value)
     previewDraft({
       ...draftLoadout,
       characterId:
@@ -188,6 +200,7 @@ export function createCharacterWorkshop(
       draftLoadout = { ...loadout }
       openerElement = opener
       characterSelect.value = loadout.characterId
+      updateGuardianDescription(loadout.characterId)
       paletteSelect.value = loadout.paletteId
       accessorySelect.value = loadout.accessoryId
       root.hidden = false

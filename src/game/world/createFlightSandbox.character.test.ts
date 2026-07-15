@@ -36,14 +36,14 @@ const PALETTE: FlightSandboxPalette = {
   collisionCoral: '#ff766d',
 }
 
-const GRIFFIN_LOADOUT = {
-  characterId: 'storm-griffin',
+const PHOENIX_LOADOUT = {
+  characterId: 'ember-phoenix',
   paletteId: 'moonlight',
   accessoryId: 'wind-goggles',
 } as const
 
-const MANTA_LOADOUT = {
-  characterId: 'cloud-manta',
+const WHITE_TIGER_LOADOUT = {
+  characterId: 'storm-white-tiger',
   paletteId: 'storm',
   accessoryId: 'festival-ribbon',
 } as const
@@ -99,7 +99,7 @@ function createSandbox(
   )
 }
 
-describe('Milestone 37 transactional character visuals', () => {
+describe('Milestone 38 transactional guardian visuals', () => {
   beforeEach(() => {
     dragonFactoryMock.create.mockReset()
     vi.stubGlobal('window', {
@@ -116,18 +116,18 @@ describe('Milestone 37 transactional character visuals', () => {
 
   it('loads a restored character directly as the initial visual', async () => {
     const restored = createMockDragon(
-      'M37_RestoredCharacter',
+      'M38_RestoredGuardian',
       Promise.resolve('glb'),
     )
     dragonFactoryMock.create.mockReturnValueOnce(restored)
     const scene = new THREE.Scene()
 
-    const sandbox = createSandbox(scene, MANTA_LOADOUT)
+    const sandbox = createSandbox(scene, WHITE_TIGER_LOADOUT)
 
     await expect(sandbox.ready).resolves.toBe('glb')
     expect(dragonFactoryMock.create).toHaveBeenCalledTimes(1)
     expect(dragonFactoryMock.create).toHaveBeenCalledWith(PALETTE, {
-      loadout: MANTA_LOADOUT,
+      loadout: WHITE_TIGER_LOADOUT,
     })
     expect(scene.children).toContain(restored.movementRoot)
   })
@@ -136,12 +136,12 @@ describe('Milestone 37 transactional character visuals', () => {
     const firstReady = deferred<'fallback' | 'glb'>()
     const latestReady = deferred<'fallback' | 'glb'>()
     const initial = createMockDragon(
-      'M37_InitialCharacter',
+      'M38_InitialGuardian',
       Promise.resolve('glb'),
     )
-    const stale = createMockDragon('M37_StaleCharacter', firstReady.promise)
+    const stale = createMockDragon('M38_StaleGuardian', firstReady.promise)
     const latest = createMockDragon(
-      'M37_LatestCharacter',
+      'M38_LatestGuardian',
       latestReady.promise,
     )
     dragonFactoryMock.create
@@ -151,8 +151,8 @@ describe('Milestone 37 transactional character visuals', () => {
     const scene = new THREE.Scene()
     const sandbox = createSandbox(scene)
 
-    const staleRequest = sandbox.setCharacterLoadout(GRIFFIN_LOADOUT)
-    const latestRequest = sandbox.setCharacterLoadout(MANTA_LOADOUT)
+    const staleRequest = sandbox.setCharacterLoadout(PHOENIX_LOADOUT)
+    const latestRequest = sandbox.setCharacterLoadout(WHITE_TIGER_LOADOUT)
     expect(scene.children).toContain(initial.movementRoot)
 
     latestReady.resolve('glb')
@@ -171,11 +171,11 @@ describe('Milestone 37 transactional character visuals', () => {
 
   it('keeps the current visual when a replacement falls back', async () => {
     const initial = createMockDragon(
-      'M37_CurrentCharacter',
+      'M38_CurrentGuardian',
       Promise.resolve('glb'),
     )
     const failed = createMockDragon(
-      'M37_FailedCharacter',
+      'M38_FailedGuardian',
       Promise.resolve('fallback'),
     )
     dragonFactoryMock.create
@@ -185,7 +185,7 @@ describe('Milestone 37 transactional character visuals', () => {
     const sandbox = createSandbox(scene)
 
     await expect(
-      sandbox.setCharacterLoadout(GRIFFIN_LOADOUT),
+      sandbox.setCharacterLoadout(PHOENIX_LOADOUT),
     ).resolves.toBe('fallback')
 
     expect(scene.children).toContain(initial.movementRoot)
