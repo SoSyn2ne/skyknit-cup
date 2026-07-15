@@ -25,6 +25,23 @@ async function selectLoadout(
     .toEqual(loadout)
 }
 
+async function expectPortraitPreviewClearance(
+  page: Page,
+  dialogTop: number,
+  viewportHeight: number,
+): Promise<void> {
+  for (let sample = 0; sample < 5; sample += 1) {
+    const snapshot = await readSnapshot(page)
+    expect(snapshot).not.toBeNull()
+    const boundsBottom =
+      (1 - (snapshot?.camera.dragonBoundsNdc.minY ?? -1)) *
+      0.5 *
+      viewportHeight
+    expect(boundsBottom).toBeLessThanOrEqual(dialogTop - 12)
+    await page.waitForTimeout(100)
+  }
+}
+
 test('previews a flying creature safely inside every supported viewport', async ({
   page,
 }, testInfo) => {
@@ -76,24 +93,33 @@ test('previews a flying creature safely inside every supported viewport', async 
   expect(layout.documentWidth).toBe(layout.viewportWidth)
   expect(layout.documentHeight).toBe(layout.viewportHeight)
 
-  const previewSnapshot = await readSnapshot(page)
-  expect(previewSnapshot).not.toBeNull()
-  const previewCenter = {
-    x:
-      ((previewSnapshot?.camera.dragonNdc.x ?? 0) + 1) *
-      0.5 *
-      layout.viewportWidth,
-    y:
-      (1 - (previewSnapshot?.camera.dragonNdc.y ?? 0)) *
-      0.5 *
+  if (layout.viewportWidth < layout.viewportHeight) {
+    await expectPortraitPreviewClearance(
+      page,
+      layout.top,
       layout.viewportHeight,
+    )
   }
-  expect(
-    previewCenter.x >= layout.left &&
-      previewCenter.x <= layout.right &&
-      previewCenter.y >= layout.top &&
-      previewCenter.y <= layout.bottom,
-  ).toBe(false)
+
+  if (testInfo.project.name === 'touch-minimum') {
+    const compactLoadouts: readonly CharacterLoadout[] = [
+      DEFAULT_LOADOUT,
+      {
+        characterId: 'cloud-manta',
+        paletteId: 'storm',
+        accessoryId: 'festival-ribbon',
+      },
+      draft,
+    ]
+    for (const loadout of compactLoadouts) {
+      await selectLoadout(page, loadout)
+      await expectPortraitPreviewClearance(
+        page,
+        layout.top,
+        layout.viewportHeight,
+      )
+    }
+  }
 
   for (const control of await dialog.locator('select, button').all()) {
     const box = await control.boundingBox()
