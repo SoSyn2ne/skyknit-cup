@@ -1,5 +1,6 @@
 import {
   deriveUnlockedMissionIds,
+  getMissionDefinition,
   getNextMissionId,
   isAwardedMissionGrade,
   mergeBestGrade,
@@ -37,6 +38,10 @@ import {
   type SkyLeagueRecordResult,
   type SkyLeagueRecords,
 } from '../competition/skyLeagueRecords'
+import {
+  getCourseDefinition,
+  type RaceCourseId,
+} from '../world/course'
 
 export type RacePhase =
   | 'loading'
@@ -97,6 +102,7 @@ export interface RaceLeagueResult {
 }
 
 export interface RaceConfig {
+  readonly courseId?: RaceCourseId
   readonly checkpointCount: number
   readonly boostCapacity: number
   readonly spawnPosition: RaceVector
@@ -179,6 +185,34 @@ function startFreshCountdown(state: RaceState): RaceState {
   }
 }
 
+function alignRaceToMissionCourse(
+  state: RaceState,
+  missionId: MissionId,
+): RaceState {
+  const courseId = getMissionDefinition(missionId).courseId
+  const currentCourseId = state.config.courseId ?? 'skyknot'
+  if (currentCourseId === courseId) {
+    return state.config.courseId === courseId
+      ? state
+      : { ...state, config: { ...state.config, courseId } }
+  }
+
+  const course = getCourseDefinition(courseId)
+  const config: RaceConfig = {
+    ...state.config,
+    courseId,
+    checkpointCount: course.checkpoints.length,
+    spawnPosition: cloneVector(course.startAnchor.position),
+  }
+  return {
+    ...state,
+    config,
+    run: createCleanRun(config),
+    finalElapsedMs: null,
+    leagueResult: null,
+  }
+}
+
 function toLeaguePlacement(
   result: SkyLeagueRecordResult,
 ): RaceLeaguePlacement {
@@ -190,12 +224,25 @@ function toLeaguePlacement(
   }
 }
 
+const UNRECORDED_LEAGUE_PLACEMENT: RaceLeaguePlacement = Object.freeze({
+  rank: null,
+  medal: null,
+  isNewBest: false,
+  inserted: false,
+})
+
 function finishRace(state: RaceState): RaceState {
   const elapsedMs = state.run.elapsedMs
   const elapsedIsValid = Number.isFinite(elapsedMs) && elapsedMs > 0
+  const courseId = getMissionDefinition(
+    state.mission.selectedMissionId,
+  ).courseId
+  const recordsLegacyRace = courseId === 'skyknot'
   const currentBest = state.persistent.bestTimeMs
   const isNewBest =
-    elapsedIsValid && (currentBest === null || elapsedMs < currentBest)
+    recordsLegacyRace &&
+    elapsedIsValid &&
+    (currentBest === null || elapsedMs < currentBest)
   const mission = finishMissionAttempt(state.mission)
   const missionGrade = mission.result?.grade ?? 'failed'
   const previousMissionGrade =
@@ -212,13 +259,15 @@ function finishRace(state: RaceState): RaceState {
           [mission.selectedMissionId]: bestMissionGrade,
         }
 
-  const raceLeague = elapsedIsValid
+  const raceLeague = recordsLegacyRace && elapsedIsValid
     ? recordRaceLeagueTime(state.persistent.skyLeague, elapsedMs)
     : null
+  const recordsAfterRace =
+    raceLeague?.records ?? state.persistent.skyLeague
   const missionLeague =
-    raceLeague !== null && isAwardedMissionGrade(missionGrade)
+    elapsedIsValid && isAwardedMissionGrade(missionGrade)
       ? recordMissionLeagueResult(
-          raceLeague.records,
+          recordsAfterRace,
           mission.selectedMissionId,
           elapsedMs,
           missionGrade,
@@ -226,13 +275,15 @@ function finishRace(state: RaceState): RaceState {
       : null
   const skyLeague =
     missionLeague?.records ??
-    raceLeague?.records ??
-    state.persistent.skyLeague
+    recordsAfterRace
   const leagueResult =
-    raceLeague === null
+    !elapsedIsValid
       ? null
       : {
-          race: toLeaguePlacement(raceLeague),
+          race:
+            raceLeague === null
+              ? UNRECORDED_LEAGUE_PLACEMENT
+              : toLeaguePlacement(raceLeague),
           mission:
             missionLeague === null
               ? null
@@ -267,6 +318,7 @@ export function createInitialRaceState(
   options: CreateRaceStateOptions,
 ): RaceState {
   const config: RaceConfig = {
+    courseId: options.courseId ?? 'skyknot',
     checkpointCount: options.checkpointCount,
     boostCapacity: options.boostCapacity,
     spawnPosition: cloneVector(options.spawnPosition),
@@ -355,7 +407,9 @@ export function transitionRace(
       state.mission.selectedMissionId,
     )
   ) {
-    return startFreshCountdown(state)
+    return startFreshCountdown(
+      alignRaceToMissionCourse(state, state.mission.selectedMissionId),
+    )
   }
 
   if (
@@ -521,7 +575,7 @@ export function selectRaceMission(
   const mission = selectMission(selectableState.mission, missionId)
   return mission === selectableState.mission
     ? selectableState
-    : { ...selectableState, mission }
+    : alignRaceToMissionCourse({ ...selectableState, mission }, missionId)
 }
 
 export function selectNextRaceMission(state: RaceState): RaceState {
@@ -541,7 +595,9 @@ export function selectNextRaceMission(state: RaceState): RaceState {
 
   const ready = transitionRace(state, { type: 'RETURN_TO_READY' })
   const mission = selectMission(ready.mission, nextMissionId)
-  return mission === ready.mission ? ready : { ...ready, mission }
+  return mission === ready.mission
+    ? ready
+    : alignRaceToMissionCourse({ ...ready, mission }, nextMissionId)
 }
 
 export function recordRaceCollision(state: RaceState): RaceState {

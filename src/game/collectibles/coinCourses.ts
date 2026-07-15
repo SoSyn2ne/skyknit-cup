@@ -7,6 +7,8 @@ import {
 export const COINS_PER_COURSE = 10
 export const COIN_PICKUP_RADIUS = 3.2
 
+export type CoinVisualKind = 'sky-coin' | 'cooling-crystal'
+
 export interface SkyCoinDefinition {
   readonly id: string
   readonly index: number
@@ -17,6 +19,7 @@ export interface SkyCoinDefinition {
 export interface CoinCourseDefinition {
   readonly regionId: OpenWorldRegionId
   readonly center: Vec3Value
+  readonly visualKind: CoinVisualKind
   readonly coins: readonly SkyCoinDefinition[]
 }
 
@@ -61,12 +64,28 @@ const LOCAL_COURSES: Readonly<
     [-28, 18, 0],
     [-18, 20, 24],
   ],
+  'volcanic-archipelago': [
+    [-28, 12, 32],
+    [-52, 16, 8],
+    [-60, 20, -18],
+    [-42, 26, -48],
+    [-10, 32, -64],
+    [22, 34, -54],
+    [48, 28, -32],
+    [58, 22, -4],
+    [40, 18, 22],
+    [28, 14, 34],
+  ],
 }
 
 export const COIN_COURSES: readonly CoinCourseDefinition[] =
   OPEN_WORLD_REGIONS.map((region) => ({
     regionId: region.id,
     center: { ...region.center },
+    visualKind:
+      region.id === 'volcanic-archipelago'
+        ? 'cooling-crystal'
+        : 'sky-coin',
     coins: LOCAL_COURSES[region.id].map(([x, y, z], index) => ({
       id: `${region.id}-coin-${index + 1}`,
       index,

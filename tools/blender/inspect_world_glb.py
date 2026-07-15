@@ -47,7 +47,7 @@ LANDING_PAD_ORIGINS = {
     "festival-hub": (0.0, 0.0, -3.15),
     "wind-canyon": (0.0, -4.0, -14.0),
     "cloud-ruins": (0.0, 0.0, -3.55),
-    "volcanic-archipelago": (0.0, -78.0, 4.0),
+    "volcanic-archipelago": (0.0, -72.0, -5.0),
 }
 
 SEMANTIC_ORIGINS = {

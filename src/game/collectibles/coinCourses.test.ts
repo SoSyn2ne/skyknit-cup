@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { OPEN_WORLD_REGIONS } from '../world/openWorldRegions'
-import { COINS_PER_COURSE, COIN_COURSES } from './coinCourses'
+import {
+  COINS_PER_COURSE,
+  COIN_COURSES,
+  getCoinCourse,
+} from './coinCourses'
 
 describe('regional sky-coin course data', () => {
   it('defines exactly ten uniquely identified coins for every region', () => {
@@ -47,5 +51,24 @@ describe('regional sky-coin course data', () => {
         ).toBeGreaterThan((region?.landingPad.radius ?? 0) + coin.radius)
       }
     }
+  })
+
+  it('uses ten cooling crystals for the volcanic route without changing existing coin visuals', () => {
+    expect(
+      COIN_COURSES.filter(
+        (course) => course.regionId !== 'volcanic-archipelago',
+      ).every((course) => course.visualKind === 'sky-coin'),
+    ).toBe(true)
+
+    const volcanicCourse = getCoinCourse('volcanic-archipelago')
+    expect(volcanicCourse.visualKind).toBe('cooling-crystal')
+    expect(volcanicCourse.coins).toHaveLength(COINS_PER_COURSE)
+    expect(
+      new Set(
+        volcanicCourse.coins.map(
+          (coin) => `${coin.position.x}:${coin.position.y}:${coin.position.z}`,
+        ),
+      ).size,
+    ).toBe(COINS_PER_COURSE)
   })
 })

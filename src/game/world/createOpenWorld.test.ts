@@ -40,6 +40,37 @@ async function settleLoads(): Promise<void> {
 }
 
 describe('open-world region GLB streaming', () => {
+  it('replaces the volcanic lava surface once and advances its shader time', async () => {
+    const originalMaterial = new THREE.MeshStandardMaterial({ color: 0xff3b12 })
+    const disposeOriginal = vi.spyOn(originalMaterial, 'dispose')
+    const asset = new THREE.Group()
+    const lava = new THREE.Mesh(
+      new THREE.CircleGeometry(12, 24),
+      originalMaterial,
+    )
+    lava.name = 'LavaSurface'
+    asset.add(lava)
+    const world = createOpenWorld(new THREE.Scene(), {
+      assetLoader: { load: async () => asset },
+    })
+
+    world.update({ x: -240, y: 28, z: -820 }, 0)
+    await settleLoads()
+
+    expect(lava.material).toBeInstanceOf(THREE.ShaderMaterial)
+    expect(disposeOriginal).toHaveBeenCalledOnce()
+    if (!(lava.material instanceof THREE.ShaderMaterial)) {
+      throw new Error('volcanic lava material was not installed')
+    }
+    const lavaMaterial = lava.material
+    expect(lavaMaterial.uniforms.uTime.value).toBe(0)
+
+    world.update({ x: -240, y: 28, z: -820 }, 2.5)
+    expect(lavaMaterial.uniforms.uTime.value).toBe(2.5)
+
+    world.dispose()
+  })
+
   it('tints festival lanterns away from the collectible coin palette', async () => {
     const sharedGold = new THREE.MeshStandardMaterial({ color: 0xffd96a })
     const asset = new THREE.Group()

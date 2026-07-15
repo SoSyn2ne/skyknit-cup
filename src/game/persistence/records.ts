@@ -81,7 +81,7 @@ export interface CoinCompetitionResult {
   readonly placement: SkyLeagueRecordResult
 }
 
-const SETTINGS_VERSION = 10
+const SETTINGS_VERSION = 11
 
 interface StoredSettings extends GameSettings {
   readonly version: typeof SETTINGS_VERSION
@@ -519,7 +519,8 @@ function isSupportedSettingsVersion(value: unknown): value is
   | 7
   | 8
   | 9
-  | 10 {
+  | 10
+  | 11 {
   return (
     typeof value === 'number' &&
     Number.isInteger(value) &&

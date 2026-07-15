@@ -1,13 +1,15 @@
 import type { Vec3Value } from '../flight/flightModel'
 import type { ExplorationLandingPad } from '../exploration/explorationFlight'
 import { FESTIVAL_HUB_PRIMARY_LANDING_PAD } from './festivalHubActivities'
+import { VOLCANIC_ARCHIPELAGO_PRIMARY_LANDING_PAD } from './volcanicArchipelagoActivities'
 
 export type OpenWorldRegionId =
   | 'festival-hub'
   | 'wind-canyon'
   | 'cloud-ruins'
+  | 'volcanic-archipelago'
 
-export type RegionVisualTheme = 'festival' | 'canyon' | 'ruins'
+export type RegionVisualTheme = 'festival' | 'canyon' | 'ruins' | 'volcanic'
 
 export interface OpenWorldRegion {
   readonly id: OpenWorldRegionId
@@ -61,6 +63,14 @@ export const OPEN_WORLD_REGIONS: readonly OpenWorldRegion[] = [
       position: { x: 430, y: 24, z: 190 },
       radius: 18,
     },
+  },
+  {
+    id: 'volcanic-archipelago',
+    name: '태양의 심장 · 용암 군도',
+    center: { x: -240, y: 28, z: -820 },
+    discoveryRadius: REGION_DISCOVERY_RADIUS,
+    visualTheme: 'volcanic',
+    landingPad: VOLCANIC_ARCHIPELAGO_PRIMARY_LANDING_PAD,
   },
 ] as const
 

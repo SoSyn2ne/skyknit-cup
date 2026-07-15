@@ -9,18 +9,36 @@ import {
 } from './openWorldRegions'
 
 describe('small open-world regions', () => {
-  it('defines three distinct regions with landing pads', () => {
+  it('defines four distinct regions with landing pads', () => {
     expect(OPEN_WORLD_REGIONS.map((region) => region.id)).toEqual([
       'festival-hub',
       'wind-canyon',
       'cloud-ruins',
+      'volcanic-archipelago',
     ])
-    expect(new Set(OPEN_WORLD_REGIONS.map((region) => region.visualTheme)).size).toBe(3)
+    expect(new Set(OPEN_WORLD_REGIONS.map((region) => region.visualTheme)).size).toBe(4)
     expect(OPEN_WORLD_REGIONS.every((region) => region.landingPad.radius >= 18)).toBe(true)
     expect(
       OPEN_WORLD_REGIONS.find((region) => region.id === 'cloud-ruins')
         ?.landingPad.position.y,
     ).toBeGreaterThan(22)
+
+    const volcanicRegion = OPEN_WORLD_REGIONS.find(
+      (region) => region.id === 'volcanic-archipelago',
+    )
+    expect(volcanicRegion).toMatchObject({
+      name: '태양의 심장 · 용암 군도',
+      center: { x: -240, y: 28, z: -820 },
+      visualTheme: 'volcanic',
+    })
+    expect(
+      Math.hypot(
+        (volcanicRegion?.landingPad.position.x ?? 0) -
+          (volcanicRegion?.center.x ?? 0),
+        (volcanicRegion?.landingPad.position.z ?? 0) -
+          (volcanicRegion?.center.z ?? 0),
+      ),
+    ).toBeLessThanOrEqual(volcanicRegion?.discoveryRadius ?? 0)
   })
 
   it('loads nearby regions and keeps loaded regions until the unload radius', () => {

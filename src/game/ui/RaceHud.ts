@@ -157,6 +157,13 @@ export function formatMissionProgress(
       return `${elapsed} / 3:30.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/3`
     case 'golden-knot':
       return `${elapsed} / 3:00.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/5`
+    case 'heart-of-sun': {
+      const objective =
+        attempt.nextCheckpointIndex < 3
+          ? `냉각 봉인 ${attempt.nextCheckpointIndex}/3`
+          : '분화 탈출'
+      return `${objective} · ${elapsed} / 1:15.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/2`
+    }
   }
 }
 
@@ -486,10 +493,23 @@ export function createRaceHud(
   const updateResult = (view: RaceHudView): void => {
     if (view.finalElapsedMs === null) return
     const finalElapsedMs = view.finalElapsedMs
+    const missionDefinition = MISSION_CATALOG.find(
+      (mission) => mission.id === view.mission.selectedMissionId,
+    )
+    const recordsLegacyRace = missionDefinition?.courseId === 'skyknot'
+    const missionBoard =
+      view.skyLeague.missionTop10[view.mission.selectedMissionId] ?? []
+    const displayBestTimeMs = recordsLegacyRace
+      ? view.bestTimeMs
+      : (missionBoard[0]?.elapsedMs ?? null)
+    const isNewBest = recordsLegacyRace
+      ? view.previousBestTimeMs === null ||
+        finalElapsedMs < view.previousBestTimeMs
+      : view.leagueResult?.mission?.isNewBest === true
 
     const nextSignature = JSON.stringify({
       finalElapsedMs,
-      bestTimeMs: view.bestTimeMs,
+      bestTimeMs: displayBestTimeMs,
       previousBestTimeMs: view.previousBestTimeMs,
       missionId: view.mission.selectedMissionId,
       missionResult: view.mission.result,
@@ -521,30 +541,33 @@ export function createRaceHud(
           ['이번 기록', formatRaceTime(finalElapsedMs)],
           [
             '최고 기록',
-            view.bestTimeMs === null
+            displayBestTimeMs === null
               ? '기록 없음'
-              : formatRaceTime(view.bestTimeMs),
+              : formatRaceTime(displayBestTimeMs),
           ],
           [
             '최고 기록 대비',
-            view.previousBestTimeMs === null ||
-            finalElapsedMs < view.previousBestTimeMs
+            isNewBest
               ? '새 최고 기록'
-              : `+${formatRaceTime(
-                  finalElapsedMs - view.previousBestTimeMs,
-                )}`,
+              : displayBestTimeMs === null
+                ? '기록 없음'
+                : `+${formatRaceTime(
+                    Math.max(0, finalElapsedMs - displayBestTimeMs),
+                  )}`,
           ],
         ]
 
         for (const [term, value] of rows) appendResultRow(term, value)
 
         if (view.leagueResult !== null) {
-          appendResultRow(
-            '전체 레이스 순위',
-            formatLeaguePlacement(view.leagueResult.race),
-            'race',
-            view.leagueResult.race,
-          )
+          if (recordsLegacyRace) {
+            appendResultRow(
+              '전체 레이스 순위',
+              formatLeaguePlacement(view.leagueResult.race),
+              'race',
+              view.leagueResult.race,
+            )
+          }
           if (
             view.mission.result?.success === true &&
             view.leagueResult.mission !== null
@@ -566,6 +589,13 @@ export function createRaceHud(
     const missionDefinition =
       MISSION_CATALOG.find((mission) => mission.id === missionId) ??
       MISSION_CATALOG[0]
+    const recordsLegacyRace = missionDefinition.courseId === 'skyknot'
+    raceLeagueButton.hidden = !recordsLegacyRace
+    if (!recordsLegacyRace && leagueCategory === 'race') {
+      leagueCategory = 'mission'
+      raceLeagueButton.setAttribute('aria-pressed', 'false')
+      missionLeagueButton.setAttribute('aria-pressed', 'true')
+    }
     missionLeagueButton.textContent = missionDefinition.name
     const raceBoard = view.skyLeague.raceTop10Ms
     const missionBoard = view.skyLeague.missionTop10[missionId] ?? []
@@ -661,6 +691,12 @@ export function createRaceHud(
         view.nextCheckpointIndex,
         view.checkpointCount,
       )} / ${view.checkpointCount}`
+      gateLabel.textContent =
+        view.mission.selectedMissionId === 'heart-of-sun'
+          ? view.nextCheckpointIndex < 3
+            ? '냉각 봉인'
+            : '탈출 매듭'
+          : '바람 관문'
       status.hidden = view.phase === 'ready'
       missionTracker.hidden =
         view.phase !== 'countdown' && view.phase !== 'racing'

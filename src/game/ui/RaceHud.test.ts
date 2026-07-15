@@ -226,6 +226,10 @@ describe('mission HUD formatting', () => {
       'golden-knot',
       '1:31.250 / 3:00.000 · 충돌 1 · 리스폰 2 · 돌풍 3/5',
     ],
+    [
+      'heart-of-sun',
+      '분화 탈출 · 1:31.250 / 1:15.000 · 충돌 1 · 리스폰 2 · 돌풍 3/2',
+    ],
   ] as const)('formats %s progress', (missionId, label) => {
     expect(formatMissionProgress(missionId, attempt, 12)).toBe(label)
   })

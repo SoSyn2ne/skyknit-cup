@@ -49,10 +49,19 @@ describe('mission unlock derivation', () => {
     },
   )
 
-  it('unlocks all missions from a final mission achievement', () => {
+  it('unlocks the volcanic mission after a Golden Knot achievement', () => {
     expect(deriveUnlockedMissionIds({ 'golden-knot': 'gold' })).toEqual(
       MISSION_IDS,
     )
+  })
+
+  it('keeps the volcanic mission locked before Golden Knot Bronze', () => {
+    expect(
+      deriveUnlockedMissionIds({
+        'clean-flight': 'gold',
+        'golden-knot': 'failed',
+      }),
+    ).not.toContain('heart-of-sun')
   })
 })
 
@@ -63,12 +72,13 @@ describe('mission progression navigation', () => {
     ['no-respawn', 'time-trial'],
     ['time-trial', 'clean-flight'],
     ['clean-flight', 'golden-knot'],
+    ['golden-knot', 'heart-of-sun'],
   ] as const)('returns %s followed by %s', (missionId, nextMissionId) => {
     expect(getNextMissionId(missionId)).toBe(nextMissionId)
   })
 
-  it('returns no next mission after the final achievement', () => {
-    expect(getNextMissionId('golden-knot')).toBeNull()
+  it('returns no next mission after escaping the volcanic archipelago', () => {
+    expect(getNextMissionId('heart-of-sun')).toBeNull()
   })
 
   it('does not require an unlock message for the first mission', () => {

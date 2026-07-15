@@ -36,7 +36,7 @@ function expectUnmetCriteria(
 }
 
 describe('mission catalog', () => {
-  it('defines the six unique missions in progressive difficulty order', () => {
+  it('defines seven unique missions in progressive difficulty order', () => {
     expect(MISSION_IDS).toEqual([
       'first-skyknot',
       'boost-mastery',
@@ -44,14 +44,24 @@ describe('mission catalog', () => {
       'time-trial',
       'clean-flight',
       'golden-knot',
+      'heart-of-sun',
     ])
-    expect(new Set(MISSION_IDS).size).toBe(6)
+    expect(new Set(MISSION_IDS).size).toBe(7)
     expect(MISSION_CATALOG.map((mission) => mission.id)).toEqual(MISSION_IDS)
     expect(
       MISSION_CATALOG.every(
         (mission) => mission.name.length > 0 && mission.objective.length > 0,
       ),
     ).toBe(true)
+    expect(MISSION_CATALOG.map((mission) => mission.courseId)).toEqual([
+      'skyknot',
+      'skyknot',
+      'skyknot',
+      'skyknot',
+      'skyknot',
+      'skyknot',
+      'volcanic-archipelago',
+    ])
   })
 
   it('frames every objective as a step in restoring the first sky knot', () => {
@@ -62,6 +72,7 @@ describe('mission catalog', () => {
       '햇실이 흐려지기 전, 돌풍 3회 이상과 무리스폰으로 3분 30초 안에 완주하세요.',
       '시간·돌풍·무리스폰 조건을 지키고 충돌 없이 날아 햇실을 온전히 보존하세요.',
       '3분 안에 충돌·리스폰 없이 돌풍을 5회 이상 사용해 황금 매듭을 완성하세요.',
+      '세 개의 냉각 봉인을 깨우고 분화가 덮치기 전에 태양의 심장에서 탈출하세요.',
     ])
   })
 })
@@ -246,6 +257,47 @@ describe('golden-knot evaluation', () => {
         boostActivationCount: 4,
       }),
       ['time-limit', 'collision-limit', 'respawn-limit', 'boost-count'],
+    )
+  })
+})
+
+describe('heart-of-sun evaluation', () => {
+  it.each([
+    [45_000, 0, 0, 2, 'gold'],
+    [45_000, 0, 0, 1, 'silver'],
+    [45_001, 0, 0, 2, 'silver'],
+    [60_000, 2, 1, 0, 'silver'],
+    [60_001, 0, 0, 2, 'bronze'],
+    [75_000, 99, 99, 0, 'bronze'],
+  ] as const)(
+    'grades %sms, %s collisions, %s respawns, and %s boosts as %s',
+    (
+      elapsedMs,
+      collisionCount,
+      respawnCount,
+      boostActivationCount,
+      grade,
+    ) => {
+      expect(
+        evaluateMission(
+          'heart-of-sun',
+          completed({
+            elapsedMs,
+            nextCheckpointIndex: 4,
+            collisionCount,
+            respawnCount,
+            boostActivationCount,
+          }),
+        ).grade,
+      ).toBe(grade)
+    },
+  )
+
+  it('reports a missed eruption deadline as a failed attempt', () => {
+    expectUnmetCriteria(
+      'heart-of-sun',
+      completed({ elapsedMs: 75_001, nextCheckpointIndex: 4 }),
+      ['time-limit'],
     )
   })
 })

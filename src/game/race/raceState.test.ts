@@ -19,6 +19,7 @@ import {
 } from './raceState'
 
 const options = {
+  courseId: 'skyknot' as const,
   checkpointCount: 3,
   boostCapacity: 100,
   spawnPosition: { x: 2, y: 12, z: -4 },
@@ -81,6 +82,7 @@ function makeState(phase: RacePhase): RaceState {
     },
     persistent: { ...options.persistent },
     config: {
+      courseId: options.courseId,
       checkpointCount: options.checkpointCount,
       boostCapacity: options.boostCapacity,
       spawnPosition: { ...options.spawnPosition },
@@ -244,6 +246,78 @@ describe('race state', () => {
       },
     })
     expect(finished.run).toBe(complete.run)
+  })
+
+  it('records a volcanic finish only on its mission board', () => {
+    const base = makeState('racing')
+    const racing: RaceState = {
+      ...withRun(base, {
+        elapsedMs: 44_000,
+        nextCheckpointIndex: 4,
+      }),
+      config: {
+        ...base.config,
+        courseId: 'volcanic-archipelago',
+        checkpointCount: 4,
+      },
+      mission: {
+        ...base.mission,
+        selectedMissionId: 'heart-of-sun',
+        attempt: {
+          ...base.mission.attempt,
+          elapsedMs: 44_000,
+          nextCheckpointIndex: 4,
+          boostActivationCount: 2,
+        },
+      },
+      persistent: {
+        ...base.persistent,
+        missionGrades: {
+          ...base.persistent.missionGrades,
+          'golden-knot': 'bronze',
+        },
+      },
+    }
+
+    const finished = transitionRace(racing, { type: 'FINISH' })
+
+    expect(finished.mission.result?.grade).toBe('gold')
+    expect(finished.persistent.bestTimeMs).toBe(50_000)
+    expect(finished.persistent.skyLeague.raceTop10Ms).toEqual([50_000])
+    expect(finished.persistent.skyLeague.missionTop10['heart-of-sun']).toEqual([
+      { elapsedMs: 44_000, grade: 'gold' },
+    ])
+    expect(finished.leagueResult).toMatchObject({
+      race: { rank: null, inserted: false, isNewBest: false },
+      mission: {
+        missionId: 'heart-of-sun',
+        rank: 1,
+        inserted: true,
+        isNewBest: true,
+      },
+    })
+  })
+
+  it('uses the mission course to protect legacy records from mismatched recovered config', () => {
+    const base = makeState('racing')
+    const racing: RaceState = {
+      ...withRun(base, { elapsedMs: 40_000, nextCheckpointIndex: 3 }),
+      mission: {
+        ...base.mission,
+        selectedMissionId: 'heart-of-sun',
+        attempt: {
+          ...base.mission.attempt,
+          elapsedMs: 40_000,
+          nextCheckpointIndex: 3,
+          boostActivationCount: 2,
+        },
+      },
+    }
+
+    const finished = transitionRace(racing, { type: 'FINISH' })
+
+    expect(finished.persistent.bestTimeMs).toBe(50_000)
+    expect(finished.persistent.skyLeague.raceTop10Ms).toEqual([50_000])
   })
 
   it('keeps a faster existing best time after a valid finish', () => {
@@ -687,6 +761,38 @@ describe('race state', () => {
     expect(selectRaceMission(ready, 'golden-knot')).toBe(ready)
   })
 
+  it('switches checkpoint count and spawn when selecting a mission on another course', () => {
+    const ready = {
+      ...makeState('ready'),
+      mission: {
+        ...makeState('ready').mission,
+        status: 'idle' as const,
+      },
+      persistent: {
+        ...makeState('ready').persistent,
+        missionGrades: { 'golden-knot': 'bronze' as const },
+      },
+    }
+
+    const volcanic = selectRaceMission(ready, 'heart-of-sun')
+    const skyknot = selectRaceMission(volcanic, 'golden-knot')
+
+    expect(volcanic.config).toMatchObject({
+      courseId: 'volcanic-archipelago',
+      checkpointCount: 4,
+      spawnPosition: { x: -240, y: 34, z: -700 },
+    })
+    expect(volcanic.run).toMatchObject({
+      nextCheckpointIndex: 0,
+      position: { x: -240, y: 34, z: -700 },
+    })
+    expect(skyknot.config).toMatchObject({
+      courseId: 'skyknot',
+      checkpointCount: 12,
+      spawnPosition: { x: 0, y: 8, z: 0 },
+    })
+  })
+
   it('changes to an unlocked mission from pause by abandoning only the attempt', () => {
     const paused = makeState('paused')
     const changed = selectRaceMission(paused, 'boost-mastery')
@@ -738,7 +844,7 @@ describe('race state', () => {
       ...makeState('finished'),
       mission: {
         ...makeState('finished').mission,
-        selectedMissionId: 'golden-knot' as const,
+        selectedMissionId: 'heart-of-sun' as const,
       },
       persistent: {
         ...makeState('finished').persistent,
@@ -749,6 +855,7 @@ describe('race state', () => {
           'time-trial': 'gold' as const,
           'clean-flight': 'gold' as const,
           'golden-knot': 'gold' as const,
+          'heart-of-sun': 'gold' as const,
         },
       },
     }

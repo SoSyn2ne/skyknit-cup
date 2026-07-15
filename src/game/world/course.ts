@@ -4,11 +4,25 @@ import type { RespawnAnchor } from '../race/raceRuntime'
 
 export interface CourseCheckpoint extends RaceCheckpoint {
   readonly id: string
+  readonly kind: 'gate' | 'cooling-seal' | 'escape'
 }
 
 export interface CourseSegment {
   readonly start: Vec3Like
   readonly end: Vec3Like
+}
+
+export const RACE_COURSE_IDS = [
+  'skyknot',
+  'volcanic-archipelago',
+] as const
+
+export type RaceCourseId = (typeof RACE_COURSE_IDS)[number]
+
+export interface CourseDefinition {
+  readonly id: RaceCourseId
+  readonly startAnchor: RespawnAnchor
+  readonly checkpoints: readonly CourseCheckpoint[]
 }
 
 export const START_ANCHOR: RespawnAnchor = {
@@ -30,6 +44,38 @@ const CHECKPOINT_CENTERS: readonly Vec3Like[] = [
   { x: 40, y: 42, z: 50 },
   { x: -80, y: 18, z: -170 },
 ]
+
+export const VOLCANIC_START_ANCHOR: RespawnAnchor = {
+  position: { x: -240, y: 34, z: -720 },
+  headingRadians: Math.atan2(-55, 123),
+}
+
+const VOLCANIC_CHECKPOINTS = [
+  {
+    id: 'cooling-seal-01',
+    kind: 'cooling-seal',
+    center: { x: -295, y: 45, z: -843 },
+    radius: 16,
+  },
+  {
+    id: 'cooling-seal-02',
+    kind: 'cooling-seal',
+    center: { x: -196, y: 44, z: -786 },
+    radius: 16,
+  },
+  {
+    id: 'cooling-seal-03',
+    kind: 'cooling-seal',
+    center: { x: -212, y: 45, z: -875 },
+    radius: 16,
+  },
+  {
+    id: 'eruption-escape',
+    kind: 'escape',
+    center: { x: -240, y: 53, z: -902 },
+    radius: 20,
+  },
+] as const
 
 function subtract(left: Vec3Like, right: Vec3Like): Vec3Like {
   return {
@@ -66,11 +112,51 @@ export const SKYKNOT_COURSE: readonly CourseCheckpoint[] =
 
     return {
       id: `gate-${String(index + 1).padStart(2, '0')}`,
+      kind: 'gate',
       center,
       normal: normalize(subtract(center, previous)),
       radius: 22,
     }
   })
+
+export const VOLCANIC_ARCHIPELAGO_COURSE: readonly CourseCheckpoint[] =
+  VOLCANIC_CHECKPOINTS.map((checkpoint, index) => {
+    const previous =
+      index === 0
+        ? VOLCANIC_START_ANCHOR.position
+        : (VOLCANIC_CHECKPOINTS[index - 1]?.center ??
+          VOLCANIC_START_ANCHOR.position)
+
+    return {
+      ...checkpoint,
+      normal: normalize(subtract(checkpoint.center, previous)),
+    }
+  })
+
+export const SKYKNOT_COURSE_DEFINITION: CourseDefinition = {
+  id: 'skyknot',
+  startAnchor: START_ANCHOR,
+  checkpoints: SKYKNOT_COURSE,
+}
+
+export const VOLCANIC_ARCHIPELAGO_COURSE_DEFINITION: CourseDefinition = {
+  id: 'volcanic-archipelago',
+  startAnchor: VOLCANIC_START_ANCHOR,
+  checkpoints: VOLCANIC_ARCHIPELAGO_COURSE,
+}
+
+export const RACE_COURSE_CATALOG: Readonly<
+  Record<RaceCourseId, CourseDefinition>
+> = Object.freeze({
+  skyknot: SKYKNOT_COURSE_DEFINITION,
+  'volcanic-archipelago': VOLCANIC_ARCHIPELAGO_COURSE_DEFINITION,
+})
+
+export function getCourseDefinition(
+  courseId: RaceCourseId,
+): CourseDefinition {
+  return RACE_COURSE_CATALOG[courseId]
+}
 
 export function getCourseDistance(
   checkpoints: readonly RaceCheckpoint[],
@@ -87,38 +173,84 @@ export function getCourseDistance(
   return total
 }
 
-export function getCourseSegment(nextCheckpointIndex: number): CourseSegment {
-  const end = SKYKNOT_COURSE[nextCheckpointIndex]
+type CourseSelector = RaceCourseId | CourseDefinition
 
-  if (end === undefined) {
+function resolveCourseAndIndex(
+  courseOrIndex: CourseSelector | number,
+  maybeCheckpointIndex: number | undefined,
+): { readonly course: CourseDefinition; readonly checkpointIndex: number } {
+  if (typeof courseOrIndex === 'number') {
+    return {
+      course: SKYKNOT_COURSE_DEFINITION,
+      checkpointIndex: courseOrIndex,
+    }
+  }
+
+  return {
+    course:
+      typeof courseOrIndex === 'string'
+        ? getCourseDefinition(courseOrIndex)
+        : courseOrIndex,
+    checkpointIndex: maybeCheckpointIndex ?? Number.NaN,
+  }
+}
+
+export function getCourseSegment(nextCheckpointIndex: number): CourseSegment
+export function getCourseSegment(
+  course: CourseSelector,
+  nextCheckpointIndex: number,
+): CourseSegment
+export function getCourseSegment(
+  courseOrIndex: CourseSelector | number,
+  maybeCheckpointIndex?: number,
+): CourseSegment {
+  const { course, checkpointIndex } = resolveCourseAndIndex(
+    courseOrIndex,
+    maybeCheckpointIndex,
+  )
+  const end = course.checkpoints[checkpointIndex]
+
+  if (!Number.isInteger(checkpointIndex) || end === undefined) {
     throw new RangeError('Active checkpoint index is outside the course')
   }
 
   return {
     start:
-      nextCheckpointIndex === 0
-        ? START_ANCHOR.position
-        : (SKYKNOT_COURSE[nextCheckpointIndex - 1]?.center ??
-          START_ANCHOR.position),
+      checkpointIndex === 0
+        ? course.startAnchor.position
+        : (course.checkpoints[checkpointIndex - 1]?.center ??
+          course.startAnchor.position),
     end: end.center,
   }
 }
 
 export function getRespawnAnchor(
   nextCheckpointIndex: number,
+): RespawnAnchor
+export function getRespawnAnchor(
+  course: CourseSelector,
+  nextCheckpointIndex: number,
+): RespawnAnchor
+export function getRespawnAnchor(
+  courseOrIndex: CourseSelector | number,
+  maybeCheckpointIndex?: number,
 ): RespawnAnchor {
-  if (nextCheckpointIndex <= 0) {
-    return START_ANCHOR
+  const { course, checkpointIndex } = resolveCourseAndIndex(
+    courseOrIndex,
+    maybeCheckpointIndex,
+  )
+  if (!Number.isInteger(checkpointIndex) || checkpointIndex <= 0) {
+    return course.startAnchor
   }
 
   const previous =
-    SKYKNOT_COURSE[
-      Math.min(nextCheckpointIndex - 1, SKYKNOT_COURSE.length - 1)
+    course.checkpoints[
+      Math.min(checkpointIndex - 1, course.checkpoints.length - 1)
     ]
-  const next = SKYKNOT_COURSE[nextCheckpointIndex]
+  const next = course.checkpoints[checkpointIndex]
 
   if (previous === undefined) {
-    return START_ANCHOR
+    return course.startAnchor
   }
 
   const direction =
@@ -128,7 +260,7 @@ export function getRespawnAnchor(
   const horizontalLength = Math.hypot(direction.x, direction.z)
   const headingRadians =
     horizontalLength <= Number.EPSILON
-      ? START_ANCHOR.headingRadians
+      ? course.startAnchor.headingRadians
       : Math.atan2(direction.x, -direction.z)
 
   return {

@@ -1,3 +1,5 @@
+import type { RaceCourseId } from '../world/course'
+
 export const MISSION_IDS = [
   'first-skyknot',
   'boost-mastery',
@@ -5,6 +7,7 @@ export const MISSION_IDS = [
   'time-trial',
   'clean-flight',
   'golden-knot',
+  'heart-of-sun',
 ] as const
 
 export type MissionId = (typeof MISSION_IDS)[number]
@@ -20,6 +23,7 @@ export type MissionCriterionId =
 
 export interface MissionDefinition {
   readonly id: MissionId
+  readonly courseId: RaceCourseId
   readonly name: string
   readonly objective: string
 }
@@ -42,37 +46,50 @@ export interface MissionResult {
 export const MISSION_CATALOG: readonly MissionDefinition[] = [
   {
     id: 'first-skyknot',
+    courseId: 'skyknot',
     name: '첫 하늘매듭',
     objective: '잠든 바람 관문을 순서대로 깨워 첫 매듭의 길을 복원하세요.',
   },
   {
     id: 'boost-mastery',
+    courseId: 'skyknot',
     name: '돌풍 조율사',
     objective: '돌풍을 세 번 이상 일으켜 바람실에 힘을 더하고 완주하세요.',
   },
   {
     id: 'no-respawn',
+    courseId: 'skyknot',
     name: '끊기지 않는 매듭',
     objective:
       '돌풍을 세 번 이상 일으키고 리스폰 없이 완주해 햇실 한 가닥을 끊김 없이 이으세요.',
   },
   {
     id: 'time-trial',
+    courseId: 'skyknot',
     name: '질풍 시간전',
     objective:
       '햇실이 흐려지기 전, 돌풍 3회 이상과 무리스폰으로 3분 30초 안에 완주하세요.',
   },
   {
     id: 'clean-flight',
+    courseId: 'skyknot',
     name: '구름 한 점 없이',
     objective:
       '시간·돌풍·무리스폰 조건을 지키고 충돌 없이 날아 햇실을 온전히 보존하세요.',
   },
   {
     id: 'golden-knot',
+    courseId: 'skyknot',
     name: '황금 하늘매듭',
     objective:
       '3분 안에 충돌·리스폰 없이 돌풍을 5회 이상 사용해 황금 매듭을 완성하세요.',
+  },
+  {
+    id: 'heart-of-sun',
+    courseId: 'volcanic-archipelago',
+    name: '태양의 심장',
+    objective:
+      '세 개의 냉각 봉인을 깨우고 분화가 덮치기 전에 태양의 심장에서 탈출하세요.',
   },
 ]
 
@@ -170,6 +187,20 @@ const MISSION_GRADE_THRESHOLDS: Readonly<
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 7,
+    },
+  },
+  'heart-of-sun': {
+    bronze: { maxElapsedMs: 75_000 },
+    silver: {
+      maxElapsedMs: 60_000,
+      maxCollisionCount: 2,
+      maxRespawnCount: 1,
+    },
+    gold: {
+      maxElapsedMs: 45_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 2,
     },
   },
 }
@@ -271,6 +302,12 @@ export function evaluateMission(
   }
 
   return evaluateThresholds(stats, MISSION_GRADE_THRESHOLDS[missionId])
+}
+
+export function getMissionDefinition(
+  missionId: MissionId,
+): MissionDefinition {
+  return MISSION_CATALOG[MISSION_IDS.indexOf(missionId)]
 }
 
 export function deriveUnlockedMissionIds(

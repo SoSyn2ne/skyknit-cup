@@ -222,7 +222,7 @@ def _build_landing_and_ruins(
     landing_parts = [
         world.add_handcut_slab(
             f"LandingShelf_{tag}",
-            (0.0, -78.0, 4.0),
+            (0.0, -72.0, -5.0),
             (18.0, 14.0, 3.0),
             materials["basalt"],
             collection,
@@ -232,7 +232,7 @@ def _build_landing_and_ruins(
         ),
         world.add_torus(
             f"LandingRune_{tag}",
-            (0.0, -78.0, 7.15),
+            (0.0, -72.0, -1.85),
             7.2,
             0.42,
             materials["cooling"],
