@@ -9,6 +9,10 @@ import {
   type GhostRun,
   type GhostSample,
 } from '../../src/game/competition/ghostRun'
+import {
+  DEFAULT_CHARACTER_LOADOUT,
+  type CharacterLoadout,
+} from '../../src/game/customization/characterCatalog'
 import type { FlightDebugSnapshot } from '../../src/game/createRenderer'
 
 const BASE_URL =
@@ -165,21 +169,24 @@ async function measure(
   touch: boolean,
   viewport: readonly [number, number],
   mode: 'race' | 'explore' = 'race',
+  characterLoadout: CharacterLoadout = DEFAULT_CHARACTER_LOADOUT,
 ): Promise<PerformanceResult> {
   await page.context().addInitScript(({
     selectedQuality,
     muted,
     raceGhost,
     coinGhost,
+    loadout,
   }) => {
     localStorage.setItem(
       'skyknit-cup:settings',
       JSON.stringify({
-        version: 8,
+        version: 9,
         bestTimeMs: raceGhost.durationMs,
         muted,
         musicVolume: 0.35,
         quality: selectedQuality,
+        characterLoadout: loadout,
         missionGrades: {},
         coinBestTimesMs: { 'cloud-ruins': coinGhost.durationMs },
         skyLeague: {
@@ -208,12 +215,16 @@ async function measure(
     muted: mode === 'race',
     raceGhost: REPRESENTATIVE_RACE_GHOST,
     coinGhost: REPRESENTATIVE_CLOUD_COIN_GHOST,
+    loadout: characterLoadout,
   })
   await page.goto(BASE_URL)
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
   )
+  await expect
+    .poll(async () => (await readSnapshot(page))?.camera.dragon.loadout)
+    .toEqual(characterLoadout)
 
   if (mode === 'explore') {
     await page.getByRole('button', { name: '하늘 탐험' }).click()
@@ -425,4 +436,83 @@ test('meets the 30 second desktop and mobile frame budgets', async ({
   expect(mobile.ghostVisible).toBe(true)
   expect(desktopExplore.ghostVisible).toBe(true)
   expect(mobileExplore.ghostVisible).toBe(true)
+})
+
+test('keeps griffin and manta inside the 30 second character budgets', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000)
+  const desktopViewport = [1_440, 900] as const
+  const mobileViewport = [844, 390] as const
+  const loadouts = [
+    {
+      characterId: 'storm-griffin',
+      paletteId: 'moonlight',
+      accessoryId: 'wind-goggles',
+    },
+    {
+      characterId: 'cloud-manta',
+      paletteId: 'storm',
+      accessoryId: 'festival-ribbon',
+    },
+  ] as const satisfies readonly CharacterLoadout[]
+  const results: Record<
+    string,
+    { desktopHigh: PerformanceResult; mobileLow: PerformanceResult }
+  > = {}
+
+  for (const loadout of loadouts) {
+    const desktopPage = await newMeasuredPage(
+      browser,
+      desktopViewport,
+      false,
+    )
+    const desktopHigh = await measure(
+      desktopPage,
+      `${loadout.characterId}-desktop-high`,
+      'high',
+      false,
+      desktopViewport,
+      'race',
+      loadout,
+    )
+    await desktopPage.context().close()
+
+    const mobilePage = await newMeasuredPage(
+      browser,
+      mobileViewport,
+      true,
+    )
+    const mobileLow = await measure(
+      mobilePage,
+      `${loadout.characterId}-mobile-low`,
+      'low',
+      true,
+      mobileViewport,
+      'race',
+      loadout,
+    )
+    await mobilePage.context().close()
+
+    results[loadout.characterId] = { desktopHigh, mobileLow }
+    expect(desktopHigh.medianFps).toBeGreaterThanOrEqual(55)
+    expect(desktopHigh.minimumBucketFps).toBeGreaterThanOrEqual(50)
+    expect(desktopHigh.drawCalls).toBeLessThanOrEqual(120)
+    expect(mobileLow.medianFps).toBeGreaterThanOrEqual(30)
+    expect(desktopHigh.fixedSteps).toBeGreaterThanOrEqual(1_790)
+    expect(desktopHigh.fixedSteps).toBeLessThanOrEqual(1_810)
+    expect(mobileLow.fixedSteps).toBeGreaterThanOrEqual(1_790)
+    expect(mobileLow.fixedSteps).toBeLessThanOrEqual(1_810)
+  }
+
+  const artifactPath = path.resolve(
+    `artifacts/browser-qa/${QA_SCOPE}/performance-characters-30s.json`,
+  )
+  await mkdir(path.dirname(artifactPath), { recursive: true })
+  await writeFile(
+    artifactPath,
+    `${JSON.stringify(results, null, 2)}\n`,
+    'utf8',
+  )
+  console.log(JSON.stringify(results))
 })

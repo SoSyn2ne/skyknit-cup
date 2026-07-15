@@ -185,7 +185,7 @@ test('uses a visible non-blocking fallback when the GLB resource fails', async (
   await expect(
     page
       .getByRole('status')
-      .filter({ hasText: '기본 드래곤으로 비행합니다' }),
+      .filter({ hasText: '간소화 모델로 비행합니다' }),
   ).toBeVisible()
   await expect
     .poll(async () => (await readSnapshot(page))?.camera.dragon.source)

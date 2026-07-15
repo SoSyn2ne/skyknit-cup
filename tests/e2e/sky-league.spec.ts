@@ -130,7 +130,7 @@ test.describe('Sky League offline record competition', () => {
     await page.addInitScript((key) => localStorage.removeItem(key), SETTINGS_KEY)
   })
 
-  test('saves the first race and successful mission to v8 Top 10 boards with canonical ghosts', async ({
+  test('saves the first race and successful mission to v9 Top 10 boards with canonical ghosts', async ({
     page,
   }) => {
     await openQaCourse(page)
@@ -144,7 +144,7 @@ test.describe('Sky League offline record competition', () => {
     const stored = await readStoredSettings(page)
     expect(stored).not.toBeNull()
     expect(stored).toMatchObject({
-      version: 8,
+      version: 9,
       bestTimeMs: finalElapsedMs,
       missionGrades: { [FIRST_MISSION_ID]: 'gold' },
       skyLeague: {
@@ -204,7 +204,7 @@ test.describe('Sky League offline record competition', () => {
     })
   })
 
-  test('saves a completed regional coin run to its v8 Top 10 board and ghost slot', async ({
+  test('saves a completed regional coin run to its v9 Top 10 board and ghost slot', async ({
     page,
   }) => {
     await page.goto('/')
@@ -224,7 +224,7 @@ test.describe('Sky League offline record competition', () => {
     expect(completedTime).not.toBeNull()
     const stored = await readStoredSettings(page)
     expect(stored).toMatchObject({
-      version: 8,
+      version: 9,
       coinBestTimesMs: { [FESTIVAL_REGION_ID]: completedTime },
       skyLeague: {
         coinTop10Ms: { [FESTIVAL_REGION_ID]: [completedTime] },
@@ -355,7 +355,7 @@ test.describe('Sky League offline record competition', () => {
 })
 
 test.describe('Sky League v7 migration', () => {
-  test('migrates records and Festival discoveries to v8 without fabrication', async ({
+  test('migrates records and Festival discoveries to v9 without fabrication', async ({
     page,
   }, testInfo) => {
     test.skip(
@@ -399,7 +399,7 @@ test.describe('Sky League v7 migration', () => {
 
     const stored = await readStoredSettings(page)
     expect(stored).toMatchObject({
-      version: 8,
+      version: 9,
       bestTimeMs: 88_000,
       missionGrades: { 'time-trial': 'silver' },
       coinBestTimesMs: { [FESTIVAL_REGION_ID]: 14_500 },

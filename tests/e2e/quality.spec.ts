@@ -131,7 +131,7 @@ test('changes and saves quality without resetting race progress', async ({
   const storedAfterQuality = await page.evaluate(() =>
     JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? 'null'),
   )
-  expect(storedAfterQuality).toMatchObject({ version: 8, quality: 'low' })
+  expect(storedAfterQuality).toMatchObject({ version: 9, quality: 'low' })
 
   const mute = page.getByRole('button', { name: '소리 끄기' })
   await expect(mute).toHaveAttribute('title', '소리 끄기')
