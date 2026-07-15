@@ -1,9 +1,19 @@
 {
-  "active": true,
-  "phase": "planning",
+  "active": false,
+  "phase": "completed",
   "task": "progressive mission unlocks",
   "started_at": "2026-07-14T23:41:11Z",
   "context_snapshot": ".omx/context/mission-progression-20260714T234111Z.md",
   "spec": ".omx/plans/autopilot-spec.md",
-  "implementation_plan": ".omx/plans/autopilot-impl.md"
+  "implementation_plan": ".omx/plans/autopilot-impl.md",
+  "completed_at": "2026-07-15T00:21:03Z",
+  "verification": {
+    "unit": "476 passed",
+    "playwright": "160 passed, 165 skipped, 0 failed across five viewports",
+    "visual_verdict": "94/100 pass",
+    "typecheck": "passed",
+    "lint": "passed",
+    "build": "passed",
+    "independent_review": "approved"
+  }
 }

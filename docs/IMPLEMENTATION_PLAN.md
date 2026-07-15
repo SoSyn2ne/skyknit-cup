@@ -633,7 +633,7 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 
 ### Milestone 36: 누적 미션 진행과 영구 해금
 
-**상태: 구현 중 — 2026-07-15**
+**상태: 자동 검증 완료 / 실기기·사람 플레이테스트 대기 — 2026-07-15**
 
 **결과물**
 - `.omx/plans/prd-m36-progressive-missions.md`, `.omx/plans/test-spec-m36-progressive-missions.md`
@@ -641,6 +641,7 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 - 완주 → 돌풍 → 무리스폰 → 시간 → 무충돌 → 종합으로 누적되는 평가 규칙
 - 준비/`Esc` 선택기의 잠금 상태와 성공 결과의 `다음 미션` 동작
 - v8 등급·Top 10·고스트를 그대로 사용하는 무필드 마이그레이션
+- `docs/MILESTONE_36_PROGRESSIVE_MISSIONS_REPORT.md`, `docs/M36_PROGRESSIVE_MISSIONS_PLAYTEST_HANDOFF.md`
 
 **완료 조건**
 - 비어 있는 저장은 첫 미션만 열고, 브론즈 이상은 정확히 다음 미션을 열며, 후반 기록이 있는 기존 저장은 접근권을 잃지 않는다.

@@ -18,8 +18,7 @@
   "reasoning": "The direct pause selector, next-unlock requirement, settings, and three primary actions are fully visible with consistent hierarchy and single-line labels across all five viewports.",
   "suggestions": [],
   "next_actions": [
-    "run full regression suite",
-    "complete independent review",
-    "finalize Milestone 36 evidence"
+    "run the real-device mission progression playtest",
+    "record player feedback on cumulative difficulty and lock copy"
   ]
 }
