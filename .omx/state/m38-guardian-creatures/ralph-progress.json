@@ -1,0 +1,75 @@
+{
+  "scope": "m38-guardian-creatures",
+  "iteration": 18,
+  "threshold": 90,
+  "passed": true,
+  "active": false,
+  "completed_at": "2026-07-15T19:26:00.2135295+09:00",
+  "guardians": {
+    "ember-phoenix": {
+      "score": 90,
+      "verdict": "pass",
+      "category_match": true,
+      "differences": [
+        "Raised tail-plume tips slightly overlap the crest silhouette in front view.",
+        "Narrow wing support rods remain more exposed than the Sunrise Dragon wing roots.",
+        "The broad dark chest is less articulated than the head, wings, and tail."
+      ],
+      "suggestions": [
+        "Optionally yaw the tail plumes a few degrees farther outward for a cleaner front silhouette.",
+        "Optionally extend shoulder coverts inward to hide more of the wing support rods.",
+        "Optionally add a shallow chest-feather row without changing accepted proportions."
+      ],
+      "reasoning": "v11 restores readable eyes, articulated talons and halluces, and exactly three separated split-tip plumes in side and three-quarter views, meeting the Sunrise Dragon quality bar."
+    },
+    "storm-white-tiger": {
+      "score": 90,
+      "verdict": "pass",
+      "category_match": true,
+      "differences": [
+        "The v13 geometry clears the tiger head, paw, rear-chain, tail, and flight-wing blockers.",
+        "The v14 reflected neutral transforms remove asymmetry, excessive width, and head occlusion.",
+        "Folded primary tips sit slightly low across the hindquarter in side view, adding minor visual weight near the rear hock."
+      ],
+      "suggestions": [
+        "Freeze the accepted v13 geometry and v14 neutral matrix.",
+        "Preserve the full X-axis reflection, matched tip positions, and byte-identical flight branch.",
+        "Optional later polish only: raise both reflected folded-wing targets by about four degrees."
+      ],
+      "reasoning": "v14 produces a compact readable neutral fold while preserving the passing tiger geometry and byte-identical flight pose, meeting the Sunrise Dragon acceptance threshold."
+    }
+  },
+  "runtime_preview": {
+    "touch-minimum-workshop": {
+      "score": 91,
+      "verdict": "pass",
+      "category_match": true,
+      "differences": [
+        "The 320x568 dialog necessarily leaves a shallow presentation band above the controls.",
+        "The guardian is smaller than in wider portrait layouts but its full silhouette remains readable."
+      ],
+      "suggestions": [
+        "Preserve the compact-only camera pitch so future guardian silhouettes remain clear of the dialog.",
+        "Revisit the dialog height only if more preview space becomes a product priority."
+      ],
+      "reasoning": "The final touch-minimum capture keeps the phoenix wings, body, feet, and tail fully above the workshop dialog with stable clearance while leaving all controls readable and usable."
+    }
+  },
+  "runtime_verification": {
+    "unit": "46 files, 523 passed",
+    "playwright": "40 passed, 15 intentional skips, 0 failed across five viewports",
+    "performance_report_sha256": "36680D28860AA1A0DE720F8AE6E767B7840E67BA8AFB034A01F7B0BF5A418A66",
+    "ember-phoenix": {
+      "desktop_high_fps_median_min": [60, 53],
+      "mobile_low_fps_median_min": [60, 60]
+    },
+    "storm-white-tiger": {
+      "desktop_high_fps_median_min": [60, 51],
+      "mobile_low_fps_median_min": [60, 60]
+    }
+  },
+  "next_actions": [
+    "Keep both accepted source geometries and the Tiger v14 neutral preview matrix frozen.",
+    "Preserve the compact workshop camera clearance and recorded performance gates in future guardian work."
+  ]
+}

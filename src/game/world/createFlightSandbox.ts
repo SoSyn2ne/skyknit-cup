@@ -216,7 +216,7 @@ const PORTRAIT_WORKSHOP_CAMERA: ReadyCameraFraming = Object.freeze({
 
 const COMPACT_PORTRAIT_WORKSHOP_CAMERA: ReadyCameraFraming = Object.freeze({
   ...COMPACT_PORTRAIT_READY_CAMERA,
-  lookHeight: -23,
+  lookHeight: -35,
 })
 
 export function getReadyCameraFraming(
