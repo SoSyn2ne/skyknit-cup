@@ -7,6 +7,10 @@ import {
   type MissionId,
 } from '../missions/missionRules'
 import {
+  normalizeCharacterLoadout,
+  type CharacterLoadout,
+} from '../customization/characterCatalog'
+import {
   advanceMissionAttemptClock,
   createMissionSession,
   finishMissionAttempt,
@@ -65,6 +69,7 @@ export interface RacePersistentState {
   readonly muted: boolean
   readonly musicVolume: number
   readonly quality: RaceQuality
+  readonly characterLoadout: CharacterLoadout
   readonly bestTimeMs: number | null
   readonly missionGrades: Readonly<
     Partial<Record<MissionId, AwardedMissionGrade>>
@@ -128,11 +133,26 @@ export type RaceEvent =
   | { readonly type: 'SET_MUTED'; readonly muted: boolean }
   | { readonly type: 'SET_MUSIC_VOLUME'; readonly musicVolume: number }
   | { readonly type: 'SET_QUALITY'; readonly quality: RaceQuality }
+  | {
+      readonly type: 'SET_CHARACTER_LOADOUT'
+      readonly loadout: CharacterLoadout
+    }
 
 const COUNTDOWN_DURATION_MS = 3_000
 
 function cloneVector(vector: RaceVector): RaceVector {
   return { x: vector.x, y: vector.y, z: vector.z }
+}
+
+function characterLoadoutsEqual(
+  left: CharacterLoadout,
+  right: CharacterLoadout,
+): boolean {
+  return (
+    left.characterId === right.characterId &&
+    left.paletteId === right.paletteId &&
+    left.accessoryId === right.accessoryId
+  )
 }
 
 function createCleanRun(config: RaceConfig): RaceRunState {
@@ -261,6 +281,7 @@ export function createInitialRaceState(
     mission: createMissionSession(),
     persistent: {
       ...options.persistent,
+      characterLoadout: { ...options.persistent.characterLoadout },
       missionGrades: { ...options.persistent.missionGrades },
       coinBestTimesMs: { ...options.persistent.coinBestTimesMs },
       skyLeague: cloneSkyLeagueRecords(options.persistent.skyLeague),
@@ -274,6 +295,21 @@ export function transitionRace(
   state: RaceState,
   event: RaceEvent,
 ): RaceState {
+  if (event.type === 'SET_CHARACTER_LOADOUT') {
+    if (state.phase !== 'ready' && state.phase !== 'paused') return state
+
+    const characterLoadout = { ...normalizeCharacterLoadout(event.loadout) }
+    return characterLoadoutsEqual(
+      characterLoadout,
+      state.persistent.characterLoadout,
+    )
+      ? state
+      : {
+          ...state,
+          persistent: { ...state.persistent, characterLoadout },
+        }
+  }
+
   if (event.type === 'SET_MUTED') {
     return event.muted === state.persistent.muted
       ? state

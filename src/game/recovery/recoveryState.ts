@@ -28,6 +28,7 @@ export function prepareRaceForRecovery(state: RaceState): RaceState {
     mission: cloneMissionSession(paused.mission),
     persistent: {
       ...paused.persistent,
+      characterLoadout: { ...paused.persistent.characterLoadout },
       missionGrades: { ...paused.persistent.missionGrades },
       coinBestTimesMs: { ...paused.persistent.coinBestTimesMs },
       skyLeague: cloneSkyLeagueRecords(paused.persistent.skyLeague),

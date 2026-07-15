@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { DEFAULT_CHARACTER_LOADOUT } from '../customization/characterCatalog'
 import {
   advanceRaceClock,
   canMove,
@@ -25,6 +26,7 @@ const options = {
     muted: true,
     musicVolume: 0.35,
     quality: 'high' as const,
+    characterLoadout: DEFAULT_CHARACTER_LOADOUT,
     bestTimeMs: 50_000,
     missionGrades: { 'first-skyknot': 'silver' as const },
     coinBestTimesMs: { 'festival-hub': 18_250 },
@@ -537,6 +539,73 @@ describe('race state', () => {
     expect(transitionRace(state, { type: 'SET_MUTED', muted: true })).toBe(
       state,
     )
+  })
+
+  it.each(['ready', 'paused'] as const)(
+    'applies a detached character loadout while the race is %s',
+    (phase) => {
+      const state = makeState(phase)
+      const loadout = {
+        characterId: 'cloud-manta' as const,
+        paletteId: 'moonlight' as const,
+        accessoryId: 'festival-ribbon' as const,
+      }
+      const changed = transitionRace(state, {
+        type: 'SET_CHARACTER_LOADOUT',
+        loadout,
+      })
+
+      expect(changed.phase).toBe(phase)
+      expect(changed.persistent.characterLoadout).toEqual(loadout)
+      expect(changed.persistent.characterLoadout).not.toBe(loadout)
+    },
+  )
+
+  it('preserves active progress and existing persistent collections when applying a loadout', () => {
+    const state = makeState('paused')
+    const changed = transitionRace(state, {
+      type: 'SET_CHARACTER_LOADOUT',
+      loadout: {
+        characterId: 'storm-griffin',
+        paletteId: 'storm',
+        accessoryId: 'wind-goggles',
+      },
+    })
+
+    expect(changed.run).toBe(state.run)
+    expect(changed.mission).toBe(state.mission)
+    expect(changed.config).toBe(state.config)
+    expect(changed.persistent.missionGrades).toBe(
+      state.persistent.missionGrades,
+    )
+    expect(changed.persistent.coinBestTimesMs).toBe(
+      state.persistent.coinBestTimesMs,
+    )
+    expect(changed.persistent.skyLeague).toBe(state.persistent.skyLeague)
+    expect(changed.persistent.ghosts).toBe(state.persistent.ghosts)
+    expect(changed.persistent.exploration).toBe(
+      state.persistent.exploration,
+    )
+  })
+
+  it.each([
+    'loading',
+    'countdown',
+    'racing',
+    'finished',
+  ] as const)('rejects a character loadout change while %s', (phase) => {
+    const state = makeState(phase)
+
+    expect(
+      transitionRace(state, {
+        type: 'SET_CHARACTER_LOADOUT',
+        loadout: {
+          characterId: 'storm-griffin',
+          paletteId: 'moonlight',
+          accessoryId: 'wind-goggles',
+        },
+      }),
+    ).toBe(state)
   })
 
   it('selects missions only while ready', () => {

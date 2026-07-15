@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { deriveUnlockedMissionIds } from '../missions/missionRules'
+import { DEFAULT_CHARACTER_LOADOUT } from '../customization/characterCatalog'
 
 import {
   DEFAULT_SETTINGS,
@@ -94,13 +95,18 @@ describe('versioned game settings', () => {
     )
   })
 
-  it('round-trips settings, exploration discoveries, league records, and ghosts in version 8', () => {
+  it('round-trips a selected character with all existing settings in version 9', () => {
     const storage = new MemoryStorage()
     const settings = {
       bestTimeMs: 123_456,
       muted: true,
       musicVolume: 0.6,
       quality: 'low' as const,
+      characterLoadout: {
+        characterId: 'cloud-manta' as const,
+        paletteId: 'storm' as const,
+        accessoryId: 'festival-ribbon' as const,
+      },
       missionGrades: {
         'first-skyknot': 'gold' as const,
         'clean-flight': 'bronze' as const,
@@ -142,10 +148,71 @@ describe('versioned game settings', () => {
 
     expect(saveSettings(storage, settings)).toBe(true)
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 8,
+      version: 9,
       ...settings,
     })
     expect(readSettings(storage)).toEqual(settings)
+  })
+
+  it('migrates a complete version 8 document to the default loadout without losing progress', () => {
+    const storage = new MemoryStorage()
+    const legacySettings = {
+      bestTimeMs: 123_456,
+      muted: true,
+      musicVolume: 0.62,
+      quality: 'high' as const,
+      missionGrades: {
+        'first-skyknot': 'gold' as const,
+        'boost-mastery': 'silver' as const,
+      },
+      coinBestTimesMs: {
+        'festival-hub': 18_250,
+        'wind-canyon': 24_800,
+      },
+      skyLeague: {
+        raceTop10Ms: [123_456, 130_000],
+        coinTop10Ms: {
+          'festival-hub': [18_250, 20_000],
+          'wind-canyon': [24_800],
+        },
+        missionTop10: {
+          'first-skyknot': [
+            { elapsedMs: 123_456, grade: 'gold' as const },
+          ],
+        },
+      },
+      ghosts: {
+        race: RACE_GHOST,
+        coin: { 'festival-hub': COIN_GHOST },
+        mission: { 'first-skyknot': MISSION_GHOST },
+      },
+      exploration: {
+        position: { x: 430, y: 31, z: 190 },
+        headingRadians: 1.25,
+        movement: 'airborne' as const,
+        discoveredRegionIds: ['festival-hub', 'cloud-ruins'] as const,
+        destinationRegionId: 'cloud-ruins' as const,
+        discoveredLandmarkIds: [
+          'dawnwing-airfield',
+          'whispering-grotto',
+        ] as const,
+        traversedWindZoneIds: ['harbor-lift'] as const,
+      },
+    }
+    storage.values.set(
+      SETTINGS_KEY,
+      JSON.stringify({ version: 8, ...legacySettings }),
+    )
+
+    expect(readSettings(storage)).toEqual({
+      ...legacySettings,
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
+    })
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
+      version: 9,
+      ...legacySettings,
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
+    })
   })
 
   it('migrates version 6 without losing audio, race, mission, coin, or exploration progress', () => {
@@ -177,6 +244,7 @@ describe('versioned game settings', () => {
       muted: true,
       musicVolume: 0.55,
       quality: 'high',
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       missionGrades: { 'first-skyknot': 'gold' },
       coinBestTimesMs: { 'festival-hub': 18_200 },
       skyLeague: {
@@ -196,7 +264,8 @@ describe('versioned game settings', () => {
       },
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 8,
+      version: 9,
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       bestTimeMs: 123_000,
       musicVolume: 0.55,
       missionGrades: { 'first-skyknot': 'gold' },
@@ -267,7 +336,7 @@ describe('versioned game settings', () => {
       ],
       traversedWindZoneIds: ['harbor-lift'],
     })
-    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(8)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(9)
   })
 
   it('migrates version 5 without losing progress and defaults BGM volume', () => {
@@ -302,6 +371,7 @@ describe('versioned game settings', () => {
       muted: true,
       musicVolume: 0.35,
       quality: 'high',
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       missionGrades: { 'first-skyknot': 'silver' },
       coinBestTimesMs: { 'festival-hub': 17_200 },
       skyLeague: {
@@ -313,7 +383,8 @@ describe('versioned game settings', () => {
       exploration: migratedExploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 8,
+      version: 9,
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       bestTimeMs: 42_500,
       muted: true,
       musicVolume: 0.35,
@@ -362,6 +433,7 @@ describe('versioned game settings', () => {
       muted: false,
       musicVolume: 0.35,
       quality: 'auto',
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       missionGrades: {},
       coinBestTimesMs: {},
       skyLeague: {
@@ -373,11 +445,12 @@ describe('versioned game settings', () => {
       exploration: DEFAULT_SETTINGS.exploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 8,
+      version: 9,
       bestTimeMs: 51_234,
       muted: false,
       musicVolume: 0.35,
       quality: 'auto',
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       missionGrades: {},
       coinBestTimesMs: {},
       skyLeague: {
@@ -411,6 +484,7 @@ describe('versioned game settings', () => {
       muted: true,
       musicVolume: 0.35,
       quality: 'high',
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       missionGrades: {},
       coinBestTimesMs: {},
       skyLeague: {
@@ -422,11 +496,12 @@ describe('versioned game settings', () => {
       exploration: DEFAULT_SETTINGS.exploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 8,
+      version: 9,
       bestTimeMs: 42_000,
       muted: true,
       musicVolume: 0.35,
       quality: 'high',
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       missionGrades: {},
       coinBestTimesMs: {},
       skyLeague: {
@@ -444,7 +519,7 @@ describe('versioned game settings', () => {
     storage.values.set(SETTINGS_KEY, JSON.stringify({ version: 3 }))
 
     expect(readSettings(storage)).toEqual(DEFAULT_SETTINGS)
-    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(8)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(9)
   })
 
   it('migrates version 4 exploration and fills empty coin records', () => {
@@ -471,7 +546,8 @@ describe('versioned game settings', () => {
       exploration: migratedExploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 8,
+      version: 9,
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       coinBestTimesMs: {},
       exploration: migratedExploration,
     })
@@ -588,7 +664,8 @@ describe('versioned game settings', () => {
       600_000,
     )
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 8,
+      version: 9,
+      characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       bestTimeMs: 1,
       coinBestTimesMs: { 'festival-hub': 10 },
       missionGrades: { 'time-trial': 'gold' },
@@ -650,7 +727,7 @@ describe('versioned game settings', () => {
     'not json',
     '{}',
     '{"version":1,"bestTimeMs":50000}',
-    '{"version":9,"bestTimeMs":50000}',
+    '{"version":10,"bestTimeMs":50000,"characterLoadout":{"characterId":"cloud-manta","paletteId":"moonlight","accessoryId":"festival-ribbon"}}',
     '{"version":3,"bestTimeMs":0,"muted":"yes","quality":"ultra"}',
   ])('uses safe values for a damaged or unsupported document: %s', (value) => {
     const storage = new MemoryStorage()

@@ -43,6 +43,11 @@ function makeState(phase: RacePhase): RaceState {
       muted: true,
       musicVolume: 0.35,
       quality: 'low',
+      characterLoadout: {
+        characterId: 'storm-griffin',
+        paletteId: 'moonlight',
+        accessoryId: 'festival-ribbon',
+      },
       missionGrades: { 'first-skyknot': 'silver' },
       coinBestTimesMs: { 'festival-hub': 18_250 },
       skyLeague: {
@@ -101,6 +106,12 @@ describe('renderer recovery race state', () => {
     expect(recovered.run).not.toBe(state.run)
     expect(recovered.run.position).not.toBe(state.run.position)
     expect(recovered.persistent).not.toBe(state.persistent)
+    expect(recovered.persistent.characterLoadout).toEqual(
+      state.persistent.characterLoadout,
+    )
+    expect(recovered.persistent.characterLoadout).not.toBe(
+      state.persistent.characterLoadout,
+    )
     expect(recovered.persistent.missionGrades).not.toBe(
       state.persistent.missionGrades,
     )

@@ -31,6 +31,12 @@ import {
   type SkyLeagueRecordResult,
   type SkyLeagueRecords,
 } from '../competition/skyLeagueRecords'
+import {
+  DEFAULT_CHARACTER_LOADOUT,
+  isCharacterLoadout,
+  normalizeCharacterLoadout,
+  type CharacterLoadout,
+} from '../customization/characterCatalog'
 
 export interface RecordStorage {
   getItem(key: string): string | null
@@ -62,6 +68,7 @@ export interface GameSettings {
   readonly muted: boolean
   readonly musicVolume: number
   readonly quality: QualityPreference
+  readonly characterLoadout: CharacterLoadout
   readonly missionGrades: Readonly<MissionGrades>
   readonly coinBestTimesMs: Readonly<CoinBestTimes>
   readonly skyLeague: SkyLeagueRecords
@@ -75,7 +82,7 @@ export interface CoinCompetitionResult {
 }
 
 interface StoredSettings extends GameSettings {
-  readonly version: 8
+  readonly version: 9
 }
 
 interface LegacyStoredRecord {
@@ -97,6 +104,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   muted: false,
   musicVolume: 0.35,
   quality: 'auto',
+  characterLoadout: DEFAULT_CHARACTER_LOADOUT,
   missionGrades: {},
   coinBestTimesMs: {},
   skyLeague: createEmptySkyLeagueRecords(),
@@ -204,6 +212,7 @@ export function isCanonicalSkyLeagueGhosts(
 function freshDefaults(): GameSettings {
   return {
     ...DEFAULT_SETTINGS,
+    characterLoadout: { ...DEFAULT_CHARACTER_LOADOUT },
     missionGrades: {},
     coinBestTimesMs: {},
     skyLeague: cloneSkyLeagueRecords(DEFAULT_SETTINGS.skyLeague),
@@ -485,6 +494,20 @@ function hasCanonicalFestivalDiscoveries(
   )
 }
 
+function characterLoadoutMatches(
+  value: unknown,
+  expected: CharacterLoadout,
+): boolean {
+  return (
+    isObjectRecord(value) &&
+    Object.keys(value).length === 3 &&
+    isCharacterLoadout(value) &&
+    value.characterId === expected.characterId &&
+    value.paletteId === expected.paletteId &&
+    value.accessoryId === expected.accessoryId
+  )
+}
+
 function parseSettings(
   raw: string,
 ): { readonly settings: GameSettings; readonly shouldMigrate: boolean } | null {
@@ -499,7 +522,8 @@ function parseSettings(
       parsed.version !== 5 &&
       parsed.version !== 6 &&
       parsed.version !== 7 &&
-      parsed.version !== 8)
+      parsed.version !== 8 &&
+      parsed.version !== 9)
   ) {
     return null
   }
@@ -522,6 +546,14 @@ function parseSettings(
     'quality' in parsed && isQualityPreference(parsed.quality)
       ? parsed.quality
       : 'auto'
+  const rawCharacterLoadout =
+    parsed.version >= 9 && 'characterLoadout' in parsed
+      ? parsed.characterLoadout
+      : undefined
+  const characterLoadout =
+    parsed.version >= 9
+      ? normalizeCharacterLoadout(rawCharacterLoadout)
+      : { ...DEFAULT_CHARACTER_LOADOUT }
   const missionGrades =
     parsed.version >= 3 &&
     'missionGrades' in parsed
@@ -566,6 +598,7 @@ function parseSettings(
       muted,
       musicVolume,
       quality,
+      characterLoadout,
       missionGrades: synchronizedMissionGrades,
       coinBestTimesMs: synchronizedCoinBestTimesMs,
       skyLeague,
@@ -573,7 +606,8 @@ function parseSettings(
       exploration,
     },
     shouldMigrate:
-      parsed.version !== 8 ||
+      parsed.version !== 9 ||
+      !characterLoadoutMatches(rawCharacterLoadout, characterLoadout) ||
       !hasCanonicalFestivalDiscoveries(rawExploration, exploration) ||
       !isCanonicalSkyLeagueRecords(rawSkyLeague) ||
       JSON.stringify(rawSkyLeague) !== JSON.stringify(skyLeague) ||
@@ -612,6 +646,7 @@ function isValidSettings(settings: GameSettings): boolean {
     typeof settings.muted === 'boolean' &&
     isMusicVolume(settings.musicVolume) &&
     isQualityPreference(settings.quality) &&
+    isCharacterLoadout(settings.characterLoadout) &&
     typeof settings.missionGrades === 'object' &&
     settings.missionGrades !== null &&
     Object.entries(settings.missionGrades).every(
@@ -682,8 +717,9 @@ export function saveSettings(
   if (!isValidSettings(settings)) return false
 
   const stored: StoredSettings = {
-    version: 8,
+    version: 9,
     ...settings,
+    characterLoadout: { ...settings.characterLoadout },
     missionGrades: { ...settings.missionGrades },
     coinBestTimesMs: { ...settings.coinBestTimesMs },
     skyLeague: cloneSkyLeagueRecords(settings.skyLeague),
