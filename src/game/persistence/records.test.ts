@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { deriveUnlockedMissionIds } from '../missions/missionRules'
+
 import {
   DEFAULT_SETTINGS,
   SETTINGS_KEY,
@@ -570,6 +572,16 @@ describe('versioned game settings', () => {
         mission: { 'time-trial': MISSION_GHOST },
       },
     })
+    expect(deriveUnlockedMissionIds(settings.missionGrades)).toEqual([
+      'first-skyknot',
+      'boost-mastery',
+      'no-respawn',
+      'time-trial',
+      'clean-flight',
+    ])
+    expect(
+      JSON.parse(storage.values.get(SETTINGS_KEY) ?? '{}'),
+    ).not.toHaveProperty('unlockedMissionIds')
     expect(settings.ghosts.coin['festival-hub']?.samples).toHaveLength(6_001)
     expect(settings.ghosts.coin['festival-hub']?.samples[0]?.[0]).toBe(0)
     expect(settings.ghosts.coin['festival-hub']?.samples.at(-1)?.[0]).toBe(

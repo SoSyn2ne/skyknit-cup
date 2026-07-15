@@ -8,6 +8,7 @@ import {
   recordRaceCollision,
   recordRaceRespawn,
   recordCheckpointPass,
+  selectNextRaceMission,
   selectRaceMission,
   syncRaceRun,
   transitionRace,
@@ -539,12 +540,152 @@ describe('race state', () => {
   })
 
   it('selects missions only while ready', () => {
-    const ready = { ...makeState('ready'), mission: { ...makeState('ready').mission, status: 'idle' as const } }
+    const ready = {
+      ...makeState('ready'),
+      mission: {
+        ...makeState('ready').mission,
+        status: 'idle' as const,
+      },
+      persistent: {
+        ...makeState('ready').persistent,
+        missionGrades: {
+          'first-skyknot': 'gold' as const,
+          'boost-mastery': 'gold' as const,
+          'no-respawn': 'gold' as const,
+          'time-trial': 'gold' as const,
+        },
+      },
+    }
     const selected = selectRaceMission(ready, 'clean-flight')
     const racing = makeState('racing')
 
     expect(selected.mission.selectedMissionId).toBe('clean-flight')
     expect(selectRaceMission(racing, 'time-trial')).toBe(racing)
+  })
+
+  it('rejects locked mission selection for a new player', () => {
+    const ready = {
+      ...makeState('ready'),
+      mission: {
+        ...makeState('ready').mission,
+        status: 'idle' as const,
+      },
+      persistent: {
+        ...makeState('ready').persistent,
+        missionGrades: {},
+      },
+    }
+
+    expect(selectRaceMission(ready, 'boost-mastery')).toBe(ready)
+    expect(selectRaceMission(ready, 'golden-knot')).toBe(ready)
+  })
+
+  it('rejects starting a locked mission from a recovered ready state', () => {
+    const ready = {
+      ...makeState('ready'),
+      mission: {
+        ...makeState('ready').mission,
+        selectedMissionId: 'golden-knot' as const,
+        status: 'idle' as const,
+      },
+      persistent: {
+        ...makeState('ready').persistent,
+        missionGrades: {},
+      },
+    }
+
+    expect(
+      transitionRace(ready, { type: 'START', input: 'keyboard' }),
+    ).toBe(ready)
+  })
+
+  it('preserves access around a sparse later historical grade', () => {
+    const ready = {
+      ...makeState('ready'),
+      mission: {
+        ...makeState('ready').mission,
+        status: 'idle' as const,
+      },
+      persistent: {
+        ...makeState('ready').persistent,
+        missionGrades: { 'time-trial': 'bronze' as const },
+      },
+    }
+
+    expect(
+      selectRaceMission(ready, 'clean-flight').mission.selectedMissionId,
+    ).toBe('clean-flight')
+    expect(selectRaceMission(ready, 'golden-knot')).toBe(ready)
+  })
+
+  it('changes to an unlocked mission from pause by abandoning only the attempt', () => {
+    const paused = makeState('paused')
+    const changed = selectRaceMission(paused, 'boost-mastery')
+
+    expect(changed).toMatchObject({
+      phase: 'ready',
+      pausedFrom: null,
+      mission: {
+        selectedMissionId: 'boost-mastery',
+        status: 'idle',
+        attempt: {
+          elapsedMs: 0,
+          nextCheckpointIndex: 0,
+          finished: false,
+        },
+        result: null,
+      },
+    })
+    expect(changed.persistent).toBe(paused.persistent)
+  })
+
+  it('moves a successful result to the newly unlocked next mission without starting', () => {
+    const finished = makeState('finished')
+    const next = selectNextRaceMission(finished)
+
+    expect(next).toMatchObject({
+      phase: 'ready',
+      mission: {
+        selectedMissionId: 'boost-mastery',
+        status: 'idle',
+      },
+    })
+    expect(next.persistent).toBe(finished.persistent)
+  })
+
+  it('has no next-mission transition after failure or final completion', () => {
+    const failed = {
+      ...makeState('finished'),
+      mission: {
+        ...makeState('finished').mission,
+        result: {
+          success: false,
+          grade: 'failed' as const,
+          unmetCriteria: ['boost-count' as const],
+        },
+      },
+    }
+    const final = {
+      ...makeState('finished'),
+      mission: {
+        ...makeState('finished').mission,
+        selectedMissionId: 'golden-knot' as const,
+      },
+      persistent: {
+        ...makeState('finished').persistent,
+        missionGrades: {
+          'first-skyknot': 'gold' as const,
+          'boost-mastery': 'gold' as const,
+          'no-respawn': 'gold' as const,
+          'time-trial': 'gold' as const,
+          'clean-flight': 'gold' as const,
+          'golden-knot': 'gold' as const,
+        },
+      },
+    }
+
+    expect(selectNextRaceMission(failed)).toBe(failed)
+    expect(selectNextRaceMission(final)).toBe(final)
   })
 
   it('starts and retries a clean attempt while preserving mission choice', () => {
@@ -608,7 +749,7 @@ describe('race state', () => {
   it('evaluates the mission at the final checkpoint and saves only a higher grade', () => {
     const racing = {
       ...withRun(makeState('racing'), {
-        elapsedMs: 180_000,
+        elapsedMs: 150_000,
         nextCheckpointIndex: 2,
       }),
       mission: {
@@ -616,8 +757,9 @@ describe('race state', () => {
         selectedMissionId: 'clean-flight' as const,
         attempt: {
           ...makeState('racing').mission.attempt,
-          elapsedMs: 180_000,
+          elapsedMs: 150_000,
           nextCheckpointIndex: 2,
+          boostActivationCount: 7,
         },
       },
     }

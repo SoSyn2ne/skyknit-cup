@@ -1,4 +1,6 @@
 import {
+  deriveUnlockedMissionIds,
+  getNextMissionId,
   isAwardedMissionGrade,
   mergeBestGrade,
   type AwardedMissionGrade,
@@ -312,7 +314,10 @@ export function transitionRace(
   if (
     state.phase === 'ready' &&
     event.type === 'START' &&
-    (event.input === 'keyboard' || event.input === 'touch')
+    (event.input === 'keyboard' || event.input === 'touch') &&
+    deriveUnlockedMissionIds(state.persistent.missionGrades).includes(
+      state.mission.selectedMissionId,
+    )
   ) {
     return startFreshCountdown(state)
   }
@@ -459,11 +464,48 @@ export function selectRaceMission(
   state: RaceState,
   missionId: MissionId,
 ): RaceState {
-  if (state.phase !== 'ready') {
+  if (state.phase !== 'ready' && state.phase !== 'paused') {
     return state
   }
-  const mission = selectMission(state.mission, missionId)
-  return mission === state.mission ? state : { ...state, mission }
+  if (
+    !deriveUnlockedMissionIds(state.persistent.missionGrades).includes(
+      missionId,
+    )
+  ) {
+    return state
+  }
+  if (state.mission.selectedMissionId === missionId) {
+    return state
+  }
+
+  const selectableState =
+    state.phase === 'paused'
+      ? transitionRace(state, { type: 'RETURN_TO_READY' })
+      : state
+  const mission = selectMission(selectableState.mission, missionId)
+  return mission === selectableState.mission
+    ? selectableState
+    : { ...selectableState, mission }
+}
+
+export function selectNextRaceMission(state: RaceState): RaceState {
+  if (state.phase !== 'finished' || state.mission.result?.success !== true) {
+    return state
+  }
+
+  const nextMissionId = getNextMissionId(state.mission.selectedMissionId)
+  if (
+    nextMissionId === null ||
+    !deriveUnlockedMissionIds(state.persistent.missionGrades).includes(
+      nextMissionId,
+    )
+  ) {
+    return state
+  }
+
+  const ready = transitionRace(state, { type: 'RETURN_TO_READY' })
+  const mission = selectMission(ready.mission, nextMissionId)
+  return mission === ready.mission ? ready : { ...ready, mission }
 }
 
 export function recordRaceCollision(state: RaceState): RaceState {

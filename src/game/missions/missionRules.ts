@@ -1,9 +1,9 @@
 export const MISSION_IDS = [
   'first-skyknot',
+  'boost-mastery',
+  'no-respawn',
   'time-trial',
   'clean-flight',
-  'no-respawn',
-  'boost-mastery',
   'golden-knot',
 ] as const
 
@@ -46,31 +46,129 @@ export const MISSION_CATALOG: readonly MissionDefinition[] = [
     objective: '모든 바람 관문을 순서대로 통과해 완주하세요.',
   },
   {
-    id: 'time-trial',
-    name: '질풍 시간전',
-    objective: '3분 안에 하늘매듭을 완성하세요.',
-  },
-  {
-    id: 'clean-flight',
-    name: '구름 한 점 없이',
-    objective: '어떤 장애물에도 부딪히지 않고 완주하세요.',
+    id: 'boost-mastery',
+    name: '돌풍 조율사',
+    objective: '돌풍을 세 번 이상 활성화하고 완주하세요.',
   },
   {
     id: 'no-respawn',
     name: '끊기지 않는 매듭',
-    objective: '리스폰 없이 한 번의 비행으로 완주하세요.',
+    objective: '돌풍을 세 번 이상 활성화하고 리스폰 없이 완주하세요.',
   },
   {
-    id: 'boost-mastery',
-    name: '돌풍 조율사',
-    objective: '돌풍을 세 번 이상 정확히 활성화하고 완주하세요.',
+    id: 'time-trial',
+    name: '질풍 시간전',
+    objective: '돌풍 3회 이상, 리스폰 없이 3분 30초 안에 완주하세요.',
+  },
+  {
+    id: 'clean-flight',
+    name: '구름 한 점 없이',
+    objective: '시간·돌풍·무리스폰 조건을 지키며 충돌 없이 완주하세요.',
   },
   {
     id: 'golden-knot',
     name: '황금 하늘매듭',
-    objective: '시간, 충돌, 리스폰, 돌풍 조건을 함께 달성하세요.',
+    objective: '3분 안에 충돌·리스폰 없이 돌풍을 5회 이상 쓰세요.',
   },
 ]
+
+interface MissionThreshold {
+  readonly maxElapsedMs?: number
+  readonly maxCollisionCount?: number
+  readonly maxRespawnCount?: number
+  readonly minBoostActivationCount?: number
+}
+
+interface MissionGradeThresholds {
+  readonly bronze: MissionThreshold
+  readonly silver: MissionThreshold
+  readonly gold: MissionThreshold
+}
+
+const MISSION_GRADE_THRESHOLDS: Readonly<
+  Record<MissionId, MissionGradeThresholds>
+> = {
+  'first-skyknot': {
+    bronze: {},
+    silver: { maxElapsedMs: 210_000 },
+    gold: { maxElapsedMs: 180_000 },
+  },
+  'boost-mastery': {
+    bronze: { minBoostActivationCount: 3 },
+    silver: { minBoostActivationCount: 5 },
+    gold: { minBoostActivationCount: 7 },
+  },
+  'no-respawn': {
+    bronze: { maxRespawnCount: 0, minBoostActivationCount: 3 },
+    silver: {
+      maxElapsedMs: 210_000,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 5,
+    },
+    gold: {
+      maxElapsedMs: 180_000,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 7,
+    },
+  },
+  'time-trial': {
+    bronze: {
+      maxElapsedMs: 210_000,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 3,
+    },
+    silver: {
+      maxElapsedMs: 165_000,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 5,
+    },
+    gold: {
+      maxElapsedMs: 150_000,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 7,
+    },
+  },
+  'clean-flight': {
+    bronze: {
+      maxElapsedMs: 210_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 3,
+    },
+    silver: {
+      maxElapsedMs: 165_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 5,
+    },
+    gold: {
+      maxElapsedMs: 150_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 7,
+    },
+  },
+  'golden-knot': {
+    bronze: {
+      maxElapsedMs: 180_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 5,
+    },
+    silver: {
+      maxElapsedMs: 165_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 6,
+    },
+    gold: {
+      maxElapsedMs: 150_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 7,
+    },
+  },
+}
 
 const GRADE_RANK: Readonly<Record<MissionGrade, number>> = {
   failed: 0,
@@ -101,52 +199,60 @@ function result(
   return { success: grade !== 'failed', grade, unmetCriteria }
 }
 
-function timeGrade(
-  elapsedMs: number,
-  goldMs: number,
-  silverMs: number,
-): AwardedMissionGrade {
-  if (elapsedMs <= goldMs) {
-    return 'gold'
+function collectUnmetCriteria(
+  stats: MissionAttemptStats,
+  threshold: MissionThreshold,
+): MissionCriterionId[] {
+  const unmet: MissionCriterionId[] = []
+  if (
+    threshold.maxElapsedMs !== undefined &&
+    stats.elapsedMs > threshold.maxElapsedMs
+  ) {
+    unmet.push('time-limit')
   }
-  if (elapsedMs <= silverMs) {
-    return 'silver'
+  if (
+    threshold.maxCollisionCount !== undefined &&
+    stats.collisionCount > threshold.maxCollisionCount
+  ) {
+    unmet.push('collision-limit')
   }
-  return 'bronze'
+  if (
+    threshold.maxRespawnCount !== undefined &&
+    stats.respawnCount > threshold.maxRespawnCount
+  ) {
+    unmet.push('respawn-limit')
+  }
+  if (
+    threshold.minBoostActivationCount !== undefined &&
+    stats.boostActivationCount < threshold.minBoostActivationCount
+  ) {
+    unmet.push('boost-count')
+  }
+  return unmet
 }
 
-function evaluateGoldenKnot(stats: MissionAttemptStats): MissionResult {
-  if (
-    stats.elapsedMs <= 180_000 &&
-    stats.collisionCount === 0 &&
-    stats.respawnCount === 0 &&
-    stats.boostActivationCount >= 5
-  ) {
+function meetsThreshold(
+  stats: MissionAttemptStats,
+  threshold: MissionThreshold,
+): boolean {
+  return collectUnmetCriteria(stats, threshold).length === 0
+}
+
+function evaluateThresholds(
+  stats: MissionAttemptStats,
+  thresholds: MissionGradeThresholds,
+): MissionResult {
+  const unmetBronzeCriteria = collectUnmetCriteria(stats, thresholds.bronze)
+  if (unmetBronzeCriteria.length > 0) {
+    return result('failed', unmetBronzeCriteria)
+  }
+  if (meetsThreshold(stats, thresholds.gold)) {
     return result('gold')
   }
-  if (
-    stats.elapsedMs <= 195_000 &&
-    stats.collisionCount === 0 &&
-    stats.respawnCount <= 1 &&
-    stats.boostActivationCount >= 4
-  ) {
+  if (meetsThreshold(stats, thresholds.silver)) {
     return result('silver')
   }
-  if (
-    stats.elapsedMs <= 210_000 &&
-    stats.collisionCount <= 1 &&
-    stats.respawnCount <= 1 &&
-    stats.boostActivationCount >= 3
-  ) {
-    return result('bronze')
-  }
-
-  const unmet: MissionCriterionId[] = []
-  if (stats.elapsedMs > 210_000) unmet.push('time-limit')
-  if (stats.collisionCount > 1) unmet.push('collision-limit')
-  if (stats.respawnCount > 1) unmet.push('respawn-limit')
-  if (stats.boostActivationCount < 3) unmet.push('boost-count')
-  return result('failed', unmet)
+  return result('bronze')
 }
 
 export function evaluateMission(
@@ -160,29 +266,41 @@ export function evaluateMission(
     return result('failed', ['finish'])
   }
 
-  switch (missionId) {
-    case 'first-skyknot':
-      return result(timeGrade(stats.elapsedMs, 180_000, 210_000))
-    case 'time-trial':
-      return stats.elapsedMs <= 180_000
-        ? result(timeGrade(stats.elapsedMs, 150_000, 165_000))
-        : result('failed', ['time-limit'])
-    case 'clean-flight':
-      return stats.collisionCount === 0
-        ? result(timeGrade(stats.elapsedMs, 180_000, 210_000))
-        : result('failed', ['collision-limit'])
-    case 'no-respawn':
-      return stats.respawnCount === 0
-        ? result(timeGrade(stats.elapsedMs, 180_000, 210_000))
-        : result('failed', ['respawn-limit'])
-    case 'boost-mastery':
-      if (stats.boostActivationCount >= 7) return result('gold')
-      if (stats.boostActivationCount >= 5) return result('silver')
-      if (stats.boostActivationCount >= 3) return result('bronze')
-      return result('failed', ['boost-count'])
-    case 'golden-knot':
-      return evaluateGoldenKnot(stats)
+  return evaluateThresholds(stats, MISSION_GRADE_THRESHOLDS[missionId])
+}
+
+export function deriveUnlockedMissionIds(
+  grades: Readonly<Record<string, unknown>>,
+): readonly MissionId[] {
+  let highestAwardedMissionIndex = -1
+
+  MISSION_IDS.forEach((missionId, missionIndex) => {
+    if (isAwardedMissionGrade(grades[missionId])) {
+      highestAwardedMissionIndex = missionIndex
+    }
+  })
+
+  const unlockedCount = Math.min(
+    MISSION_IDS.length,
+    Math.max(1, highestAwardedMissionIndex + 2),
+  )
+  return MISSION_IDS.slice(0, unlockedCount)
+}
+
+export function getNextMissionId(missionId: MissionId): MissionId | null {
+  const nextMissionIndex = MISSION_IDS.indexOf(missionId) + 1
+  return MISSION_IDS[nextMissionIndex] ?? null
+}
+
+export function getMissionLockRequirement(
+  missionId: MissionId,
+): string | null {
+  const missionIndex = MISSION_IDS.indexOf(missionId)
+  if (missionIndex <= 0) {
+    return null
   }
+
+  return `${MISSION_CATALOG[missionIndex - 1].name} 브론즈 달성 필요`
 }
 
 export function mergeBestGrade(

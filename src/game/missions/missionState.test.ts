@@ -94,7 +94,10 @@ describe('mission session state', () => {
     let active = startMissionAttempt(
       selectMission(createMissionSession(), 'clean-flight'),
     )
-    active = advanceMissionAttemptClock(active, 180_000)
+    active = advanceMissionAttemptClock(active, 150_000)
+    for (let activation = 0; activation < 7; activation += 1) {
+      active = recordMissionBoostActivation(active)
+    }
     const finished = finishMissionAttempt(active)
 
     expect(finished.status).toBe('finished')
