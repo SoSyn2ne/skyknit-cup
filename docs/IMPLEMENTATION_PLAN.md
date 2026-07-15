@@ -1,6 +1,6 @@
 # 하늘매듭배 구현 계획
 
-> 상태: **RC11 / 비행 생명체 작업실 자동 검증 완료 / 실기기·사람 플레이테스트 대기**
+> 상태: **Milestone 38 / 수호수 아트 리빌드와 첫 하늘매듭 서막 구현 중**
 >
 > 선행 문서: `docs/PRODUCT_GOAL.md`
 
@@ -52,22 +52,29 @@ ESLint는 루트 `eslint.config.js` flat config를 사용한다. `@eslint/js` re
 
 - 제작 도구: Blender `4.5.10 LTS`
 - 실행 파일: `C:\Program Files\Blender Foundation\Blender 4.5\blender.exe`
-- 원본 목표 경로: `assets/source/dragon/skyknit-dragon.blend`
-- 자동화 스크립트 목표 경로: `tools/blender/build_dragon.py`
-- 게임 출력 목표 경로: `public/assets/models/skyknit-dragon.glb`
-- 기본 애니메이션: `idle`, `takeoff`, `flap`, `glide`, `boost`, `hit`
-- 선회 뱅크와 몸통/꼬리 지연은 게임 입력에 맞춰 Three.js에서 절차적으로 보정
-- 첫 모델 예산: 15,000~25,000 triangles, 변형 본 30~40개, 1024px 텍스처 1장 또는 vertex color
+- 기준 드래곤 원본: `assets/source/dragon/skyknit-dragon-v07.blend`
+- 신규 수호수 원본: `assets/source/characters/{ember-phoenix,storm-white-tiger}.blend`
+- 게임 출력: `public/assets/models/characters/{skyknit-dragon,skyknit-phoenix,skyknit-white-tiger}.glb`
+- 생성: `tools/blender/build_character_assets.py`
+- 내보내기: `tools/blender/export_character_asset.py`
+- 구조·예산 검사: `tools/blender/inspect_character_assets.py`
+- 스튜디오 미리보기: `tools/blender/render_character_preview.py`
+- 프로젝트 제작 Blender 원본이 자산의 단일 소유권 근거이며, 런타임 GLB와 QA 미리보기는 원본을 덮어쓰지 않고 다시 만들 수 있어야 한다.
+- 텍스처 파일을 추가하지 않고 삼각형 메시, 세 역할 재질과 vertex color를 사용한다.
+- 선회 뱅크와 몸통·머리·꼬리 지연은 게임 입력에 맞춰 Three.js에서 시각적으로 보정하며 비행 상태와 충돌을 바꾸지 않는다.
 
-RC11부터 같은 런타임 피벗 계약을 지키는 캐릭터 GLB를 세 종으로 확장한다.
+Milestone 38의 세 수호수는 같은 런타임 계약을 사용한다.
 
-- 캐릭터: `skyknit-dragon.glb`, `skyknit-griffin.glb`, `skyknit-manta.glb`
-- 공통 피벗: `DragonRoot`, `WingRig_L/R`, `HeadRig`, `TailRig_1..5`; 선택 `JawRig`, `EyeRig_L/R`
-- 캐릭터별 예산: 18,000~20,500 triangles, 14 meshes 이하, 18 primitives 이하, 3 base materials 이하, gzip-9 450KiB 이하
+- 캐릭터 ID: `sunrise-dragon`, `ember-phoenix`, `storm-white-tiger`
+- 공통 동작 노드: `DragonRoot`, `WingRig_L/R`, `HeadRig`, `TailRig_1..5`, `JawRig`, `EyeRig_L/R`
+- 공통 장식 소켓: `AccessorySocket_Head`, `AccessorySocket_Back`, `AccessorySocket_Tail`
+- 공통 재질: `M_Dragon_Scale`, `M_Dragon_Membrane`, `M_Dragon_Glow`
+- 봉황 목표: 22,000~28,000 triangles; 백호 목표: 24,000~30,000 triangles
+- 공통 목표: 14 meshes 이하, 18 primitives 이하, 정확히 3 materials, gzip-9 600KiB 이하
 - 장식: `wind-goggles.glb`, `festival-ribbon.glb`; 각각 3,000 triangles 이하, 2 primitives 이하, gzip-9 100KiB 이하
 - 런타임은 선택된 플레이어 GLB 하나와 필요한 고스트 하나만 로드하며, 교체 성공 뒤 이전 자원을 해제한다.
 
-콘셉트 시트로 실루엣을 확정한 뒤 Blender 원본과 GLB를 만든다. 초기 콘셉트 이미지는 참고 자료이며 런타임에 직접 포함하지 않는다.
+콘셉트 시트로 실루엣을 확정한 뒤 Blender 원본과 GLB를 만든다. 초기 콘셉트 이미지는 참고 자료이며 런타임에 직접 포함하지 않는다. 목표 예산, 결정적 내보내기와 시각 품질은 inspector·미리보기·실브라우저 게이트가 통과해야 완료로 기록한다.
 
 ## 런타임 구조
 
@@ -680,6 +687,29 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 - 5개 필수 뷰포트에서 dialog 이름, label, Tab containment, 44px 조작, Apply/Back 노출, 스크롤·겹침 없음과 `visual-verdict >= 90`을 증명한다.
 - 전체 단위, 타입, 린트, 빌드, Playwright, 프로덕션·gzip과 캐릭터별 성능 예산을 통과한다.
 
+### Milestone 38: 수호수 아트 리빌드와 첫 하늘매듭 서막
+
+**상태: 구현 진행 중 — 2026-07-15**
+
+**결과물**
+- `.omx/plans/prd-m38-guardian-creature-rebuild.md`, `.omx/plans/test-spec-m38-guardian-creature-rebuild.md`
+- `docs/concepts/m38-ember-phoenix-concept.png`, `docs/concepts/m38-storm-white-tiger-concept.png`
+- `해뜰녘 드래곤`, `잿불 봉황`, `폭풍 백호` 카탈로그와 종족별 시각 포즈
+- 프로젝트 제작 봉황·백호 Blender 원본, 런타임 GLB와 재현 가능한 생성·내보내기·검사·미리보기 도구
+- 선택 중인 수호수 설명과 준비/일시정지에서 여는 접근 가능한 `첫 하늘매듭` 서막
+- 하늘동전·관문·미션·고스트를 하나로 설명하는 `docs/WORLD_STORY_BIBLE.md`
+- 구 v9 종족 ID를 새 종족으로 이전하고 모든 진행을 보존하는 v10 저장
+
+**완료 조건**
+- 카탈로그는 `sunrise-dragon`, `ember-phoenix`, `storm-white-tiger`의 형태 3 × 팔레트 3 × 장식 3, 총 27개 조합만 제공한다.
+- v9 `storm-griffin`은 `ember-phoenix`, `cloud-manta`는 `storm-white-tiger`로 일대일 이전되고 미션, 동전, Top 10, 고스트, 탐험, BGM과 품질 설정은 그대로 v10에 저장된다.
+- 세 수호수는 같은 비행 물리, 속도, 충돌 반경, 카메라, 미션과 기록 조건을 사용하며 차이는 모델·재질·시각 포즈에만 있다.
+- 봉황은 부리·왕관·세 겹 깃털·발톱·세 갈래 꼬리, 백호는 고양잇과 얼굴·네 다리·줄무늬·견갑 날개로 게임 카메라에서 즉시 구분된다.
+- 신규 GLB는 공통 노드·표정·소켓·세 재질 계약, 삼각형·메시·프리미티브·gzip 예산과 착륙 최저점 게이트를 통과한다.
+- 서막과 공방 설명은 ready/paused 상태와 저장을 바꾸지 않고 마우스·키보드·다섯 필수 뷰포트에서 접근 가능하다.
+- 기존 미션 ID·해금·등급·판정 조건은 유지하고, 고스트는 적이 아닌 `비행의 메아리`로 설명한다.
+- test, typecheck, lint, build, 전체 E2E, production, performance, audit, 결정적 export와 `visual-verdict >= 90`을 모두 통과한 뒤에만 완료 상태로 바꾼다.
+
 ## 테스트 매트릭스
 
 | 레벨 | 검증 대상 | 핵심 시나리오 |
@@ -696,6 +726,7 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 | Sky League | 순위/저장/고스트/UI/장시간 | Top 10 정렬·v8 마이그레이션·결정성·델타·재시도·자원 안정성 |
 | 누적 미션 | 해금/평가/저장 호환/UI | 브론즈 해금·누적 조건·후반 기록 승계·Esc 선택·다음 미션 |
 | 캐릭터 공방 | 카탈로그/GLB/저장/UI/복구 | 3종 실루엣·팔레트·장식·초안 취소·v9·5뷰포트·context recovery |
+| M38 수호수 | 카탈로그/Blender GLB/v10/서막/세계관 | 구 ID 일대일 이전·공통 Rig/재질/소켓·해부 실루엣·공정한 물리·5뷰포트 |
 
 ## 주요 위험과 대응
 
@@ -725,6 +756,9 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 | 외형마다 조작·충돌 이점이 생김 | 시각 루트만 교체하고 기존 고정 충돌 반경·비행 상태·카메라 목표를 공유 |
 | 짧은 화면에서 공방이 기존 pause 패널을 밀어냄 | 기존 패널에 행을 추가하지 않고 별도 dialog/bottom sheet와 고정 적용 동작 사용 |
 | 빠른 초안 변경에서 늦은 GLB 응답이 최신 선택을 덮음 | 요청 세대 번호를 사용하고 최신 로드 성공만 원자적으로 교체 |
+| 구 v9 종족 ID를 제거하면서 플레이어 선택이나 기록이 손실됨 | 엄격 타입 가드와 별도로 구 ID 일대일 정규화를 두고 전체 v9 fixture로 모든 필드 보존을 검증 |
+| 삼각형 수만 늘고 봉황·백호가 조립된 기본 도형처럼 보임 | 콘셉트 실루엣, 연속 해부 구조와 종족별 필수 특징을 inspector와 독립 시각 판정에 함께 고정 |
+| 세계관이 전용 능력이나 전투 요구로 범위를 넓힘 | 이야기를 기존 코인·관문·미션·고스트의 설명층으로 제한하고 모든 수호수의 물리·기록 계약을 공유 |
 
 ## 구현 시작 시 첫 작업
 

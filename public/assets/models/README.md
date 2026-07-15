@@ -1,4 +1,37 @@
-# RC7 Dragon Runtime Asset
+# Runtime 3D Assets
+
+## Milestone 38 guardian character pipeline
+
+Milestone 38의 현재 캐릭터 카탈로그는 다음 프로젝트 제작 자산을 사용한다.
+
+| 수호수 | Blender 원본 | 런타임 GLB |
+| --- | --- | --- |
+| 해뜰녘 드래곤 | `assets/source/dragon/skyknit-dragon-v07.blend` | `public/assets/models/characters/skyknit-dragon.glb` |
+| 잿불 봉황 | `assets/source/characters/ember-phoenix.blend` | `public/assets/models/characters/skyknit-phoenix.glb` |
+| 폭풍 백호 | `assets/source/characters/storm-white-tiger.blend` | `public/assets/models/characters/skyknit-white-tiger.glb` |
+
+Blender `.blend` 파일과 이를 재현하는 `tools/blender/build_character_assets.py`가 신규 수호수 형상의 소유 원본이다. 런타임 GLB, inspector 보고서와 스튜디오 미리보기는 파생 산출물이며 원본을 덮어쓰지 않는다. 캐릭터는 외부 게임·에셋 사이트에서 복사하지 않은 `project-authored` 자산이고, 별도 텍스처 파일 대신 프로젝트 제작 메시와 vertex color를 사용한다.
+
+파이프라인 역할은 다음과 같이 분리한다.
+
+- 생성: `tools/blender/build_character_assets.py`
+- 런타임 내보내기: `tools/blender/export_character_asset.py`
+- 구조·메타데이터·예산 검사: `tools/blender/inspect_character_assets.py`
+- 비파괴 QA 미리보기: `tools/blender/render_character_preview.py`
+
+예시 명령:
+
+```powershell
+& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --python tools/blender/build_character_assets.py -- --asset ember-phoenix
+& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --python tools/blender/export_character_asset.py -- --input assets/source/characters/ember-phoenix.blend --output public/assets/models/characters/skyknit-phoenix.glb
+& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --python tools/blender/inspect_character_assets.py -- --input public/assets/models/characters/skyknit-phoenix.glb --input public/assets/models/characters/skyknit-white-tiger.glb
+```
+
+M38 런타임 계약은 세 수호수에 `DragonRoot`, `WingRig_L/R`, `HeadRig`, `TailRig_1..5`, `JawRig`, `EyeRig_L/R`, `AccessorySocket_Head/Back/Tail`과 `M_Dragon_Scale`, `M_Dragon_Membrane`, `M_Dragon_Glow`를 요구한다. `DragonRoot`와 `M_Dragon_*`는 호환성을 위한 레거시 이름이며 종족이나 재질 표현을 제한하지 않는다. 최종 inspector가 이 계약을 모두 확인해야 M38 자산을 완료로 기록한다.
+
+M38 목표 게이트는 봉황 22,000~28,000 triangles, 백호 24,000~30,000 triangles, 각 14 meshes·18 primitives 이하, 정확히 3 materials, gzip-9 600KiB 이하이다. 이 수치는 목표이며 최종 SHA-256, 결정적 이중 내보내기와 시각 품질 통과 여부는 M38 검사 보고서가 만들어진 뒤 기록한다.
+
+## RC7 Dragon Runtime Asset
 
 - Source: `assets/source/dragon/skyknit-dragon-v07.blend`
 - Reference: `assets/source/dragon/reference/skyknit-dragon-turnaround-v01.png`
