@@ -2,7 +2,7 @@
 
 > 승인: 2026-07-15 사용자 지시 `꼭 용이 아니어도 여러가지로 커스텀`
 >
-> 상태: 구현 승인 / 코드 게이트 열림
+> 상태: 자동 검증 완료 / 실기기·사람 플레이테스트 대기
 
 ## 전제
 
@@ -60,7 +60,7 @@ export const DEFAULT_CHARACTER_LOADOUT: CharacterLoadout = Object.freeze({
 
 ## 상호작용
 
-- ready와 paused에서만 44px `꾸미기` 진입점을 보여 준다.
+- ready와 paused에서만 44px `캐릭터 꾸미기` 진입점을 보여 주고 dialog도 같은 접근 가능한 이름을 사용한다.
 - 공방은 기존 HUD와 중첩된 modal을 만들지 않고 별도 `aria-modal` dialog로 연다.
 - 형태·색상·장식 변경은 초안이며 3D 미리보기만 즉시 바꾼다.
 - `적용`은 초안을 영구 상태와 v9 저장에 반영하고 닫는다.
@@ -95,12 +95,12 @@ export const DEFAULT_CHARACTER_LOADOUT: CharacterLoadout = Object.freeze({
 
 ## 작업
 
-- [ ] 카탈로그·v9·레이스 영구 상태 RED→GREEN
-- [ ] Blender 그리핀·가오리·고글·리본 생성/export/inspect
-- [ ] 공통 GLB tint/accessory/transactional swap RED→GREEN
-- [ ] CharacterWorkshop와 ready/paused 진입점 RED→GREEN
-- [ ] 5뷰포트 E2E·시각·성능·프로덕션 검증
-- [ ] 독립 리뷰, 보고서, Lore 커밋과 실기기 인계
+- [x] 카탈로그·v9·레이스 영구 상태 RED→GREEN
+- [x] Blender 그리핀·가오리·고글·리본 생성/export/inspect
+- [x] 공통 GLB tint/accessory/transactional swap RED→GREEN
+- [x] CharacterWorkshop와 ready/paused 진입점 RED→GREEN
+- [x] 5뷰포트 E2E·시각·성능·프로덕션 검증
+- [x] 독립 리뷰, 보고서, Lore 커밋과 실기기 인계
 
 ## 열린 질문
 

@@ -1,6 +1,6 @@
 {
   "scope": "m37-character-workshop",
-  "iteration": 6,
+  "iteration": 7,
   "generated_screenshot": "artifacts/browser-qa/m37-character-workshop/desktop-griffin-preview.png",
   "reference_images": [
     "artifacts/browser-qa/m36-progressive-missions-full/desktop-ready-character.png"
@@ -24,8 +24,7 @@
   ],
   "reasoning": "The workshop now preserves full-silhouette visibility for dragon, griffin, and manta at the minimum viewport while keeping the established panel and palette quality.",
   "next_actions": [
-    "Re-run the complete focused browser suite after the compact camera change.",
-    "Run the full legacy browser and performance gates.",
-    "Run independent code and completion review."
+    "Run the physical iOS and Android playtest handoff.",
+    "Use player preference feedback to choose a fourth species, finer parts, or naming as the next slice."
   ]
 }

@@ -1,6 +1,6 @@
 # 하늘매듭배 구현 계획
 
-> 상태: **RC11 / Milestone 37 비행 생명체 작업실 구현 중**
+> 상태: **RC11 / 비행 생명체 작업실 자동 검증 완료 / 실기기·사람 플레이테스트 대기**
 >
 > 선행 문서: `docs/PRODUCT_GOAL.md`
 
@@ -63,8 +63,8 @@ RC11부터 같은 런타임 피벗 계약을 지키는 캐릭터 GLB를 세 종�
 
 - 캐릭터: `skyknit-dragon.glb`, `skyknit-griffin.glb`, `skyknit-manta.glb`
 - 공통 피벗: `DragonRoot`, `WingRig_L/R`, `HeadRig`, `TailRig_1..5`; 선택 `JawRig`, `EyeRig_L/R`
-- 캐릭터별 예산: 18,000~20,500 triangles, 14 meshes, 18 primitives, 3 base materials, gzip-9 450KiB 이하
-- 장식: `wind-goggles.glb`, `festival-ribbon.glb`; 각각 3,000 triangles, 2 primitives, gzip-9 100KiB 이하
+- 캐릭터별 예산: 18,000~20,500 triangles, 14 meshes 이하, 18 primitives 이하, 3 base materials 이하, gzip-9 450KiB 이하
+- 장식: `wind-goggles.glb`, `festival-ribbon.glb`; 각각 3,000 triangles 이하, 2 primitives 이하, gzip-9 100KiB 이하
 - 런타임은 선택된 플레이어 GLB 하나와 필요한 고스트 하나만 로드하며, 교체 성공 뒤 이전 자원을 해제한다.
 
 콘셉트 시트로 실루엣을 확정한 뒤 Blender 원본과 GLB를 만든다. 초기 콘셉트 이미지는 참고 자료이며 런타임에 직접 포함하지 않는다.
@@ -660,7 +660,7 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 
 ### Milestone 37: 비행 생명체 작업실
 
-**상태: 구현 중 — 2026-07-15**
+**상태: 자동 검증 완료 / 실기기·사람 플레이테스트 대기 — 2026-07-15**
 
 **결과물**
 - `.omx/plans/prd-m37-character-workshop.md`, `.omx/plans/test-spec-m37-character-workshop.md`
@@ -668,6 +668,7 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 - 해뜰녘·폭풍·달빛 팔레트, 없음·바람 고글·축제 리본 장식 조합
 - 준비/일시정지에서 여는 별도 `캐릭터 공방`, 실시간 초안 미리보기, 적용·되돌리기와 포커스 복귀
 - 기존 전체 데이터를 보존하는 v9 저장과 WebGL context recovery
+- `docs/MILESTONE_37_CHARACTER_WORKSHOP_QA_REPORT.md`, `docs/RC11_CHARACTER_WORKSHOP_PLAYTEST_HANDOFF.md`
 
 **완료 조건**
 - 세 형태는 게임 카메라에서 실루엣만으로 구분되고 동일한 비행·충돌·기록 규칙을 사용한다.
