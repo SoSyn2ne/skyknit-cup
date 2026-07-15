@@ -13,6 +13,24 @@ async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
   })
 }
 
+async function unlockAllMissions(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'skyknit-cup:settings',
+      JSON.stringify({
+        version: 8,
+        missionGrades: {
+          'first-skyknot': 'bronze',
+          'boost-mastery': 'bronze',
+          'no-respawn': 'bronze',
+          'time-trial': 'bronze',
+          'clean-flight': 'bronze',
+        },
+      }),
+    )
+  })
+}
+
 test('keeps BGM inactive when context recovery happens before first flight', async ({
   page,
 }, testInfo) => {
@@ -46,6 +64,7 @@ test('recovers from WebGL context loss without resetting progress', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
+  await unlockAllMissions(page)
   await page.goto('/?qaCourse=1&qaCollision=1&qaBoost=1')
   await page
     .locator('[data-mission-select="true"]')

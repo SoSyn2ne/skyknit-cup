@@ -82,6 +82,7 @@ import {
   recordRaceBoostActivation,
   recordRaceCollision,
   recordRaceRespawn,
+  selectNextRaceMission,
   selectRaceMission,
   syncRaceRun,
   transitionRace,
@@ -1189,7 +1190,16 @@ export function createRenderer(
         clearInputs()
       },
       selectMission: (missionId) => {
+        const previousState = raceState
         raceState = selectRaceMission(raceState, missionId)
+        if (
+          raceState !== previousState &&
+          previousState.phase === 'paused' &&
+          raceState.phase === 'ready'
+        ) {
+          clearRaceGhostAttempt()
+          resetFlight()
+        }
       },
       returnToMissionSelection: () => {
         raceState = transitionRace(raceState, {
@@ -1216,6 +1226,14 @@ export function createRenderer(
         previousBestTimeMs = raceState.persistent.bestTimeMs
         resetFlight()
         beginRaceGhostAttempt()
+      },
+      nextMission: () => {
+        const previousState = raceState
+        raceState = selectNextRaceMission(raceState)
+        if (raceState !== previousState) {
+          clearRaceGhostAttempt()
+          resetFlight()
+        }
       },
       toggleMute,
       setMusicVolume,

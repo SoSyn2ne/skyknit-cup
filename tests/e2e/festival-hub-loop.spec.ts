@@ -34,6 +34,24 @@ function isJourneyEvidenceProject(projectName: string): boolean {
   return projectName === 'desktop' || projectName === 'touch-minimum'
 }
 
+async function unlockAllMissions(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'skyknit-cup:settings',
+      JSON.stringify({
+        version: 8,
+        missionGrades: {
+          'first-skyknot': 'bronze',
+          'boost-mastery': 'bronze',
+          'no-respawn': 'bronze',
+          'time-trial': 'bronze',
+          'clean-flight': 'bronze',
+        },
+      }),
+    )
+  })
+}
+
 async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
   return page.evaluate(() => window.__DRAGON_RACE_TEST__?.snapshot() ?? null)
 }
@@ -323,6 +341,7 @@ test('cycles every Festival Hub landing pad before entering the selected golden-
   )
   test.setTimeout(45_000)
 
+  await unlockAllMissions(page)
   await page.goto('/?qaCourse=1')
   await page
     .locator('[data-mission-select="true"]')
@@ -493,6 +512,7 @@ test('shows the selected race mission guidance inside the Festival map', async (
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single map guidance contract')
 
+  await unlockAllMissions(page)
   await page.goto('/?qaCourse=1')
   await page
     .locator('[data-mission-select="true"]')

@@ -18,7 +18,12 @@ import type {
   MissionGrade,
   MissionId,
 } from '../missions/missionRules'
-import { MISSION_CATALOG } from '../missions/missionRules'
+import {
+  MISSION_CATALOG,
+  deriveUnlockedMissionIds,
+  getMissionLockRequirement,
+  getNextMissionId,
+} from '../missions/missionRules'
 import type { MissionSessionState } from '../missions/missionState'
 import type { MissionGrades } from '../persistence/records'
 
@@ -53,6 +58,7 @@ export interface RaceHudActions {
   readonly restart: () => void
   readonly respawn: () => void
   readonly retry: () => void
+  readonly nextMission: () => void
   readonly toggleMute: () => void
   readonly setMusicVolume: (volume: number) => void
   readonly setQuality: (quality: RaceQuality) => void
@@ -139,16 +145,16 @@ export function formatMissionProgress(
   switch (missionId) {
     case 'first-skyknot':
       return `${checkpoint} · ${elapsed}`
-    case 'time-trial':
-      return `${elapsed} / 3:00.000`
-    case 'clean-flight':
-      return `${checkpoint} · 충돌 ${attempt.collisionCount}`
-    case 'no-respawn':
-      return `${checkpoint} · 리스폰 ${attempt.respawnCount}`
     case 'boost-mastery':
-      return `${checkpoint} · 돌풍 ${attempt.boostActivationCount}회`
+      return `${checkpoint} · 돌풍 ${attempt.boostActivationCount}/3`
+    case 'no-respawn':
+      return `${checkpoint} · 돌풍 ${attempt.boostActivationCount}/3 · 리스폰 ${attempt.respawnCount}`
+    case 'time-trial':
+      return `${elapsed} / 3:30.000 · 돌풍 ${attempt.boostActivationCount}/3 · 리스폰 ${attempt.respawnCount}`
+    case 'clean-flight':
+      return `${elapsed} / 3:30.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/3`
     case 'golden-knot':
-      return `${elapsed} · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}`
+      return `${elapsed} / 3:00.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/5`
   }
 }
 
@@ -230,11 +236,13 @@ export function createRaceHud(
   const missionSelect = document.createElement('select')
   missionSelect.id = 'race-mission-select'
   missionSelect.dataset.missionSelect = 'true'
+  const missionOptions = new Map<MissionId, HTMLOptionElement>()
   for (const mission of MISSION_CATALOG) {
     const option = document.createElement('option')
     option.value = mission.id
     option.textContent = mission.name
     missionSelect.append(option)
+    missionOptions.set(mission.id, option)
   }
   missionSelect.addEventListener('change', () => {
     actions.selectMission(missionSelect.value as MissionId)
@@ -243,6 +251,9 @@ export function createRaceHud(
   missionObjective.className = 'race-hud__mission-objective'
   const missionBest = document.createElement('small')
   missionBest.className = 'race-hud__mission-best'
+  const missionUnlockStatus = document.createElement('small')
+  missionUnlockStatus.className = 'race-hud__mission-unlock-status'
+  missionUnlockStatus.dataset.missionUnlockStatus = 'true'
   const start = createButton('비행 시작', actions.start)
   start.className = 'race-hud__mission-start'
   start.dataset.missionStart = 'true'
@@ -254,6 +265,7 @@ export function createRaceHud(
     missionSelect,
     missionObjective,
     missionBest,
+    missionUnlockStatus,
     start,
     explore,
   )
@@ -352,11 +364,20 @@ export function createRaceHud(
   const respawn = createButton('관문에서 계속', actions.respawn)
   const restart = createButton('처음부터', actions.restart)
   const retry = createButton('다시 달리기', actions.retry)
+  const nextMission = createButton('다음 미션', actions.nextMission)
+  nextMission.dataset.nextMission = 'true'
   const chooseMission = createButton(
     '미션 선택',
     actions.returnToMissionSelection,
   )
-  actionsRow.append(resume, respawn, restart, retry, chooseMission)
+  actionsRow.append(
+    resume,
+    respawn,
+    restart,
+    retry,
+    nextMission,
+    chooseMission,
+  )
   panel.append(
     eyebrow,
     title,
@@ -377,7 +398,14 @@ export function createRaceHud(
   let latestView: RaceHudView | null = null
 
   const showOnly = (...buttons: HTMLButtonElement[]): void => {
-    for (const button of [resume, respawn, restart, retry, chooseMission]) {
+    for (const button of [
+      resume,
+      respawn,
+      restart,
+      retry,
+      nextMission,
+      chooseMission,
+    ]) {
       button.hidden = !buttons.includes(button)
     }
   }
@@ -567,6 +595,24 @@ export function createRaceHud(
         MISSION_CATALOG.find(
           (mission) => mission.id === view.mission.selectedMissionId,
         ) ?? MISSION_CATALOG[0]
+      const unlockedMissionIds = deriveUnlockedMissionIds(
+        view.missionGrades,
+      )
+      const unlockedMissions = new Set(unlockedMissionIds)
+      const nextLockedMission = MISSION_CATALOG.find(
+        (mission) => !unlockedMissions.has(mission.id),
+      )
+      for (const mission of MISSION_CATALOG) {
+        const option = missionOptions.get(mission.id)
+        if (option === undefined) continue
+        const unlocked = unlockedMissions.has(mission.id)
+        const requirement = getMissionLockRequirement(mission.id)
+        option.disabled = !unlocked
+        option.textContent = unlocked
+          ? mission.name
+          : `🔒 ${mission.name} · ${requirement ?? '잠김'}`
+        option.title = unlocked ? mission.objective : (requirement ?? '')
+      }
       root.dataset.phase = view.phase
       root.dataset.mission = view.mission.selectedMissionId
       timer.textContent = formatRaceTime(
@@ -604,12 +650,26 @@ export function createRaceHud(
       panel.hidden = view.phase === 'countdown' || view.phase === 'racing'
       result.hidden = view.phase !== 'finished'
       league.hidden = view.phase !== 'finished'
-      missionPicker.hidden = view.phase !== 'ready'
+      missionPicker.hidden =
+        view.phase !== 'ready' && view.phase !== 'paused'
       missionSelect.value = view.mission.selectedMissionId
+      missionLabel.textContent =
+        view.phase === 'paused' ? '미션 변경' : '도전 미션'
       missionObjective.textContent = missionDefinition?.objective ?? ''
       missionBest.textContent = `최고 등급 · ${formatMissionGrade(
         view.missionGrades[view.mission.selectedMissionId] ?? null,
       )}`
+      missionUnlockStatus.textContent =
+        nextLockedMission === undefined
+          ? '모든 미션 해금 완료'
+          : `다음 해금 · ${nextLockedMission.name}: ${
+              getMissionLockRequirement(nextLockedMission.id) ?? ''
+            }`
+      start.hidden = view.phase !== 'ready'
+      explore.hidden = view.phase !== 'ready'
+      start.disabled = !unlockedMissions.has(
+        view.mission.selectedMissionId,
+      )
 
       mute.textContent = view.muted ? '🔇' : '🔊'
       const muteAction = view.muted ? '소리 켜기' : '소리 끄기'
@@ -646,21 +706,31 @@ export function createRaceHud(
         detail.textContent = '타이머와 비행 진행이 그대로 멈췄습니다.'
         chooseMission.textContent = '미션 변경'
         clearResult()
-        showOnly(resume, respawn, restart, chooseMission)
+        showOnly(resume, respawn, restart)
       } else if (view.phase === 'finished') {
         if (phaseChanged) {
           setLeagueCategory('race')
           setLeagueExpanded(false)
         }
         title.textContent = '하늘매듭 완주'
-        detail.textContent =
+        const nextMissionId =
           view.mission.result?.success === true
-            ? `${missionDefinition?.name ?? '미션'} 성공 · 더 높은 등급에 도전해 보세요.`
-            : `${missionDefinition?.name ?? '미션'} 실패 · 조건을 확인하고 다시 도전하세요.`
+            ? getNextMissionId(view.mission.selectedMissionId)
+            : null
+        detail.textContent =
+          view.mission.result?.success !== true
+            ? `${missionDefinition?.name ?? '미션'} 실패 · 조건을 확인하고 다시 도전하세요.`
+            : nextMissionId === null
+              ? `${missionDefinition?.name ?? '미션'} 성공 · 모든 미션을 완주했습니다.`
+              : `${missionDefinition?.name ?? '미션'} 성공 · 다음 미션이 열렸습니다.`
         chooseMission.textContent = '미션 선택'
         updateResult(view)
         updateLeaderboard(view)
-        showOnly(retry, chooseMission)
+        showOnly(
+          retry,
+          ...(nextMissionId === null ? [] : [nextMission]),
+          chooseMission,
+        )
       }
 
       if (phaseChanged) {

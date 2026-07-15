@@ -29,6 +29,7 @@ class TestElement {
   max = ''
   step = ''
   title = ''
+  disabled = false
   replaceChildrenCalls = 0
   focusCalls = 0
   parent: TestElement | null = null
@@ -90,6 +91,22 @@ function findByText(root: TestElement, text: string): TestElement {
     }
   }
   throw new Error(`Missing test element with text ${text}`)
+}
+
+function findByDataset(
+  root: TestElement,
+  key: string,
+  value: string,
+): TestElement {
+  if (root.dataset[key] === value) return root
+  for (const child of root.children) {
+    try {
+      return findByDataset(child, key, value)
+    } catch {
+      // Continue searching sibling branches.
+    }
+  }
+  throw new Error(`Missing test element [data-${key}="${value}"]`)
 }
 
 function createFinishedRaceHudView(): RaceHudView {
@@ -189,11 +206,17 @@ describe('mission HUD formatting', () => {
 
   it.each([
     ['first-skyknot', '관문 4/12 · 1:31.250'],
-    ['time-trial', '1:31.250 / 3:00.000'],
-    ['clean-flight', '관문 4/12 · 충돌 1'],
-    ['no-respawn', '관문 4/12 · 리스폰 2'],
-    ['boost-mastery', '관문 4/12 · 돌풍 3회'],
-    ['golden-knot', '1:31.250 · 충돌 1 · 리스폰 2 · 돌풍 3'],
+    ['boost-mastery', '관문 4/12 · 돌풍 3/3'],
+    ['no-respawn', '관문 4/12 · 돌풍 3/3 · 리스폰 2'],
+    ['time-trial', '1:31.250 / 3:30.000 · 돌풍 3/3 · 리스폰 2'],
+    [
+      'clean-flight',
+      '1:31.250 / 3:30.000 · 충돌 1 · 리스폰 2 · 돌풍 3/3',
+    ],
+    [
+      'golden-knot',
+      '1:31.250 / 3:00.000 · 충돌 1 · 리스폰 2 · 돌풍 3/5',
+    ],
   ] as const)('formats %s progress', (missionId, label) => {
     expect(formatMissionProgress(missionId, attempt, 12)).toBe(label)
   })
@@ -279,6 +302,7 @@ describe('Sky League HUD formatting', () => {
         restart: noop,
         respawn: noop,
         retry: noop,
+        nextMission: noop,
         toggleMute: noop,
         setMusicVolume: noop,
         setQuality: noop,
@@ -321,6 +345,175 @@ describe('Sky League HUD formatting', () => {
       expect(result.replaceChildrenCalls).toBe(1)
       expect(leaderboard.replaceChildrenCalls).toBe(2)
       expect(retry.focusCalls).toBe(1)
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, 'document')
+      } else {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      }
+    }
+  })
+
+  it('shows the same ordered lock state in ready and Escape pause selectors', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    )
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: () => new TestElement(),
+      } as unknown as Document,
+    })
+
+    try {
+      const host = new TestElement()
+      const noop = (): void => {}
+      const hud = createRaceHud(host as unknown as HTMLElement, {
+        start: noop,
+        startExplore: noop,
+        selectMission: noop,
+        returnToMissionSelection: noop,
+        resume: noop,
+        restart: noop,
+        respawn: noop,
+        retry: noop,
+        nextMission: noop,
+        toggleMute: noop,
+        setMusicVolume: noop,
+        setQuality: noop,
+      })
+      const finished = createFinishedRaceHudView()
+      const ready: RaceHudView = {
+        ...finished,
+        phase: 'ready',
+        finalElapsedMs: null,
+        mission: {
+          ...finished.mission,
+          selectedMissionId: 'first-skyknot',
+          status: 'idle',
+          result: null,
+        },
+        missionGrades: {},
+      }
+
+      hud.update(ready)
+      const picker = findByClass(
+        hud.element as unknown as TestElement,
+        'race-hud__mission-picker',
+      )
+      const select = findByDataset(
+        hud.element as unknown as TestElement,
+        'missionSelect',
+        'true',
+      )
+
+      expect(picker.hidden).toBe(false)
+      expect(select.children).toHaveLength(6)
+      expect(select.children.map((option) => option.value)).toEqual([
+        'first-skyknot',
+        'boost-mastery',
+        'no-respawn',
+        'time-trial',
+        'clean-flight',
+        'golden-knot',
+      ])
+      expect(select.children[0]?.disabled).toBe(false)
+      expect(select.children[1]?.disabled).toBe(true)
+      expect(select.children[1]?.textContent).toContain('브론즈')
+
+      hud.update({
+        ...ready,
+        phase: 'paused',
+        pausedFrom: undefined,
+        mission: {
+          ...ready.mission,
+          status: 'active',
+        },
+        missionGrades: { 'first-skyknot': 'bronze' },
+      } as RaceHudView)
+
+      expect(picker.hidden).toBe(false)
+      expect(select.children[1]?.disabled).toBe(false)
+      expect(select.children[2]?.disabled).toBe(true)
+      expect(select.children[2]?.textContent).toContain('브론즈')
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, 'document')
+      } else {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      }
+    }
+  })
+
+  it('offers the next mission only after a successful non-final result', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    )
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: () => new TestElement(),
+      } as unknown as Document,
+    })
+
+    try {
+      const host = new TestElement()
+      const noop = (): void => {}
+      const hud = createRaceHud(host as unknown as HTMLElement, {
+        start: noop,
+        startExplore: noop,
+        selectMission: noop,
+        returnToMissionSelection: noop,
+        resume: noop,
+        restart: noop,
+        respawn: noop,
+        retry: noop,
+        nextMission: noop,
+        toggleMute: noop,
+        setMusicVolume: noop,
+        setQuality: noop,
+      })
+      const firstSuccess: RaceHudView = {
+        ...createFinishedRaceHudView(),
+        mission: {
+          ...createFinishedRaceHudView().mission,
+          selectedMissionId: 'first-skyknot',
+        },
+        missionGrades: { 'first-skyknot': 'gold' },
+      }
+
+      hud.update(firstSuccess)
+      const next = findByText(
+        hud.element as unknown as TestElement,
+        '다음 미션',
+      )
+      expect(next.hidden).toBe(false)
+
+      hud.update({
+        ...firstSuccess,
+        mission: {
+          ...firstSuccess.mission,
+          selectedMissionId: 'golden-knot',
+        },
+        missionGrades: {
+          'first-skyknot': 'gold',
+          'boost-mastery': 'gold',
+          'no-respawn': 'gold',
+          'time-trial': 'gold',
+          'clean-flight': 'gold',
+          'golden-knot': 'gold',
+        },
+      })
+
+      expect(next.hidden).toBe(true)
+      expect(
+        findByClass(
+          hud.element as unknown as TestElement,
+          'race-hud__detail',
+        ).textContent,
+      ).toContain('모든 미션')
     } finally {
       if (previousDocument === undefined) {
         Reflect.deleteProperty(globalThis, 'document')

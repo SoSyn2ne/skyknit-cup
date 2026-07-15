@@ -32,12 +32,30 @@ const WIND_ZONE_IDS = [
 
 const MISSION_IDS = [
   'first-skyknot',
+  'boost-mastery',
+  'no-respawn',
   'time-trial',
   'clean-flight',
-  'no-respawn',
-  'boost-mastery',
   'golden-knot',
 ] as const satisfies readonly MissionId[]
+
+async function unlockAllMissions(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'skyknit-cup:settings',
+      JSON.stringify({
+        version: 8,
+        missionGrades: {
+          'first-skyknot': 'bronze',
+          'boost-mastery': 'bronze',
+          'no-respawn': 'bronze',
+          'time-trial': 'bronze',
+          'clean-flight': 'bronze',
+        },
+      }),
+    )
+  })
+}
 
 interface ResourceCounts {
   readonly drawCalls: number
@@ -295,6 +313,7 @@ test('keeps the Festival Hub replay loop stable during an opt-in soak', async ({
   let soakStartedAt = overallStartedAt
 
   try {
+    await unlockAllMissions(page)
     await page.goto('/?qaCourse=1')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',

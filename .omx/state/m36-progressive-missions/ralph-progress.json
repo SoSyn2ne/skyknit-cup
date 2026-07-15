@@ -1,0 +1,25 @@
+{
+  "scope": "m36-progressive-missions",
+  "iteration": 3,
+  "reference_images": [
+    "artifacts/browser-qa/m8/touch-minimum-pause-mission-change.png",
+    "artifacts/browser-qa/m8/touch-landscape-pause-mission-change.png"
+  ],
+  "generated_screenshots": [
+    "artifacts/browser-qa/m36-progressive-missions/touch-minimum-pause-mission-change.png",
+    "artifacts/browser-qa/m36-progressive-missions/touch-landscape-pause-mission-change.png"
+  ],
+  "score": 94,
+  "threshold": 90,
+  "passed": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [],
+  "reasoning": "The direct pause selector, next-unlock requirement, settings, and three primary actions are fully visible with consistent hierarchy and single-line labels across all five viewports.",
+  "suggestions": [],
+  "next_actions": [
+    "run full regression suite",
+    "complete independent review",
+    "finalize Milestone 36 evidence"
+  ]
+}
