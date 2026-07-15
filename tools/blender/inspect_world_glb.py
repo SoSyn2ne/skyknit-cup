@@ -1,4 +1,4 @@
-"""Validate RC7 world GLBs through Blender's glTF importer."""
+"""Validate project-authored world GLBs through Blender's glTF importer."""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ from mathutils.bvhtree import BVHTree
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ASSET_ROOT = ROOT / "public" / "assets" / "models" / "world"
 ASSET_VERSION = "0.7"
+ASSET_VERSIONS = {
+    "volcanic-archipelago": "0.9",
+}
 GEOMETRY_STYLE = "handcrafted-layered"
 FESTIVAL_ROUTE_CLEARANCE = 1.2
 FESTIVAL_ROUTE_SAMPLE_STEP = 0.25
@@ -44,6 +47,7 @@ LANDING_PAD_ORIGINS = {
     "festival-hub": (0.0, 0.0, -3.15),
     "wind-canyon": (0.0, -4.0, -14.0),
     "cloud-ruins": (0.0, 0.0, -3.55),
+    "volcanic-archipelago": (0.0, -78.0, 4.0),
 }
 
 SEMANTIC_ORIGINS = {
@@ -67,6 +71,25 @@ SEMANTIC_ORIGINS = {
         "RunePillars": (29.0, 0.0, 2.8),
         "TempleSteps": (0.0, 12.0, -3.8),
         "FloatingSlabs": (25.0, 0.0, 14.0),
+    },
+    "volcanic-archipelago": {
+        "VolcanoCaldera": (0.0, 4.0, -8.0),
+        "ObsidianIslands": (-58.0, 24.0, -2.0),
+        "CoolingRuins": (-39.0, 38.0, 15.5),
+        "BrokenBridge": (-47.0, 4.0, 14.0),
+        "LavaSurface": (0.0, 4.0, 19.2),
+        "ExpeditionBeacon": (0.0, -58.0, 15.0),
+        "CoolingSeal_1": (-55.0, 23.0, 17.0),
+        "CoolingSeal_2": (44.0, -34.0, 16.0),
+        "CoolingSeal_3": (28.0, 55.0, 17.0),
+        "EscapeGate": (0.0, 82.0, 25.0),
+        "Thermal_1": (-56.0, -5.0, 20.0),
+        "Thermal_2": (48.0, 8.0, 22.0),
+        "Thermal_3": (4.0, 49.0, 26.0),
+        "RockSpawner_1": (-27.0, -23.0, 42.0),
+        "RockSpawner_2": (31.0, 22.0, 45.0),
+        "RockSpawner_3": (2.0, 61.0, 48.0),
+        "LavaWaveOrigin": (0.0, 4.0, 19.5),
     },
 }
 
@@ -92,6 +115,25 @@ REGION_NODES = {
         "TempleSteps",
         "FloatingSlabs",
     ),
+    "volcanic-archipelago": (
+        "VolcanoCaldera",
+        "ObsidianIslands",
+        "CoolingRuins",
+        "BrokenBridge",
+        "LavaSurface",
+        "ExpeditionBeacon",
+        "CoolingSeal_1",
+        "CoolingSeal_2",
+        "CoolingSeal_3",
+        "EscapeGate",
+        "Thermal_1",
+        "Thermal_2",
+        "Thermal_3",
+        "RockSpawner_1",
+        "RockSpawner_2",
+        "RockSpawner_3",
+        "LavaWaveOrigin",
+    ),
 }
 
 SEMANTIC_NODE_TYPES = {
@@ -101,6 +143,20 @@ SEMANTIC_NODE_TYPES = {
         "TowerLandingPad": "EMPTY",
         "GrottoLandingPad": "EMPTY",
         "FestivalAccents": "MESH",
+    },
+    "volcanic-archipelago": {
+        "LavaSurface": "MESH",
+        "CoolingSeal_1": "MESH",
+        "CoolingSeal_2": "MESH",
+        "CoolingSeal_3": "MESH",
+        "EscapeGate": "MESH",
+        "Thermal_1": "EMPTY",
+        "Thermal_2": "EMPTY",
+        "Thermal_3": "EMPTY",
+        "RockSpawner_1": "EMPTY",
+        "RockSpawner_2": "EMPTY",
+        "RockSpawner_3": "EMPTY",
+        "LavaWaveOrigin": "EMPTY",
     },
 }
 
@@ -115,6 +171,13 @@ EXPECTED_NODE_METADATA = {
         "SecretGrotto": {"collision_proxy": "curved-shell-clear-cavern"},
         "LandingPad": {"landing_surfaces": "hub,tower,grotto"},
         "FestivalAccents": {"accent_material_contract": "gold,rune"},
+    },
+    "volcanic-archipelago": {
+        "RegionRoot": {
+            "story_chapter": "heart-of-the-sun",
+            "runtime_lava_material": "LavaSurface",
+        },
+        "LavaSurface": {"semantic": "LavaSurface"},
     },
 }
 
@@ -374,7 +437,8 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
         root_region = root.get("region_id")
         root_lod = root.get("lod")
         geometry_style = root.get("geometry_style")
-    if asset_version != ASSET_VERSION:
+    expected_asset_version = ASSET_VERSIONS.get(region_id, ASSET_VERSION)
+    if asset_version != expected_asset_version:
         errors.append(f"unexpected asset version: {asset_version}")
     if asset_license != "project-authored":
         errors.append(f"unexpected asset license: {asset_license}")
@@ -500,6 +564,7 @@ def main() -> None:
     result = {
         "scope": scope,
         "asset_version": ASSET_VERSION,
+        "asset_versions": {**{region: ASSET_VERSION for region in REGION_NODES}, **ASSET_VERSIONS},
         "asset_root": str(asset_root),
         "reports": reports,
         "errors": errors,
