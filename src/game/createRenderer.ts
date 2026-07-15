@@ -1163,15 +1163,20 @@ export function createRenderer(
       '정밀 캐릭터 모델을 불러오지 못해 간소화 모델로 비행합니다.'
     resourceNotice.hidden = true
     host.append(resourceNotice)
+    let characterPreviewRequestId = 0
+    const initialCharacterRequestId = characterPreviewRequestId
     void sandbox.ready.then((source) => {
-      if (!disposed && source === 'fallback') {
+      if (
+        !disposed &&
+        initialCharacterRequestId === characterPreviewRequestId &&
+        source === 'fallback'
+      ) {
         resourceNotice.hidden = false
       }
     })
     const touchControls = createTouchControls(host, touchInput)
     pendingTouchControls = touchControls
     let explorationHud: ExplorationHud | null = null
-    let characterPreviewRequestId = 0
     const previewCharacter = (loadout: CharacterLoadout): void => {
       const requestId = ++characterPreviewRequestId
       resourceNotice.hidden = true

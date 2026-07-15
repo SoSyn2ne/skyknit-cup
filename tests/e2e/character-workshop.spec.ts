@@ -50,6 +50,7 @@ test('previews a flying creature safely inside every supported viewport', async 
     'data-state',
     'renderer-ready',
   )
+  expect((await readSnapshot(page))?.race.phase).toBe('ready')
 
   const opener = page.getByRole('button', { name: '캐릭터 꾸미기' })
   await expect(opener).toBeVisible()
@@ -62,6 +63,7 @@ test('previews a flying creature safely inside every supported viewport', async 
   const dialog = page.getByRole('dialog', { name: '캐릭터 꾸미기' })
   await expect(dialog).toBeVisible()
   await expect(page.locator('.race-hud')).toBeHidden()
+  expect((await readSnapshot(page))?.race.phase).toBe('ready')
 
   const draft: CharacterLoadout = {
     characterId: 'storm-griffin',
@@ -138,10 +140,43 @@ test('previews a flying creature safely inside every supported viewport', async 
     .toEqual(DEFAULT_LOADOUT)
 })
 
-test('persists an applied creature through reload, pause, and context recovery', async ({
+test('ignores a stale initial model failure after a newer preview succeeds', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
+  let releaseInitialLoad: () => void = () => undefined
+  let markInitialLoadFinished: () => void = () => undefined
+  const initialLoadGate = new Promise<void>((resolve) => {
+    releaseInitialLoad = resolve
+  })
+  const initialLoadFinished = new Promise<void>((resolve) => {
+    markInitialLoadFinished = resolve
+  })
+  await page.route('**/skyknit-dragon.glb', async (route) => {
+    await initialLoadGate
+    await route.fulfill({ status: 503, body: 'delayed initial failure' })
+    markInitialLoadFinished()
+  })
+
+  await page.goto('/')
+  await page.getByRole('button', { name: '캐릭터 꾸미기' }).click()
+  await selectLoadout(page, {
+    characterId: 'storm-griffin',
+    paletteId: 'moonlight',
+    accessoryId: 'wind-goggles',
+  })
+  await expect
+    .poll(async () => (await readSnapshot(page))?.camera.dragon.source)
+    .toBe('glb')
+
+  releaseInitialLoad()
+  await initialLoadFinished
+  await expect(page.locator('.resource-notice')).toBeHidden()
+})
+
+test('persists an applied creature through reload, pause, and context recovery', async ({
+  page,
+}, testInfo) => {
   await page.addInitScript(() => {
     if (sessionStorage.getItem('m37-seeded') === 'true') return
     sessionStorage.setItem('m37-seeded', 'true')
@@ -165,7 +200,7 @@ test('persists an applied creature through reload, pause, and context recovery',
   }
   await selectLoadout(page, applied)
   await page.screenshot({
-    path: 'artifacts/browser-qa/m37-character-workshop/desktop-manta-preview.png',
+    path: `artifacts/browser-qa/m37-character-workshop/${testInfo.project.name}-manta-preview.png`,
   })
   await page.getByRole('button', { name: '적용' }).click()
 
@@ -196,6 +231,8 @@ test('persists an applied creature through reload, pause, and context recovery',
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase)
     .toBe('paused')
+  const pausedBeforeWorkshop = await readSnapshot(page)
+  expect(pausedBeforeWorkshop).not.toBeNull()
   await expect(
     page.getByRole('button', { name: '캐릭터 꾸미기' }),
   ).toBeVisible()
@@ -212,6 +249,16 @@ test('persists an applied creature through reload, pause, and context recovery',
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase)
     .toBe('paused')
+  const pausedAfterCancel = await readSnapshot(page)
+  expect(pausedAfterCancel?.race.elapsedMs).toBe(
+    pausedBeforeWorkshop?.race.elapsedMs,
+  )
+  expect(pausedAfterCancel?.race.nextCheckpointIndex).toBe(
+    pausedBeforeWorkshop?.race.nextCheckpointIndex,
+  )
+  expect(pausedAfterCancel?.race.mission).toEqual(
+    pausedBeforeWorkshop?.race.mission,
+  )
 
   await page.evaluate(() => window.__DRAGON_RACE_TEST__?.loseContext())
   await page.getByRole('button', { name: '다시 시도' }).click()
