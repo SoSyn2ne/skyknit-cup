@@ -1,4 +1,4 @@
-"""Inspect Milestone 37 runtime GLBs with Blender's glTF importer.
+"""Inspect Milestone 37/38 runtime GLBs with Blender's glTF importer.
 
 The report covers hierarchy, authoring metadata, budgets, vertex colors,
 finite transforms/normals, profile proportions, gzip-9 bytes and SHA-256.
@@ -37,6 +37,37 @@ ROLE_MATERIALS = (
     "M_Dragon_Membrane",
     "M_Dragon_Scale",
 )
+
+CHARACTER_TRIANGLE_BUDGETS = {
+    "ember-phoenix": (22_000, 28_000),
+    "storm-white-tiger": (24_000, 30_000),
+}
+
+GUARDIAN_PROFILE_BOUNDS = {
+    "ember-phoenix": {
+        "width": (11.90, 12.15),
+        "length": (11.75, 12.00),
+        "height": (5.29, 5.41),
+        "features": (
+            "continuous-avian-loft",
+            "three-feather-layers",
+            "three-forward-hallux-talons",
+            "triple-cambered-tail-plumes",
+        ),
+    },
+    "storm-white-tiger": {
+        "width": (11.65, 11.90),
+        "length": (8.77, 8.95),
+        "height": (3.69, 3.78),
+        "features": (
+            "continuous-feline-loft",
+            "rounded-ears",
+            "four-digitigrade-limbs",
+            "articulated-paws",
+            "vertex-color-stripes",
+        ),
+    },
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -159,17 +190,29 @@ def inspect_one(source: Path) -> dict[str, object]:
         ]
         if missing_expression:
             errors.append("missing expression nodes: " + ", ".join(missing_expression))
-        if not 18_000 <= triangles <= 20_500:
-            errors.append(f"triangles out of range: {triangles}")
+        triangle_minimum, triangle_maximum = CHARACTER_TRIANGLE_BUDGETS.get(
+            asset_id, (18_000, 20_500)
+        )
+        if not triangle_minimum <= triangles <= triangle_maximum:
+            errors.append(
+                "triangles out of range "
+                f"{triangle_minimum}-{triangle_maximum}: {triangles}"
+            )
         if len(meshes) > 14:
             errors.append(f"render mesh budget exceeded: {len(meshes)}")
         if primitives > 18:
             errors.append(f"primitive budget exceeded: {primitives}")
         if tuple(materials) != ROLE_MATERIALS:
             errors.append("role materials mismatch: " + ", ".join(materials))
-        if gzip_bytes > 450 * 1024:
+        gzip_budget = 600 * 1024 if asset_id in GUARDIAN_PROFILE_BOUNDS else 450 * 1024
+        if gzip_bytes > gzip_budget:
             errors.append(f"gzip-9 budget exceeded: {gzip_bytes}")
-        if asset_id in {"storm-griffin", "cloud-manta"}:
+        if asset_id in {
+            "ember-phoenix",
+            "storm-white-tiger",
+            "storm-griffin",
+            "cloud-manta",
+        }:
             for socket in (
                 "AccessorySocket_Head",
                 "AccessorySocket_Back",
@@ -178,7 +221,26 @@ def inspect_one(source: Path) -> dict[str, object]:
                 if bpy.data.objects.get(socket) is None:
                     errors.append(f"missing accessory socket: {socket}")
             features = str(root.get("silhouette_features", "")).lower()
-            if asset_id == "storm-griffin":
+            profile = GUARDIAN_PROFILE_BOUNDS.get(asset_id)
+            if profile is not None:
+                minimum_z = float(bounds["min"][2])
+                if not 0.02 <= minimum_z <= 0.06:
+                    errors.append(f"landing minimum Z out of range: {minimum_z}")
+                dimensions = {
+                    "width": float(bounds["size"][0]),
+                    "length": float(bounds["size"][1]),
+                    "height": float(bounds["size"][2]),
+                }
+                for dimension, value in dimensions.items():
+                    minimum, maximum = profile[dimension]
+                    if not minimum <= value <= maximum:
+                        errors.append(
+                            f"{dimension} out of range {minimum}-{maximum}: {value}"
+                        )
+                for feature in profile["features"]:
+                    if feature not in features:
+                        errors.append(f"guardian silhouette metadata lacks {feature}")
+            elif asset_id == "storm-griffin":
                 if "beak" not in features or "feather" not in features:
                     errors.append("griffin silhouette metadata lacks beak/feather features")
                 width = max(float(bounds["size"][0]), float(bounds["size"][1]))

@@ -1,11 +1,11 @@
-"""Build the project-authored Milestone 37 creature and accessory sources.
+"""Build the project-authored Milestone 37/38 creature and accessory sources.
 
 Run with Blender 4.5 LTS:
 
     blender --background --python tools/blender/build_character_assets.py -- --asset all
 
 The source files are intentionally procedural and texture-free.  Re-running the
-script replaces only the four Milestone 37 source blends; runtime GLBs are made
+script replaces only the selected project-authored source blends; runtime GLBs are made
 by ``export_character_asset.py`` so source generation and shipping export stay
 independently reproducible.
 """
@@ -16,6 +16,7 @@ import argparse
 import math
 import sys
 from pathlib import Path
+from typing import Callable
 
 import bpy
 from mathutils import Euler, Vector
@@ -26,6 +27,8 @@ SOURCE_DIR = ROOT / "assets" / "source" / "characters"
 TAU = math.pi * 2.0
 
 ASSET_IDS = (
+    "ember-phoenix",
+    "storm-white-tiger",
     "storm-griffin",
     "cloud-manta",
     "wind-goggles",
@@ -33,6 +36,8 @@ ASSET_IDS = (
 )
 
 SOURCE_FILENAMES = {
+    "ember-phoenix": "ember-phoenix.blend",
+    "storm-white-tiger": "storm-white-tiger.blend",
     "storm-griffin": "storm-griffin.blend",
     "cloud-manta": "cloud-manta.blend",
     "wind-goggles": "wind-goggles.blend",
@@ -221,6 +226,237 @@ def append_tube(
         faces.append((last_center, last_ring + side, last_ring + following_side))
 
 
+def append_oriented_loft(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, int, int]],
+    centers: list[tuple[float, float, float]],
+    radii: list[tuple[float, float]],
+    *,
+    sides: int = 20,
+    rolls: list[float] | None = None,
+    cap_start: bool = True,
+    cap_end: bool = True,
+) -> None:
+    """Append a continuous elliptical loft along an arbitrary 3D path."""
+
+    if len(centers) != len(radii) or len(centers) < 2:
+        raise ValueError("oriented loft path contract is invalid")
+    if rolls is None:
+        rolls = [0.0] * len(centers)
+    if len(rolls) != len(centers):
+        raise ValueError("oriented loft roll contract is invalid")
+
+    path = [Vector(center) for center in centers]
+    start = len(vertices)
+    for index, (center, (radius_a, radius_b), roll) in enumerate(
+        zip(path, radii, rolls)
+    ):
+        if index == 0:
+            tangent = path[1] - center
+        elif index == len(path) - 1:
+            tangent = center - path[index - 1]
+        else:
+            tangent = path[index + 1] - path[index - 1]
+        tangent.normalize()
+        reference = Vector((0.0, 0.0, 1.0))
+        if abs(tangent.dot(reference)) > 0.94:
+            reference = Vector((0.0, 1.0, 0.0))
+        axis_a = tangent.cross(reference).normalized()
+        axis_b = axis_a.cross(tangent).normalized()
+        if roll != 0.0:
+            cosine = math.cos(roll)
+            sine = math.sin(roll)
+            rolled_a = axis_a * cosine + axis_b * sine
+            rolled_b = -axis_a * sine + axis_b * cosine
+            axis_a, axis_b = rolled_a, rolled_b
+        for side in range(sides):
+            angle = TAU * side / sides
+            point = (
+                center
+                + axis_a * (math.cos(angle) * radius_a)
+                + axis_b * (math.sin(angle) * radius_b)
+            )
+            vertices.append(tuple(point))
+
+    for ring in range(len(path) - 1):
+        current = start + ring * sides
+        following = current + sides
+        for side in range(sides):
+            following_side = (side + 1) % sides
+            faces.append((current + side, following + side, following + following_side))
+            faces.append((current + side, following + following_side, current + following_side))
+
+    if cap_start:
+        first_center = len(vertices)
+        vertices.append(tuple(path[0]))
+        for side in range(sides):
+            following_side = (side + 1) % sides
+            faces.append((first_center, start + following_side, start + side))
+    if cap_end:
+        last_center = len(vertices)
+        vertices.append(tuple(path[-1]))
+        last_ring = start + (len(path) - 1) * sides
+        for side in range(sides):
+            following_side = (side + 1) % sides
+            faces.append((last_center, last_ring + side, last_ring + following_side))
+
+
+def subdivide_loft_profile(
+    centers: list[tuple[float, float, float]],
+    radii: list[tuple[float, float]],
+    *,
+    subdivisions: int = 2,
+) -> tuple[list[tuple[float, float, float]], list[tuple[float, float]]]:
+    if len(centers) != len(radii) or len(centers) < 2 or subdivisions < 1:
+        raise ValueError("loft subdivision contract is invalid")
+    dense_centers: list[tuple[float, float, float]] = []
+    dense_radii: list[tuple[float, float]] = []
+    for index in range(len(centers) - 1):
+        start_center = Vector(centers[index])
+        end_center = Vector(centers[index + 1])
+        start_radius = radii[index]
+        end_radius = radii[index + 1]
+        for step in range(subdivisions):
+            progress = step / subdivisions
+            dense_centers.append(tuple(start_center.lerp(end_center, progress)))
+            dense_radii.append(
+                (
+                    start_radius[0] + (end_radius[0] - start_radius[0]) * progress,
+                    start_radius[1] + (end_radius[1] - start_radius[1]) * progress,
+                )
+            )
+    dense_centers.append(centers[-1])
+    dense_radii.append(radii[-1])
+    return dense_centers, dense_radii
+
+
+def append_feather_leaf(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, int, int]],
+    root: tuple[float, float, float],
+    tip: tuple[float, float, float],
+    half_width: float,
+    *,
+    thickness: float = 0.028,
+    camber: float = 0.08,
+    bend: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    surface_normal: tuple[float, float, float] = (0.0, 0.0, 1.0),
+    length_steps: int = 7,
+    width_steps: int = 4,
+    colors: list[tuple[float, float, float, float]] | None = None,
+    root_color: tuple[float, float, float, float] = (0.82, 0.54, 0.34, 1.0),
+    tip_color: tuple[float, float, float, float] = (1.0, 0.86, 0.42, 1.0),
+) -> None:
+    """Append one tapered, cambered solid feather with a pointed silhouette."""
+
+    root_vector = Vector(root)
+    tip_vector = Vector(tip)
+    direction = tip_vector - root_vector
+    if direction.length <= 1e-5:
+        raise ValueError("feather has no length")
+    direction.normalize()
+    reference = Vector(surface_normal)
+    if reference.length <= 1e-5:
+        raise ValueError("feather surface normal has no length")
+    reference.normalize()
+    if abs(direction.dot(reference)) > 0.94:
+        reference = Vector((0.0, 1.0, 0.0))
+        if abs(direction.dot(reference)) > 0.94:
+            reference = Vector((1.0, 0.0, 0.0))
+    width_axis = direction.cross(reference).normalized()
+    surface_axis = width_axis.cross(direction).normalized()
+    bend_vector = Vector(bend)
+    start = len(vertices)
+    row_size = width_steps + 1
+    layer_size = (length_steps + 1) * row_size
+
+    for layer in range(2):
+        layer_sign = 1.0 if layer == 0 else -1.0
+        for length_index in range(length_steps + 1):
+            progress = length_index / length_steps
+            center = root_vector.lerp(tip_vector, progress)
+            center += bend_vector * math.sin(math.pi * progress)
+            center += surface_axis * camber * math.sin(math.pi * progress)
+            taper = 0.025 + 0.975 * math.sin(math.pi * progress) ** 0.66
+            station_width = half_width * taper
+            for width_index in range(width_steps + 1):
+                across = width_index / width_steps * 2.0 - 1.0
+                edge_camber = 1.0 - across * across
+                point = (
+                    center
+                    + width_axis * (station_width * across)
+                    + surface_axis
+                    * (layer_sign * thickness + camber * 0.18 * edge_camber)
+                )
+                vertices.append(tuple(point))
+                if colors is not None:
+                    color = tuple(
+                        root_channel
+                        + (tip_channel - root_channel) * progress
+                        for root_channel, tip_channel in zip(root_color, tip_color)
+                    )
+                    edge_shade = 0.88 + 0.12 * edge_camber
+                    colors.append(
+                        (
+                            color[0] * edge_shade,
+                            color[1] * edge_shade,
+                            color[2] * edge_shade,
+                            color[3],
+                        )
+                    )
+
+    for length_index in range(length_steps):
+        for width_index in range(width_steps):
+            top = start + length_index * row_size + width_index
+            next_top = top + row_size
+            faces.extend(
+                ((top, next_top, next_top + 1), (top, next_top + 1, top + 1))
+            )
+            bottom = top + layer_size
+            next_bottom = bottom + row_size
+            faces.extend(
+                (
+                    (bottom, next_bottom + 1, next_bottom),
+                    (bottom, bottom + 1, next_bottom + 1),
+                )
+            )
+
+    for edge in (0, width_steps):
+        for length_index in range(length_steps):
+            top = start + length_index * row_size + edge
+            next_top = top + row_size
+            bottom = top + layer_size
+            next_bottom = next_top + layer_size
+            faces.extend(((top, bottom, next_bottom), (top, next_bottom, next_top)))
+    for length_index in (0, length_steps):
+        base = start + length_index * row_size
+        for width_index in range(width_steps):
+            top = base + width_index
+            next_top = top + 1
+            bottom = top + layer_size
+            next_bottom = next_top + layer_size
+            faces.extend(((top, next_bottom, bottom), (top, next_top, next_bottom)))
+
+
+def append_tapered_claw(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, int, int]],
+    start: tuple[float, float, float],
+    middle: tuple[float, float, float],
+    tip: tuple[float, float, float],
+    radius: float,
+    *,
+    sides: int = 10,
+) -> None:
+    append_oriented_loft(
+        vertices,
+        faces,
+        [start, middle, tip],
+        [(radius, radius * 0.86), (radius * 0.58, radius * 0.48), (0.018, 0.012)],
+        sides=sides,
+    )
+
+
 def append_wedge(
     vertices: list[tuple[float, float, float]],
     faces: list[tuple[int, int, int]],
@@ -372,7 +608,7 @@ def apply_vertex_colors(
     base_color: tuple[float, float, float, float],
 ) -> None:
     attribute = mesh.color_attributes.new(
-        name="CharacterColor", type="BYTE_COLOR", domain="POINT"
+        name="CharacterColor", type="FLOAT_COLOR", domain="POINT"
     )
     if mesh.vertices:
         z_values = [vertex.co.z for vertex in mesh.vertices]
@@ -397,6 +633,22 @@ def apply_vertex_colors(
     mesh.color_attributes.active_color = attribute
 
 
+def apply_authored_vertex_colors(
+    mesh: bpy.types.Mesh,
+    colors: list[tuple[float, float, float, float]],
+) -> None:
+    if len(colors) != len(mesh.vertices):
+        raise ValueError(
+            f"authored vertex color count mismatch: {len(colors)} != {len(mesh.vertices)}"
+        )
+    attribute = mesh.color_attributes.new(
+        name="CharacterColor", type="BYTE_COLOR", domain="POINT"
+    )
+    for item, color in zip(attribute.data, colors):
+        item.color = color
+    mesh.color_attributes.active_color = attribute
+
+
 def make_mesh(
     name: str,
     vertices: list[tuple[float, float, float]],
@@ -405,6 +657,11 @@ def make_mesh(
     parent: bpy.types.Object,
     *,
     smooth: bool = True,
+    vertex_colors: list[tuple[float, float, float, float]] | None = None,
+    vertex_color_fn: Callable[
+        [Vector, int], tuple[float, float, float, float]
+    ]
+    | None = None,
 ) -> bpy.types.Object:
     if not vertices or not faces:
         raise ValueError(f"{name} has no geometry")
@@ -413,7 +670,18 @@ def make_mesh(
     mesh.validate(verbose=True)
     mesh.update(calc_edges=True)
     mesh.materials.append(material)
-    apply_vertex_colors(mesh, tuple(material["vertex_color"]))
+    if vertex_colors is not None:
+        apply_authored_vertex_colors(mesh, vertex_colors)
+    elif vertex_color_fn is not None:
+        apply_authored_vertex_colors(
+            mesh,
+            [
+                vertex_color_fn(vertex.co.copy(), index)
+                for index, vertex in enumerate(mesh.vertices)
+            ],
+        )
+    else:
+        apply_vertex_colors(mesh, tuple(material["vertex_color"]))
     for polygon in mesh.polygons:
         polygon.use_smooth = smooth
     obj = bpy.data.objects.new(name, mesh)
@@ -504,18 +772,1395 @@ def finish_character(
     rig: dict[str, bpy.types.Object],
     *,
     silhouette_features: str,
+    triangle_range: tuple[int, int] = (18_000, 20_500),
 ) -> None:
     root = rig["root"]
     triangles = character_triangle_count(root)
-    if not 18_000 <= triangles <= 20_500:
+    minimum, maximum = triangle_range
+    if not minimum <= triangles <= maximum:
         raise RuntimeError(
-            f"{root['asset_id']} triangles are outside the runtime budget: {triangles}"
+            f"{root['asset_id']} triangles are outside the runtime budget "
+            f"{minimum}-{maximum}: {triangles}"
         )
     root["silhouette_features"] = silhouette_features
     root["triangle_target"] = triangles
     root["render_mesh_target"] = sum(
         1 for obj in (root, *root.children_recursive) if obj.type == "MESH"
     )
+
+
+def phoenix_body_color(
+    point: Vector, _index: int
+) -> tuple[float, float, float, float]:
+    height = min(1.0, max(0.0, point.z / 5.2))
+    breast = math.exp(-((point.x / 0.72) ** 2)) * max(0.0, point.y + 0.15)
+    return (
+        min(0.92, 0.52 + height * 0.20 + breast * 0.035),
+        min(0.48, 0.075 + height * 0.18 + breast * 0.055),
+        min(0.22, 0.018 + height * 0.085),
+        1.0,
+    )
+
+
+def phoenix_feather_color(
+    point: Vector, _index: int
+) -> tuple[float, float, float, float]:
+    reach = min(1.0, max(0.0, abs(point.x) / 6.0))
+    trailing = min(1.0, max(0.0, (-point.y + 0.4) / 2.0))
+    return (
+        min(0.94, 0.72 + reach * 0.16),
+        min(0.52, 0.13 + reach * 0.22 + trailing * 0.08),
+        min(0.22, 0.018 + reach * 0.09 + trailing * 0.035),
+        1.0,
+    )
+
+
+def phoenix_head_color(
+    point: Vector, _index: int
+) -> tuple[float, float, float, float]:
+    if (
+        0.13 < abs(point.x) < 0.48
+        and 0.30 < point.y < 0.69
+        and 0.04 < point.z < 0.34
+    ):
+        return (0.055, 0.026, 0.020, 1.0)
+    if point.y > 0.46:
+        hook = min(1.0, max(0.0, (point.y - 0.46) / 0.86))
+        return (0.92, 0.42 - hook * 0.10, 0.035, 1.0)
+    height = min(1.0, max(0.0, (point.z + 0.45) / 1.35))
+    return (0.62 + height * 0.18, 0.065 + height * 0.06, 0.018, 1.0)
+
+
+def append_phoenix_wing(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, int, int]],
+    *,
+    side: int,
+) -> None:
+    # The narrow spar remains buried under three depth-separated feather fans.
+    # Each row follows the arm rather than radiating from one exposed point, so
+    # the shoulder reads as continuous anatomy instead of a bundle of slats.
+    append_oriented_loft(
+        vertices,
+        faces,
+        [
+            (side * -0.24, 0.02, -0.03),
+            (side * 0.92, 0.10, 0.30),
+            (side * 2.08, 0.04, 0.74),
+            (side * 3.05, -0.07, 1.12),
+            (side * 3.62, -0.14, 1.34),
+        ],
+        [(0.12, 0.09), (0.105, 0.078), (0.074, 0.054), (0.045, 0.032), (0.025, 0.018)],
+        sides=14,
+    )
+
+    # Four inner primaries stay buried under the middle tier; seven outer
+    # primaries alternate in reach and height to expose distinct tapered tips.
+    primary_stagger = (0.00, 0.09, -0.035, 0.11, -0.045, 0.08, 0.00)
+    for index in range(11):
+        root_x = 1.10 + index * 0.14
+        root = (
+            side * root_x,
+            -0.34 + index * 0.010,
+            0.18 + index * 0.055,
+        )
+        if index < 4:
+            tip_x = 3.55 + index * 0.18
+            tip_z = 0.48 + index * 0.10
+        else:
+            exposed = index - 4
+            tip_x = 4.10 + exposed * 0.225
+            tip_z = 0.74 + exposed * 0.17 + primary_stagger[exposed]
+        tip = (
+            side * tip_x,
+            -0.78 + index * 0.054,
+            tip_z,
+        )
+        append_feather_leaf(
+            vertices,
+            faces,
+            root,
+            tip,
+            0.138 - index * 0.0008,
+            thickness=0.026,
+            camber=0.070,
+            bend=(0.0, -0.020, 0.11 + index * 0.006),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=8,
+            width_steps=5,
+        )
+
+    # Six inner secondaries disappear below the coverts; four outer tips form a
+    # separate stepped edge between the covert row and long primaries.
+    secondary_stagger = (0.00, 0.075, -0.035, 0.055)
+    for index in range(10):
+        root = (
+            side * (0.48 + index * 0.142),
+            -0.08 + index * 0.005,
+            0.36 + index * 0.060,
+        )
+        if index < 6:
+            tip_x = 2.00 + index * 0.16
+            tip_z = 0.68 + index * 0.085
+        else:
+            exposed = index - 6
+            tip_x = 2.96 + exposed * 0.27
+            tip_z = 1.08 + exposed * 0.15 + secondary_stagger[exposed]
+        tip = (
+            side * tip_x,
+            -0.26 + index * 0.022,
+            tip_z,
+        )
+        append_feather_leaf(
+            vertices,
+            faces,
+            root,
+            tip,
+            0.148 - index * 0.001,
+            thickness=0.026,
+            camber=0.075,
+            bend=(0.0, -0.010, 0.11),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=8,
+            width_steps=5,
+        )
+
+    # Wide coverts hug the spar closely enough to hide it without merging the
+    # narrower middle and outer tiers into one slab.
+    for index in range(12):
+        root = (
+            side * (-0.08 + index * 0.108),
+            0.02 - index * 0.004,
+            0.28 + index * 0.052,
+        )
+        tip = (
+            side * (1.10 + index * 0.137),
+            -0.03 + index * 0.006,
+            0.60 + index * 0.078,
+        )
+        append_feather_leaf(
+            vertices,
+            faces,
+            root,
+            tip,
+            0.176 - index * 0.001,
+            thickness=0.028,
+            camber=0.08,
+            bend=(0.0, 0.0, 0.10),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=8,
+            width_steps=4,
+        )
+
+
+def build_phoenix() -> bpy.types.Object:
+    materials = character_materials(
+        (0.86, 0.24, 0.08, 1.0),
+        (1.0, 0.57, 0.12, 1.0),
+        (0.18, 0.92, 0.94, 1.0),
+    )
+    rig = create_character_rig(
+        "ember-phoenix",
+        head_location=(0.0, 1.98, 4.33),
+        wing_locations=((-0.56, 0.24, 3.48), (0.56, 0.24, 3.48)),
+        tail_start=(0.0, -1.50, 2.58),
+        tail_step=(0.0, -0.78, -0.025),
+    )
+    rig["back_socket"].location = (0.0, 0.02, 3.76)
+    rig["head_socket"].location = (0.0, 0.32, 0.50)
+    rig["eye_left"].location = (-0.31, 0.56, 0.17)
+    rig["eye_right"].location = (0.31, 0.56, 0.17)
+    rig["tail_socket"].parent = rig["tail_3"]
+    rig["tail_socket"].location = (0.0, -0.34, 0.16)
+
+    body_vertices: list[tuple[float, float, float]] = []
+    body_faces: list[tuple[int, int, int]] = []
+    append_oriented_loft(
+        body_vertices,
+        body_faces,
+        [
+            (0.0, -1.52, 2.50),
+            (0.0, -1.12, 2.68),
+            (0.0, -0.64, 2.94),
+            (0.0, -0.08, 3.08),
+            (0.0, 0.48, 3.28),
+            (0.0, 1.08, 3.70),
+            (0.0, 1.52, 4.08),
+            (0.0, 1.86, 4.33),
+        ],
+        [
+            (0.35, 0.42),
+            (0.58, 0.64),
+            (0.72, 0.82),
+            (0.79, 0.86),
+            (0.68, 0.82),
+            (0.508, 0.68),
+            (0.357, 0.50),
+            (0.263, 0.36),
+        ],
+        sides=28,
+    )
+
+    for side in (-1, 1):
+        add_ellipsoid_part(
+            body_vertices,
+            body_faces,
+            (side * 0.42, -0.12, 2.34),
+            (0.36, 0.44, 0.58),
+            segments=20,
+            rings=10,
+            rotation=(0.06, 0.0, -side * 0.08),
+        )
+        append_oriented_loft(
+            body_vertices,
+            body_faces,
+            [
+                (side * 0.42, -0.14, 2.60),
+                (side * 0.49, -0.62, 1.58),
+                (side * 0.35, -0.18, 0.76),
+                (side * 0.40, 0.32, 0.32),
+                (side * 0.40, 0.52, 0.18),
+            ],
+            [(0.25, 0.31), (0.21, 0.25), (0.16, 0.205), (0.12, 0.15), (0.15, 0.10)],
+            sides=14,
+        )
+        add_ellipsoid_part(
+            body_vertices,
+            body_faces,
+            (side * 0.40, 0.49, 0.185),
+            (0.22, 0.25, 0.13),
+            segments=16,
+            rings=8,
+            rotation=(0.04, 0.0, 0.0),
+        )
+        toe_offsets = (-0.15, 0.0, 0.15)
+        for toe_offset in toe_offsets:
+            start = (side * 0.40 + toe_offset, 0.54, 0.180)
+            knuckle = (side * 0.40 + toe_offset * 1.18, 0.75, 0.155)
+            append_oriented_loft(
+                body_vertices,
+                body_faces,
+                [start, knuckle],
+                [(0.10, 0.085), (0.084, 0.070)],
+                sides=10,
+            )
+            claw_middle = (side * 0.40 + toe_offset * 1.38, 0.90, 0.078)
+            tip = (side * 0.40 + toe_offset * 1.52, 1.00, 0.038)
+            append_tapered_claw(
+                body_vertices,
+                body_faces,
+                knuckle,
+                claw_middle,
+                tip,
+                0.082,
+                sides=10,
+            )
+        append_tapered_claw(
+            body_vertices,
+            body_faces,
+            (side * 0.47, 0.45, 0.178),
+            (side * 0.58, 0.10, 0.110),
+            (side * 0.69, -0.22, 0.038),
+            0.095,
+            sides=10,
+        )
+
+    chest_vertices: list[tuple[float, float, float]] = []
+    chest_faces: list[tuple[int, int, int]] = []
+    for row in range(5):
+        count = 4 + row
+        for column in range(count):
+            across = column - (count - 1) * 0.5
+            root = (
+                across * (0.26 - row * 0.012),
+                0.78 - row * 0.33,
+                3.78 - row * 0.23 + abs(across) * 0.025,
+            )
+            tip = (
+                root[0] * 1.08,
+                root[1] - 0.32,
+                root[2] - (0.52 + row * 0.045),
+            )
+            append_feather_leaf(
+                chest_vertices,
+                chest_faces,
+                root,
+                tip,
+                0.21 + row * 0.014,
+                thickness=0.026,
+                camber=0.055,
+                bend=(0.0, -0.04, 0.03),
+                surface_normal=(0.0, 1.0, 0.0),
+                length_steps=6,
+                width_steps=4,
+            )
+
+    make_mesh(
+        "Phoenix_BodyLoft",
+        body_vertices,
+        body_faces,
+        materials["base"],
+        rig["root"],
+        smooth=False,
+        vertex_color_fn=phoenix_body_color,
+    )
+    make_mesh(
+        "Phoenix_ChestFeathers",
+        chest_vertices,
+        chest_faces,
+        materials["membrane"],
+        rig["root"],
+        smooth=False,
+        vertex_color_fn=phoenix_feather_color,
+    )
+
+    for side, parent, name in (
+        (-1, rig["left"], "Phoenix_Wing_L"),
+        (1, rig["right"], "Phoenix_Wing_R"),
+    ):
+        vertices: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, int, int]] = []
+        append_phoenix_wing(vertices, faces, side=side)
+        make_mesh(
+            name,
+            vertices,
+            faces,
+            materials["membrane"],
+            parent,
+            smooth=False,
+            vertex_color_fn=phoenix_feather_color,
+        )
+
+    head_vertices: list[tuple[float, float, float]] = []
+    head_faces: list[tuple[int, int, int]] = []
+    append_oriented_loft(
+        head_vertices,
+        head_faces,
+        [
+            (0.0, -0.48, 0.00),
+            (0.0, -0.18, 0.10),
+            (0.0, 0.18, 0.08),
+            (0.0, 0.46, 0.00),
+            (0.0, 0.62, -0.08),
+        ],
+        [(0.286, 0.355), (0.492, 0.527), (0.549, 0.481), (0.446, 0.355), (0.286, 0.229)],
+        sides=16,
+    )
+    append_oriented_loft(
+        head_vertices,
+        head_faces,
+        [
+            (0.0, 0.42, -0.08),
+            (0.0, 0.86, -0.06),
+            (0.0, 1.16, -0.14),
+            (0.0, 1.30, -0.36),
+        ],
+        [(0.36, 0.25), (0.25, 0.17), (0.13, 0.09), (0.025, 0.018)],
+        sides=10,
+    )
+    mantle_specs = (
+        ((0.00, -0.38, -0.02), (0.00, -0.86, -0.72), 0.18),
+        ((-0.15, -0.32, 0.00), (-0.28, -0.78, -0.62), 0.16),
+        ((0.15, -0.32, 0.00), (0.28, -0.78, -0.62), 0.16),
+        ((-0.28, -0.22, -0.02), (-0.42, -0.66, -0.50), 0.14),
+        ((0.28, -0.22, -0.02), (0.42, -0.66, -0.50), 0.14),
+    )
+    for root, tip, half_width in mantle_specs:
+        append_feather_leaf(
+            head_vertices,
+            head_faces,
+            root,
+            tip,
+            half_width,
+            thickness=0.024,
+            camber=0.050,
+            bend=(tip[0] * 0.08, -0.03, -0.04),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=6,
+            width_steps=4,
+        )
+    collar_specs = (
+        ((-0.30, -0.31, -0.27), (-0.40, -0.55, -0.52), 0.125),
+        ((-0.18, -0.36, -0.29), (-0.24, -0.61, -0.58), 0.135),
+        ((-0.06, -0.39, -0.30), (-0.08, -0.66, -0.61), 0.14),
+        ((0.06, -0.39, -0.30), (0.08, -0.66, -0.61), 0.14),
+        ((0.18, -0.36, -0.29), (0.24, -0.61, -0.58), 0.135),
+        ((0.30, -0.31, -0.27), (0.40, -0.55, -0.52), 0.125),
+    )
+    for root, tip, half_width in collar_specs:
+        append_feather_leaf(
+            head_vertices,
+            head_faces,
+            root,
+            tip,
+            half_width,
+            thickness=0.022,
+            camber=0.042,
+            bend=(tip[0] * 0.05, -0.02, -0.025),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=5,
+            width_steps=4,
+        )
+    crown_vertices: list[tuple[float, float, float]] = []
+    crown_faces: list[tuple[int, int, int]] = []
+    crown_specs = (
+        (0.00, (0.00, 0.27, 0.28), (0.00, -0.66, 1.02), 0.115),
+        (-0.17, (-0.17, 0.18, 0.25), (-0.32, -0.74, 0.88), 0.105),
+        (0.17, (0.17, 0.18, 0.25), (0.32, -0.74, 0.88), 0.105),
+        (-0.11, (-0.11, -0.02, 0.27), (-0.25, -0.94, 0.78), 0.100),
+        (0.11, (0.11, -0.02, 0.27), (0.25, -0.94, 0.78), 0.100),
+        (-0.06, (-0.06, -0.22, 0.18), (-0.16, -1.14, 0.60), 0.092),
+        (0.06, (0.06, -0.22, 0.18), (0.16, -1.14, 0.60), 0.092),
+    )
+    for side_offset, root, tip, half_width in crown_specs:
+        append_feather_leaf(
+            crown_vertices,
+            crown_faces,
+            root,
+            tip,
+            half_width,
+            thickness=0.022,
+            camber=0.046,
+            bend=(side_offset * 0.08, -0.09, 0.035),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=7,
+            width_steps=4,
+        )
+    for side in (-1, 1):
+        for index in range(3):
+            root = (
+                side * (0.28 + index * 0.045),
+                -0.06 - index * 0.08,
+                0.10 - index * 0.07,
+            )
+            tip = (
+                side * (0.56 + index * 0.10),
+                -0.34 - index * 0.12,
+                0.02 - index * 0.15,
+            )
+            append_feather_leaf(
+                crown_vertices,
+                crown_faces,
+                root,
+                tip,
+                0.10,
+                thickness=0.02,
+                camber=0.035,
+                surface_normal=(0.0, 1.0, 0.0),
+                length_steps=6,
+                width_steps=4,
+            )
+    make_mesh(
+        "Phoenix_AvianHeadBeak",
+        head_vertices,
+        head_faces,
+        materials["base"],
+        rig["head"],
+        smooth=False,
+        vertex_color_fn=phoenix_head_color,
+    )
+    make_mesh(
+        "Phoenix_CrownCheekFeathers",
+        crown_vertices,
+        crown_faces,
+        materials["membrane"],
+        rig["head"],
+        smooth=False,
+        vertex_color_fn=phoenix_feather_color,
+    )
+
+    jaw_vertices: list[tuple[float, float, float]] = []
+    jaw_faces: list[tuple[int, int, int]] = []
+    append_oriented_loft(
+        jaw_vertices,
+        jaw_faces,
+        [
+            (0.0, 0.00, 0.03),
+            (0.0, 0.38, -0.01),
+            (0.0, 0.66, -0.09),
+            (0.0, 0.78, -0.22),
+        ],
+        [(0.29, 0.12), (0.21, 0.095), (0.10, 0.055), (0.024, 0.016)],
+        sides=10,
+    )
+    make_mesh(
+        "Phoenix_JawBeak",
+        jaw_vertices,
+        jaw_faces,
+        materials["base"],
+        rig["jaw"],
+        smooth=False,
+        vertex_color_fn=phoenix_head_color,
+    )
+
+    for side_name, parent in (("L", rig["eye_left"]), ("R", rig["eye_right"])):
+        vertices: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, int, int]] = []
+        add_ellipsoid_part(
+            vertices,
+            faces,
+            (0.0, 0.0, 0.0),
+            (0.082, 0.045, 0.062),
+            segments=14,
+            rings=7,
+        )
+        make_mesh(f"Phoenix_Eye_{side_name}", vertices, faces, materials["glow"], parent)
+
+    for index in range(1, 6):
+        vertices: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, int, int]] = []
+        # Every segment extends beyond 1.02 units while the rig advances only
+        # 0.78, guaranteeing a hidden overlap instead of visible ring gaps.
+        segment_length = 1.10 if index < 5 else 1.06
+        local_y_values = (
+            0.10,
+            -segment_length * 0.14,
+            -segment_length * 0.36,
+            -segment_length * 0.58,
+            -segment_length * 0.80,
+            -segment_length,
+        )
+        segment_centers = [(0.0, local_y, local_y * 0.032) for local_y in local_y_values]
+        segment_radii: list[tuple[float, float]] = []
+        nesting = 1.0 - (index - 1) * 0.006
+        for _x, local_y, _z in segment_centers:
+            distance = max(0.0, (index - 1) * 0.78 - local_y)
+            radius = max(0.052, 0.25 * math.exp(-0.31 * distance)) * nesting
+            segment_radii.append((radius, radius * 0.82))
+        append_oriented_loft(
+            vertices,
+            faces,
+            segment_centers,
+            segment_radii,
+            sides=12,
+        )
+        if index == 5:
+            plume_specs = (
+                (
+                    (0.12, -0.98, -0.10),
+                    (2.30, -2.60, -1.40),
+                    0.24,
+                    (1.0, 0.0, 0.0),
+                    (0.40, 0.0, -0.20),
+                    (0.45, 0.26, 0.48),
+                ),
+                (
+                    (0.00, -0.46, 0.22),
+                    (0.00, -3.95, 1.25),
+                    0.21,
+                    (0.64, 0.0, 0.77),
+                    (0.0, 0.0, 0.38),
+                    (0.34, 0.28, -0.38),
+                ),
+                (
+                    (0.18, -0.62, 0.18),
+                    (1.55, -3.55, 0.55),
+                    0.20,
+                    (0.62, 0.0, 0.78),
+                    (0.32, 0.0, 0.24),
+                    (0.32, 0.25, -0.28),
+                ),
+            )
+            for root, tip, half_width, normal, bend, split_offset in plume_specs:
+                append_feather_leaf(
+                    vertices,
+                    faces,
+                    root,
+                    tip,
+                    half_width,
+                    thickness=0.025,
+                    camber=0.075,
+                    bend=bend,
+                    surface_normal=normal,
+                    length_steps=11,
+                    width_steps=4,
+                )
+                split_root = tuple(Vector(root).lerp(Vector(tip), 0.55))
+                split_tip = tuple(Vector(tip) + Vector(split_offset))
+                append_feather_leaf(
+                    vertices,
+                    faces,
+                    split_root,
+                    split_tip,
+                    0.105,
+                    thickness=0.021,
+                    camber=0.050,
+                    bend=tuple(Vector(bend) * 0.35),
+                    surface_normal=normal,
+                    length_steps=5,
+                    width_steps=3,
+                )
+        make_mesh(
+            f"Phoenix_TailPlumes_{index}",
+            vertices,
+            faces,
+            materials["membrane"],
+            rig[f"tail_{index}"],
+            smooth=False,
+            vertex_color_fn=phoenix_feather_color,
+        )
+
+    finish_character(
+        rig,
+        silhouette_features=(
+            "continuous-avian-loft angular-cranium three-feather-layers "
+            "seven-back-swept-flame-crown bent-ankles three-forward-hallux-talons "
+            "overlapped-pelvis-taper triple-cambered-tail-plumes"
+        ),
+        triangle_range=(22_000, 28_000),
+    )
+    return rig["root"]
+
+
+def tiger_stripe_color(
+    point: Vector, _index: int
+) -> tuple[float, float, float, float]:
+    dark = (0.02, 0.03, 0.045, 1.0)
+    white = (0.88, 0.91, 0.98, 1.0)
+    phase = point.y * 4.3 + abs(point.x) * 2.5 - point.z * 0.85
+    stripe = abs(math.sin(phase)) < 0.46
+    side_or_back = abs(point.x) > 0.16 or point.z > 2.22
+    limb_band = (
+        abs(point.x) > 0.42
+        and 0.30 < point.z < 2.55
+        and abs(math.sin(point.z * 6.8 + point.y * 1.1)) < 0.52
+    )
+    if point.z < 0.14:
+        return dark
+    if (stripe and side_or_back) or limb_band:
+        return dark
+    return white
+
+
+def tiger_head_color(
+    point: Vector, _index: int
+) -> tuple[float, float, float, float]:
+    dark = (0.02, 0.03, 0.045, 1.0)
+    white = (0.88, 0.91, 0.98, 1.0)
+    ax = abs(point.x)
+    ear_dark = (
+        point.z > 0.33
+        and ax > 0.20
+        and -0.16 < point.y < -0.04
+    )
+    eye_mask = (
+        0.12 < ax < 0.46
+        and 0.18 < point.z < 0.30
+        and abs(point.y - (0.44 - ax * 0.32)) < 0.028
+    )
+    forehead_half_width = 0.045 + max(0.0, 0.34 - point.z) * 0.16
+    central = (
+        -0.20 < point.y < 0.16
+        and 0.18 < point.z < 0.39
+        and ax < forehead_half_width
+    )
+    upper_cheek = (
+        0.26 < ax < 0.56
+        and 0.02 < point.y < 0.30
+        and -0.08 < point.z < 0.14
+        and abs(point.z - (point.y * 0.60 - 0.08)) < 0.045
+    )
+    lower_cheek = (
+        0.28 < ax < 0.58
+        and -0.10 < point.y < 0.18
+        and -0.20 < point.z < 0.02
+        and abs(point.z - (point.y * 0.55 - 0.14)) < 0.045
+    )
+    nose = point.y > 0.49 and point.z < 0.055 and ax < 0.235
+    if ear_dark or eye_mask or central or upper_cheek or lower_cheek or nose:
+        return dark
+    return white
+
+
+def tiger_muzzle_color(
+    _point: Vector, _index: int
+) -> tuple[float, float, float, float]:
+    return (0.88, 0.91, 0.98, 1.0)
+
+
+def tiger_wing_color(
+    point: Vector, _index: int
+) -> tuple[float, float, float, float]:
+    reach = min(1.0, max(0.0, abs(point.x) / 5.5))
+    charcoal_tip = max(0.0, (reach - 0.55) / 0.45)
+    return (
+        0.80 - charcoal_tip * 0.64,
+        0.84 - charcoal_tip * 0.64,
+        0.92 - charcoal_tip * 0.66,
+        1.0,
+    )
+
+
+def append_tiger_wing(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, int, int]],
+    *,
+    side: int,
+) -> None:
+    append_oriented_loft(
+        vertices,
+        faces,
+        [
+            (side * -0.30, 0.10, -0.08),
+            (side * 0.28, 0.04, 0.00),
+            (side * 1.05, -0.06, 0.08),
+            (side * 2.10, -0.18, 0.16),
+            (side * 3.25, -0.36, 0.25),
+            (side * 4.15, -0.54, 0.34),
+        ],
+        [
+            (0.34, 0.26),
+            (0.46, 0.31),
+            (0.40, 0.26),
+            (0.28, 0.18),
+            (0.13, 0.085),
+            (0.04, 0.03),
+        ],
+        sides=16,
+    )
+
+    for index in range(10):
+        root = (
+            side * (0.45 + index * 0.17),
+            -0.18 + index * 0.020,
+            0.10 + index * 0.015,
+        )
+        tip = (
+            side * (3.25 + index * 0.23),
+            -1.20 + index * 0.090,
+            0.28 + index * 0.015,
+        )
+        append_feather_leaf(
+            vertices,
+            faces,
+            root,
+            tip,
+            0.23,
+            thickness=0.034,
+            camber=0.095,
+            bend=(0.0, -0.02, 0.06),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=8,
+            width_steps=5,
+        )
+
+    for index in range(8):
+        root = (
+            side * (0.15 + index * 0.16),
+            0.00 + index * 0.015,
+            0.02 + index * 0.014,
+        )
+        tip = (
+            side * (2.00 + index * 0.25),
+            -0.45 + index * 0.065,
+            0.20 + index * 0.018,
+        )
+        append_feather_leaf(
+            vertices,
+            faces,
+            root,
+            tip,
+            0.21,
+            thickness=0.032,
+            camber=0.10,
+            bend=(0.0, 0.0, 0.05),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=8,
+            width_steps=5,
+        )
+    for index in range(10):
+        root = (
+            side * (-0.18 + index * 0.10),
+            0.18 + index * 0.010,
+            -0.05 + index * 0.012,
+        )
+        tip = (
+            side * (0.85 + index * 0.18),
+            0.05 + index * 0.040,
+            0.12 + index * 0.015,
+        )
+        append_feather_leaf(
+            vertices,
+            faces,
+            root,
+            tip,
+            0.20,
+            thickness=0.030,
+            camber=0.09,
+            bend=(0.0, 0.0, 0.04),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=7,
+            width_steps=4,
+        )
+
+
+def build_white_tiger() -> bpy.types.Object:
+    materials = character_materials(
+        (0.90, 0.93, 0.98, 1.0),
+        (0.68, 0.72, 0.80, 1.0),
+        (0.32, 0.91, 0.98, 1.0),
+    )
+    rig = create_character_rig(
+        "storm-white-tiger",
+        head_location=(0.0, 1.38, 2.92),
+        wing_locations=((-0.56, 0.10, 3.14), (0.56, 0.10, 3.14)),
+        tail_start=(0.0, -1.50, 2.03),
+        tail_step=(0.14, -0.88, 0.120),
+    )
+    rig["back_socket"].location = (0.0, 0.18, 3.58)
+    rig["head_socket"].location = (0.0, 0.42, 0.48)
+    rig["jaw"].location = (0.0, 0.32, -0.09)
+    rig["eye_left"].location = (-0.29, 0.37, 0.22)
+    rig["eye_right"].location = (0.29, 0.37, 0.22)
+    rig["tail_2"].location = (0.14, -0.88, 0.120)
+    rig["tail_3"].location = (-0.26, -0.84, -0.200)
+    rig["tail_4"].location = (-0.18, -0.82, -0.160)
+    rig["tail_5"].location = (0.32, -0.80, 0.240)
+    for index in range(1, 6):
+        rig[f"tail_{index}"].rotation_euler = (0.0, 0.0, 0.0)
+    rig["tail_socket"].location = (0.18, -1.14, 0.18)
+
+    body_vertices: list[tuple[float, float, float]] = []
+    body_faces: list[tuple[int, int, int]] = []
+    body_centers, body_radii = subdivide_loft_profile(
+        [
+            (0.0, -1.62, 1.82),
+            (0.0, -1.40, 1.94),
+            (0.0, -1.12, 2.06),
+            (0.0, -0.82, 2.10),
+            (0.0, -0.52, 2.08),
+            (0.0, -0.22, 2.14),
+            (0.0, 0.08, 2.26),
+            (0.0, 0.38, 2.40),
+            (0.0, 0.68, 2.54),
+            (0.0, 0.94, 2.68),
+            (0.0, 1.16, 2.84),
+            (0.0, 1.36, 3.00),
+            (0.0, 1.48, 3.10),
+        ],
+        [
+            (0.68, 0.56),
+            (0.90, 0.76),
+            (1.08, 0.92),
+            (1.04, 0.88),
+            (0.84, 0.72),
+            (0.80, 0.68),
+            (0.92, 0.78),
+            (1.02, 0.90),
+            (1.10, 0.98),
+            (1.02, 0.92),
+            (0.84, 0.80),
+            (0.62, 0.66),
+            (0.48, 0.52),
+        ],
+        subdivisions=3,
+    )
+    append_oriented_loft(
+        body_vertices,
+        body_faces,
+        body_centers,
+        body_radii,
+        sides=28,
+    )
+
+    leg_specs = (
+        (-1, "front", -0.68, 0.70),
+        (1, "front", 0.68, 0.70),
+        (-1, "hind", -0.72, -1.02),
+        (1, "hind", 0.72, -1.02),
+    )
+    for _side, kind, x, y in leg_specs:
+        if kind == "front":
+            centers = [
+                (x, y, 2.78),
+                (x * 1.16, y - 0.16, 2.15),
+                (x * 1.30, y - 0.28, 1.56),
+                (x * 1.02, y - 0.02, 0.90),
+                (x * 0.82, y + 0.22, 0.54),
+                (x * 0.92, y + 0.38, 0.32),
+                (x, y + 0.54, 0.20),
+                (x, y + 0.70, 0.14),
+            ]
+            radii = [
+                (0.40, 0.46),
+                (0.36, 0.40),
+                (0.28, 0.32),
+                (0.22, 0.25),
+                (0.18, 0.20),
+                (0.20, 0.16),
+                (0.29, 0.12),
+                (0.34, 0.11),
+            ]
+            paw_y = y + 0.48
+            palm_center = (x, paw_y + 0.18, 0.175)
+            palm_radii = (0.36, 0.34, 0.125)
+            palm_rotation = (0.05, 0.0, 0.0)
+            toe_spacing = 0.130
+            toe_z = 0.145
+            toe_radii = (0.120, 0.230, 0.100)
+            claw_start_z = 0.140
+            claw_mid_z = 0.085
+            claw_radius = 0.050
+            toe_angle_step = 4.5
+        else:
+            add_ellipsoid_part(
+                body_vertices,
+                body_faces,
+                (x * 1.04, y + 0.06, 1.90),
+                (0.50, 0.58, 0.66),
+                segments=20,
+                rings=10,
+                rotation=(0.06, 0.0, -x * 0.05),
+            )
+            centers = [
+                (x, y, 2.16),
+                (x * 1.10, y + 0.14, 1.74),
+                (x * 1.16, y + 0.24, 1.34),
+                (x * 1.08, y + 0.06, 1.02),
+                (x * 0.98, y - 0.14, 0.72),
+                (x * 0.92, y - 0.12, 0.50),
+                (x * 0.90, y + 0.04, 0.34),
+                (x * 0.95, y + 0.32, 0.22),
+                (x, y + 0.62, 0.15),
+            ]
+            radii = [
+                (0.46, 0.52),
+                (0.43, 0.48),
+                (0.34, 0.38),
+                (0.28, 0.31),
+                (0.24, 0.27),
+                (0.21, 0.23),
+                (0.20, 0.18),
+                (0.28, 0.14),
+                (0.33, 0.11),
+            ]
+            paw_y = y + 0.48
+            palm_center = (x, paw_y + 0.16, 0.155)
+            palm_radii = (0.34, 0.34, 0.11)
+            palm_rotation = (0.04, 0.0, 0.0)
+            toe_spacing = 0.110
+            toe_z = 0.125
+            toe_radii = (0.095, 0.190, 0.080)
+            claw_start_z = 0.115
+            claw_mid_z = 0.072
+            claw_radius = 0.043
+            toe_angle_step = 3.5
+        append_oriented_loft(
+            body_vertices, body_faces, centers, radii, sides=16
+        )
+        add_ellipsoid_part(
+            body_vertices,
+            body_faces,
+            palm_center,
+            palm_radii,
+            segments=20,
+            rings=10,
+            rotation=palm_rotation,
+        )
+        for toe_index in range(4):
+            fan = toe_index - 1.5
+            angle = math.radians(toe_angle_step * fan)
+            toe_x = x + fan * toe_spacing
+            toe_y = (
+                paw_y + 0.43 - abs(fan) * 0.01
+                if kind == "front"
+                else paw_y + 0.46
+            )
+            add_ellipsoid_part(
+                body_vertices,
+                body_faces,
+                (toe_x, toe_y, toe_z),
+                toe_radii,
+                segments=12,
+                rings=7,
+                rotation=(0.04, 0.0, angle),
+            )
+            claw_dx = math.sin(angle)
+            claw_dy = math.cos(angle)
+            append_tapered_claw(
+                body_vertices,
+                body_faces,
+                (toe_x + claw_dx * 0.10, toe_y + claw_dy * 0.10, claw_start_z),
+                (toe_x + claw_dx * 0.23, toe_y + claw_dy * 0.23, claw_mid_z),
+                (toe_x + claw_dx * 0.34, toe_y + claw_dy * 0.34, 0.040),
+                claw_radius,
+                sides=8,
+            )
+
+    for side in (-1, 1):
+        append_oriented_loft(
+            body_vertices,
+            body_faces,
+            [
+                (side * 0.32, 0.46, 3.10),
+                (side * 0.40, 0.26, 3.11),
+                (side * 0.46, 0.02, 3.07),
+                (side * 0.44, -0.24, 2.98),
+            ],
+            [(0.20, 0.15), (0.26, 0.18), (0.28, 0.20), (0.18, 0.12)],
+            sides=12,
+        )
+        for index in range(5):
+            root = (
+                side * (0.34 + index * 0.020),
+                0.48 - index * 0.06,
+                3.13 - index * 0.015,
+            )
+            tip = (
+                side * (0.52 + index * 0.025),
+                -0.18 - index * 0.11,
+                2.98 - index * 0.040,
+            )
+            append_feather_leaf(
+                body_vertices,
+                body_faces,
+                root,
+                tip,
+                0.26 - index * 0.012,
+                thickness=0.030,
+                camber=0.050,
+                bend=(side * 0.035, -0.10, -0.025),
+                surface_normal=(side, 0.0, 0.0),
+                length_steps=5,
+                width_steps=3,
+            )
+        for index in range(4):
+            append_feather_leaf(
+                body_vertices,
+                body_faces,
+                (
+                    side * (0.42 + index * 0.025),
+                    0.22 - index * 0.08,
+                    3.05 - index * 0.025,
+                ),
+                (
+                    side * (0.56 + index * 0.030),
+                    -0.72 - index * 0.20,
+                    2.78 - index * 0.080,
+                ),
+                0.19 - index * 0.008,
+                thickness=0.026,
+                camber=0.055,
+                bend=(side * 0.030, -0.12, -0.040),
+                surface_normal=(side, 0.0, 0.0),
+                length_steps=5,
+                width_steps=3,
+            )
+        for index in range(3):
+            append_feather_leaf(
+                body_vertices,
+                body_faces,
+                (
+                    side * (0.46 + index * 0.030),
+                    0.0 - index * 0.09,
+                    2.97 - index * 0.040,
+                ),
+                (
+                    side * (0.54 + index * 0.025),
+                    -1.18 - index * 0.21,
+                    2.54 - index * 0.090,
+                ),
+                0.17 - index * 0.010,
+                thickness=0.025,
+                camber=0.060,
+                bend=(side * 0.025, -0.14, -0.050),
+                surface_normal=(side, 0.0, 0.0),
+                length_steps=5,
+                width_steps=3,
+            )
+
+    body_colors = [
+        tiger_stripe_color(Vector(point), index)
+        for index, point in enumerate(body_vertices)
+    ]
+
+    make_mesh(
+        "WhiteTiger_BodyHide",
+        body_vertices,
+        body_faces,
+        materials["base"],
+        rig["root"],
+        smooth=False,
+        vertex_colors=body_colors,
+    )
+
+    for side, parent, name in (
+        (-1, rig["left"], "WhiteTiger_Wing_L"),
+        (1, rig["right"], "WhiteTiger_Wing_R"),
+    ):
+        vertices: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, int, int]] = []
+        append_tiger_wing(vertices, faces, side=side)
+        make_mesh(
+            name,
+            vertices,
+            faces,
+            materials["membrane"],
+            parent,
+            smooth=False,
+            vertex_color_fn=tiger_wing_color,
+        )
+
+    head_vertices: list[tuple[float, float, float]] = []
+    head_faces: list[tuple[int, int, int]] = []
+    append_oriented_loft(
+        head_vertices,
+        head_faces,
+        [
+            (0.0, -0.34, 0.00),
+            (0.0, -0.16, 0.03),
+            (0.0, 0.02, 0.05),
+            (0.0, 0.18, 0.04),
+            (0.0, 0.30, 0.01),
+        ],
+        [(0.34, 0.23), (0.52, 0.26), (0.56, 0.24), (0.50, 0.19), (0.38, 0.15)],
+        sides=18,
+    )
+    for side in (-1, 1):
+        add_ellipsoid_part(
+            head_vertices,
+            head_faces,
+            (side * 0.30, 0.08, -0.11),
+            (0.23, 0.15, 0.19),
+            segments=20,
+            rings=10,
+            rotation=(0.02, 0.0, -side * 0.04),
+        )
+        append_feather_leaf(
+            head_vertices,
+            head_faces,
+            (side * 0.43, -0.10, 0.22),
+            (side * 0.60, -0.055, 0.47),
+            0.145,
+            thickness=0.030,
+            camber=0.055,
+            bend=(side * 0.025, 0.025, -0.015),
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=6,
+            width_steps=4,
+        )
+        append_wedge(
+            head_vertices,
+            head_faces,
+            (side * 0.42, -0.12, 0.16),
+            (0.22, 0.28, 0.13),
+        )
+    append_oriented_loft(
+        head_vertices,
+        head_faces,
+        [
+            (0.0, 0.10, -0.01),
+            (0.0, 0.27, -0.03),
+            (0.0, 0.43, -0.05),
+            (0.0, 0.54, -0.065),
+        ],
+        [(0.32, 0.21), (0.30, 0.18), (0.24, 0.145), (0.17, 0.10)],
+        sides=12,
+    )
+    add_ellipsoid_part(
+        head_vertices,
+        head_faces,
+        (0.0, 0.575, -0.06),
+        (0.20, 0.080, 0.105),
+        segments=14,
+        rings=7,
+    )
+    for side in (-1, 1):
+        for index in range(4):
+            root = (
+                side * (0.27 + index * 0.028),
+                0.10 - index * 0.065,
+                0.03 - index * 0.035,
+            )
+            tip = (
+                side * (0.56 + index * 0.040),
+                -0.16 - index * 0.10,
+                -0.02 - index * 0.055,
+            )
+            append_feather_leaf(
+                head_vertices,
+                head_faces,
+                root,
+                tip,
+                0.115,
+                thickness=0.022,
+                camber=0.035,
+                bend=(side * 0.035, -0.03, -0.02),
+                surface_normal=(0.0, 1.0, 0.0),
+                length_steps=5,
+                width_steps=3,
+            )
+    for side in (-1, 1):
+        append_feather_leaf(
+            head_vertices,
+            head_faces,
+            (side * 0.12, 0.40, 0.25),
+            (side * 0.44, 0.29, 0.28),
+            0.040,
+            thickness=0.010,
+            camber=0.008,
+            surface_normal=(0.0, 1.0, 0.0),
+            length_steps=4,
+            width_steps=2,
+        )
+    head_colors = [
+        tiger_head_color(Vector(point), index)
+        for index, point in enumerate(head_vertices)
+    ]
+
+    make_mesh(
+        "WhiteTiger_HeadMane",
+        head_vertices,
+        head_faces,
+        materials["base"],
+        rig["head"],
+        smooth=False,
+        vertex_colors=head_colors,
+    )
+
+    jaw_vertices: list[tuple[float, float, float]] = []
+    jaw_faces: list[tuple[int, int, int]] = []
+    append_oriented_loft(
+        jaw_vertices,
+        jaw_faces,
+        [
+            (0.0, -0.08, -0.060),
+            (0.0, 0.00, -0.075),
+            (0.0, 0.08, -0.085),
+            (0.0, 0.15, -0.095),
+            (0.0, 0.22, -0.105),
+            (0.0, 0.28, -0.110),
+        ],
+        [(0.30, 0.210), (0.34, 0.235), (0.36, 0.245), (0.35, 0.230), (0.31, 0.205), (0.23, 0.160)],
+        sides=8,
+        rolls=[math.pi / 8.0] * 6,
+    )
+    make_mesh(
+        "WhiteTiger_JawMuzzle",
+        jaw_vertices,
+        jaw_faces,
+        materials["base"],
+        rig["jaw"],
+        smooth=False,
+        vertex_color_fn=tiger_muzzle_color,
+    )
+
+    for side_name, side, parent in (
+        ("L", -1, rig["eye_left"]),
+        ("R", 1, rig["eye_right"]),
+    ):
+        vertices: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, int, int]] = []
+        add_ellipsoid_part(
+            vertices,
+            faces,
+            (0.0, 0.0, 0.0),
+            (0.105, 0.034, 0.035),
+            segments=14,
+            rings=7,
+            rotation=(0.0, -side * 0.14, 0.0),
+        )
+        make_mesh(
+            f"WhiteTiger_Eye_{side_name}", vertices, faces, materials["glow"], parent
+        )
+
+    tail_links = (
+        Vector((0.14, -0.88, 0.120)),
+        Vector((-0.26, -0.84, -0.200)),
+        Vector((-0.18, -0.82, -0.160)),
+        Vector((0.32, -0.80, 0.240)),
+        Vector((0.18, -1.14, 0.18)),
+    )
+    tail_y_offsets = (0.0, 0.88, 1.72, 2.54, 3.34)
+    tail_boundary_radii = (0.29, 0.265, 0.235, 0.205, 0.17, 0.105)
+    for index in range(1, 6):
+        vertices: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, int, int]] = []
+        p0 = Vector((0.0, 0.0, 0.0))
+        p3 = tail_links[index - 1]
+        following = tail_links[index] if index < 5 else tail_links[-1]
+        p1 = p3 * 0.33
+        p2 = p3 - following * 0.22
+        centers: list[tuple[float, float, float]] = []
+        for station in range(6):
+            progress = station / 5.0
+            inverse = 1.0 - progress
+            point = (
+                p0 * (inverse ** 3)
+                + p1 * (3.0 * inverse * inverse * progress)
+                + p2 * (3.0 * inverse * progress * progress)
+                + p3 * (progress ** 3)
+            )
+            centers.append(tuple(point))
+        start_radius = tail_boundary_radii[index - 1]
+        end_radius = tail_boundary_radii[index]
+        radii = []
+        for station in range(len(centers)):
+            progress = station / (len(centers) - 1)
+            radius = start_radius + (end_radius - start_radius) * progress
+            radii.append((radius, radius * 0.88))
+        append_oriented_loft(
+            vertices,
+            faces,
+            centers,
+            radii,
+            sides=14,
+            cap_start=index == 1,
+            cap_end=index == 5,
+        )
+        if index == 5:
+            for feather_index in range(8):
+                fan = feather_index - 3.5
+                bias = 1.0 - abs(fan) / 3.5
+                append_feather_leaf(
+                    vertices,
+                    faces,
+                    (0.20 + fan * 0.012, -1.04, 0.18 + bias * 0.02),
+                    (
+                        0.22 + fan * 0.13,
+                        -1.90 - bias * 0.10,
+                        0.24 + bias * 0.26,
+                    ),
+                    0.12 + bias * 0.035,
+                    thickness=0.028,
+                    camber=0.065,
+                    bend=(fan * 0.02, -0.03, bias * 0.08),
+                    surface_normal=(0.0, 1.0, 0.0),
+                    length_steps=4,
+                    width_steps=3,
+                )
+
+        def tail_color(
+            point: Vector, _vertex_index: int, *, segment_index: int = index
+        ) -> tuple[float, float, float, float]:
+            dark = (0.02, 0.03, 0.045, 1.0)
+            white = (0.88, 0.91, 0.98, 1.0)
+            global_y = point.y - tail_y_offsets[segment_index - 1]
+            if segment_index == 5 and point.y < -1.20:
+                return dark
+            if abs(math.sin(global_y * 9.6)) < 0.20:
+                return dark
+            return white
+
+        make_mesh(
+            f"WhiteTiger_Tail_{index}",
+            vertices,
+            faces,
+            materials["base"],
+            rig[f"tail_{index}"],
+            smooth=True,
+            vertex_color_fn=tail_color,
+        )
+
+    finish_character(
+        rig,
+        silhouette_features=(
+            "continuous-feline-loft rounded-ears cheek-pads four-digitigrade-limbs "
+            "articulated-paws vertex-color-stripes shoulder-blade-three-feather-layers"
+        ),
+        triangle_range=(24_000, 30_000),
+    )
+    return rig["root"]
 
 
 def build_griffin() -> bpy.types.Object:
@@ -920,6 +2565,8 @@ def build_ribbon() -> bpy.types.Object:
 
 
 BUILDERS = {
+    "ember-phoenix": build_phoenix,
+    "storm-white-tiger": build_white_tiger,
     "storm-griffin": build_griffin,
     "cloud-manta": build_manta,
     "wind-goggles": build_goggles,
