@@ -1,0 +1,39 @@
+{
+  "scope": "m39-volcanic-archipelago",
+  "iteration": 9,
+  "threshold": 90,
+  "passed": true,
+  "active": false,
+  "evaluated_at": "2026-07-16T16:41:32+09:00",
+  "completed_at": "2026-07-16T16:41:32+09:00",
+  "reference": "Iteration 8 approved volcanic archipelago captures and the M39 high-quality stylized Three.js art direction",
+  "captures": [
+    "artifacts/browser-qa/m39-latest/desktop-volcanic-archipelago.png",
+    "artifacts/browser-qa/m39-latest/desktop-compact-volcanic-archipelago.png",
+    "artifacts/browser-qa/m39-latest/touch-landscape-volcanic-archipelago.png",
+    "artifacts/browser-qa/m39-latest/touch-portrait-volcanic-archipelago.png",
+    "artifacts/browser-qa/m39-latest/touch-minimum-volcanic-archipelago.png",
+    "artifacts/browser-qa/m39-latest/desktop-volcanic-mission-lava-active.png"
+  ],
+  "score": 93,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": [
+    "The latest desktop composition preserves the approved caldera silhouette, lava channel, bridge ribs, cooling crystal, ruin towers, and layered obsidian islands without a visual regression.",
+    "The active mission capture confirms the lava-wave warning, 40 pooled plane segments, mission objective HUD, cooling-seal counter, and boost UI render together without missing surfaces or overlay collisions.",
+    "Desktop, compact, landscape touch, portrait touch, and 320x568 minimum touch captures keep every essential control inside the viewport; only the long region title is intentionally ellipsized at minimum width.",
+    "The plane-based lava crest removes the prior box-like segment cost while retaining the authored orange hazard language and a four-draw-call active volcanic VFX budget.",
+    "Broad dark caldera faces and square ash remain deliberate stylized low-poly choices; they do not obscure the cyan route, bridge approach, crystals, or hazard warnings."
+  ],
+  "suggestions": [
+    "Keep the current single-plane lava crest and pooled instancing contract when adding future eruption variants.",
+    "A future QA-only volcanic overview camera could make the complete active lava ring easier to inspect in one deterministic screenshot.",
+    "Future cosmetic polish may soften ash silhouettes and add subtle tonal breakup to the broad foreground caldera without adding draw calls."
+  ],
+  "reasoning": "The current build matches the approved stylized open-world category and retains the richer authored volcano, ruins, bridges, crystals, and route hierarchy across all supported viewports. Automated pixel-change checks passed in five viewports, the active hazard capture reported no browser errors, and no essential UI or geometry is clipped; the result clears the 90-point visual release threshold.",
+  "next_actions": [
+    "Run the complete unit, lint, type, development E2E, and production viewport suites.",
+    "Verify the normal production bundle tree-shakes all QA geometry-ledger hooks.",
+    "Create clean local Lore commits and verify the SoSyn2ne remote remains unchanged without pushing."
+  ]
+}

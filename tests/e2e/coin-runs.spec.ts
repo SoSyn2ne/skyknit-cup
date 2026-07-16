@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test'
 
-const REGIONS = ['festival-hub', 'wind-canyon', 'cloud-ruins'] as const
+const REGIONS = [
+  'festival-hub',
+  'wind-canyon',
+  'cloud-ruins',
+  'volcanic-archipelago',
+] as const
 const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
 
 test('collects the current coin through real flight in every required viewport', async ({
@@ -38,7 +43,7 @@ test('collects the current coin through real flight in every required viewport',
       ),
     )
     .toMatchObject({
-      totalCount: 30,
+      totalCount: 40,
       visibleCount: 1,
       activeCoinId: 'festival-hub-coin-2',
       drawCalls: 1,
@@ -69,7 +74,7 @@ test('collects the current coin through real flight in every required viewport',
   expect(errors).toEqual([])
 })
 
-test('freezes the run under the map and persists all three regional bests', async ({
+test('freezes the run under the map and persists all four regional bests', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single persistence contract')
@@ -117,17 +122,19 @@ test('freezes the run under the map and persists all three regional bests', asyn
     return raw === null ? null : JSON.parse(raw)
   })
   expect(saved).toMatchObject({
-    version: 10,
+    version: 11,
     coinBestTimesMs: {
       'festival-hub': expect.any(Number),
       'wind-canyon': expect.any(Number),
       'cloud-ruins': expect.any(Number),
+      'volcanic-archipelago': expect.any(Number),
     },
     skyLeague: {
       coinTop10Ms: {
         'festival-hub': [expect.any(Number)],
         'wind-canyon': [expect.any(Number)],
         'cloud-ruins': [expect.any(Number)],
+        'volcanic-archipelago': [expect.any(Number)],
       },
     },
     ghosts: {
@@ -144,6 +151,10 @@ test('freezes the run under the map and persists all three regional bests', asyn
           durationMs: expect.any(Number),
           samples: expect.any(Array),
         },
+        'volcanic-archipelago': {
+          durationMs: expect.any(Number),
+          samples: expect.any(Array),
+        },
       },
     },
   })
@@ -151,7 +162,12 @@ test('freezes the run under the map and persists all three regional bests', asyn
   await page.reload()
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await page.getByRole('button', { name: '군도 지도 열기' }).click()
-  for (const regionName of ['축제 중심섬', '바람 협곡', '구름 유적지']) {
+  for (const regionName of [
+    '축제 중심섬',
+    '바람 협곡',
+    '구름 유적지',
+    '태양의 심장 · 용암 군도',
+  ]) {
     await expect(
       page.getByRole('button', { name: new RegExp(`${regionName}.*최고`) }),
     ).toBeVisible()

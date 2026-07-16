@@ -216,7 +216,7 @@ async function validateStoredCompetition(
   const settings = await readStoredSettings(page)
   expect(settings).not.toBeNull()
   if (settings === null) throw new Error('Missing persisted M33 settings')
-  expect(settings.version).toBe(10)
+  expect(settings.version).toBe(11)
 
   expectAscendingTimes(settings.skyLeague.raceTop10Ms, 'race Top 10')
   for (const [regionId, board] of Object.entries(

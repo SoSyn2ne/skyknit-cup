@@ -22,6 +22,12 @@ interface AudioSnapshot {
   readonly windEntryCues: number
   readonly ambientWindStrength: number
   readonly windBedPlaying: boolean
+  readonly volcanicAmbienceIntensity: number
+  readonly volcanicBedPlaying: boolean
+  readonly rockWarningCues: number
+  readonly lavaWarningCues: number
+  readonly coolingSealCues: number
+  readonly eruptionEscapeCues: number
 }
 
 async function readAudio(page: Page): Promise<AudioSnapshot | null> {
@@ -75,6 +81,12 @@ test('gates generated audio behind gesture, edges, and mute', async ({
     windEntryCues: 0,
     ambientWindStrength: 0,
     windBedPlaying: false,
+    volcanicAmbienceIntensity: 0,
+    volcanicBedPlaying: false,
+    rockWarningCues: 0,
+    lavaWarningCues: 0,
+    coolingSealCues: 0,
+    eruptionEscapeCues: 0,
   })
 
   await page.keyboard.press('ArrowUp')

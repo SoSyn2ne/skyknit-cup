@@ -64,6 +64,26 @@ async function expectDialogFitsViewport(
   for (const control of await dialog.locator('button:visible').all()) {
     await expectControlInViewport(control, viewport)
   }
+
+  const story = dialog.locator('.story-prologue__story')
+  const lastParagraph = story.locator('p').last()
+  const scrollState = await story.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }))
+
+  expect(scrollState.clientHeight).toBeGreaterThan(0)
+  expect(scrollState.scrollHeight).toBeGreaterThanOrEqual(
+    scrollState.clientHeight,
+  )
+
+  if (scrollState.scrollHeight > scrollState.clientHeight) {
+    await story.evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+    })
+    await expect(lastParagraph).toBeInViewport()
+    await expectControlInViewport(dialog.locator('button'), viewport)
+  }
 }
 
 test('keeps the prologue accessible and the paused mission state intact at every viewport', async ({
@@ -136,12 +156,19 @@ test('keeps the prologue accessible and the paused mission state intact at every
   const missionSelect = pauseDialog.locator('[data-mission-select="true"]')
   await expect(missionSelect).toBeVisible()
   await expect(missionSelect).toBeEnabled()
-  await expect(missionSelect.locator('option')).toHaveCount(6)
+  await expect(missionSelect.locator('option')).toHaveCount(7)
   const pausedBeforeStory = await snapshot(page)
   expect(pausedBeforeStory).not.toBeNull()
 
   await expectControlInViewport(storyOpener, viewport)
   await storyOpener.click()
+  await expect
+    .poll(() =>
+      storyDialog
+        .locator('.story-prologue__story')
+        .evaluate((element) => element.scrollTop),
+    )
+    .toBe(0)
   await expectDialogFitsViewport(page, storyDialog, viewport)
   await page.waitForTimeout(250)
   await page.keyboard.press('Escape')

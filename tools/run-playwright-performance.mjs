@@ -21,6 +21,8 @@ const result = spawnSync(
     'tests/e2e/performance.spec.ts',
     '--project=desktop',
     '--workers=1',
+    '--trace=off',
+    '--reporter=list',
   ],
   {
     cwd: projectRoot,

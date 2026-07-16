@@ -1,6 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
 
-const REGIONS = ['festival-hub', 'wind-canyon', 'cloud-ruins'] as const
+const REGIONS = [
+  'festival-hub',
+  'wind-canyon',
+  'cloud-ruins',
+  'volcanic-archipelago',
+] as const
 const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'rc7'
 
 interface CanvasSample {
@@ -48,7 +53,7 @@ async function sampleCanvas(page: Page): Promise<CanvasSample | null> {
   })
 }
 
-test('opens exploration and streams all three regions inside every required viewport', async ({
+test('opens exploration and streams all four regions inside every required viewport', async ({
   page,
 }, testInfo) => {
   const errors: string[] = []
@@ -133,6 +138,102 @@ test('lands, takes off, and enters the existing race challenge', async ({ page }
     .toBe('countdown')
 })
 
+test('starts the four-stage volcanic challenge without overwriting the legacy race board', async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== 'desktop',
+    'single volcanic course contract',
+  )
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'skyknit-cup:settings',
+      JSON.stringify({
+        version: 11,
+        missionGrades: { 'golden-knot': 'bronze' },
+      }),
+    )
+  })
+  await page.goto('/?qaCourse=1')
+  await page.evaluate(() =>
+    window.__DRAGON_RACE_TEST__?.qaExploreVolcanicChallenge(),
+  )
+
+  const context = page.locator('[data-explore-context]')
+  await expect(context).toHaveText('태양의 심장 · 냉각 봉인 도전')
+  await context.click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.__DRAGON_RACE_TEST__?.snapshot()?.race.phase,
+      ),
+    )
+    .toBe('countdown')
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const race = window.__DRAGON_RACE_TEST__?.snapshot()?.race
+          return {
+            courseId: race?.courseId,
+            checkpointCount: race?.checkpointCount,
+            selectedMissionId: race?.mission.selectedMissionId,
+          }
+        }),
+      { timeout: 6_000 },
+    )
+    .toEqual({
+      courseId: 'volcanic-archipelago',
+      checkpointCount: 4,
+      selectedMissionId: 'heart-of-sun',
+    })
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => window.__DRAGON_RACE_TEST__?.snapshot()?.race.phase,
+        ),
+      { timeout: 6_000 },
+    )
+    .toBe('racing')
+
+  for (let checkpoint = 0; checkpoint < 4; checkpoint += 1) {
+    await page.evaluate(() => window.__DRAGON_RACE_TEST__?.qaPassCheckpoint())
+  }
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.__DRAGON_RACE_TEST__?.snapshot()?.race.phase,
+      ),
+    )
+    .toBe('finished')
+
+  const stored = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? '{}'),
+  )
+  expect(stored).toMatchObject({
+    version: 11,
+    bestTimeMs: null,
+    skyLeague: {
+      raceTop10Ms: [],
+      missionTop10: {
+        'heart-of-sun': [
+          { elapsedMs: expect.any(Number), grade: 'silver' },
+        ],
+      },
+    },
+    ghosts: {
+      race: null,
+      mission: {
+        'heart-of-sun': {
+          durationMs: expect.any(Number),
+          samples: expect.any(Array),
+        },
+      },
+    },
+  })
+})
+
 test('streams region art again after returning to missions and re-entering exploration', async ({
   page,
 }, testInfo) => {
@@ -181,6 +282,10 @@ test('streams region art again after an exploration race round trip', async ({
   test.skip(testInfo.project.name !== 'desktop', 'single lifecycle contract')
   await page.goto('/?qaCourse=1')
   await page.evaluate(() => window.__DRAGON_RACE_TEST__?.qaExploreChallenge())
+  await expect(page.locator('#app')).toHaveAttribute('data-game-mode', 'explore')
+  await expect(page.locator('[data-explore-context]')).toHaveText(
+    '레이스 도전',
+  )
   await page.keyboard.press('Enter')
   await expect(page.locator('#app')).toHaveAttribute('data-game-mode', 'race')
   await expect

@@ -165,7 +165,7 @@ for (const [legacyCharacterId, expectedCharacterId] of [
     )
     expect(stored).toEqual({
       ...legacySettings,
-      version: 10,
+      version: 11,
       characterLoadout: expectedLoadout,
     })
 
@@ -344,7 +344,7 @@ test('persists an applied guardian through reload, pause, and context recovery',
     JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? '{}'),
   )
   expect(stored).toMatchObject({
-    version: 10,
+    version: 11,
     bestTimeMs: 48_210,
     coinBestTimesMs: { 'festival-hub': 17_200 },
     missionGrades: { 'first-skyknot': 'gold' },

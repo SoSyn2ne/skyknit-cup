@@ -160,7 +160,7 @@ test('completes a mission, saves its grade, and advances to the unlocked next mi
     return raw === null ? null : (JSON.parse(raw) as unknown)
   })
   expect(stored).toMatchObject({
-    version: 10,
+    version: 11,
     missionGrades: { 'first-skyknot': 'gold' },
     skyLeague: {
       raceTop10Ms: [expect.any(Number)],
@@ -272,12 +272,15 @@ test('keeps mission change visible in the pause dialog at every required viewpor
   await expect(missionSelect).toBeInViewport()
   const selectBox = await missionSelect.boundingBox()
   expect(selectBox?.height ?? 0).toBeGreaterThanOrEqual(44)
-  await expect(missionSelect.locator('option')).toHaveCount(6)
+  await expect(missionSelect.locator('option')).toHaveCount(7)
   await expect(
     missionSelect.locator('option[value="first-skyknot"]'),
   ).toBeEnabled()
   await expect(
     missionSelect.locator('option[value="boost-mastery"]'),
+  ).toBeDisabled()
+  await expect(
+    missionSelect.locator('option[value="heart-of-sun"]'),
   ).toBeDisabled()
   await expect(
     pauseDialog.locator('[data-mission-unlock-status="true"]'),
