@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { findSweptSphereCollision } from '../collision/obstacleCollision'
 import {
   LAVA_WAVE_TELEGRAPH_MS,
   ROCKFALL_TELEGRAPH_MS,
@@ -134,5 +135,39 @@ describe('volcanic hazard swept collision contract', () => {
 
     expect(nextObstacle.eventKey).not.toBe(obstacle.eventKey)
     expect(next.hit?.eventKey).toBe(nextObstacle.eventKey)
+  })
+
+  it('matches the authored lava proxy ring for a swept radial crossing', () => {
+    const frame = sampleVolcanicHazards(LAVA_WAVE_TELEGRAPH_MS, 333)
+    const wave = frame.lavaWave
+    const query = {
+      previous: {
+        x: wave.center.x + wave.waveRadius - wave.collisionBandRadius - 20,
+        y: wave.center.y,
+        z: wave.center.z,
+      },
+      current: {
+        x: wave.center.x + wave.waveRadius + wave.collisionBandRadius + 20,
+        y: wave.center.y,
+        z: wave.center.z,
+      },
+      movingRadius: 1.2,
+      handledEventKeys: frame.rockfalls.map(({ eventKey }) => eventKey),
+    }
+    const explicit = findSweptSphereCollision(
+      query.previous,
+      query.current,
+      query.movingRadius,
+      getVolcanicHazardCollisionObstacles(frame).filter(
+        ({ kind }) => kind === 'lava-wave',
+      ),
+    )
+    const sampled = sampleVolcanicHazardCollision(frame, query)
+
+    expect(explicit).not.toBeNull()
+    expect(sampled.hit?.kind).toBe('lava-wave')
+    expect(sampled.hit?.obstacleId).toBe(explicit?.obstacleId)
+    expect(sampled.hit?.t).toBeCloseTo(explicit?.t ?? -1, 10)
+    expect(sampled.hit?.point).toEqual(explicit?.point)
   })
 })

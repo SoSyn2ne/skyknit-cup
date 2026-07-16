@@ -136,7 +136,7 @@ export const VOLCANIC_ARCHIPELAGO_LANDING_PADS: readonly ExplorationLandingPad[]
     VOLCANIC_ARCHIPELAGO_PRIMARY_LANDING_PAD,
     {
       id: 'volcanic-ruins-pad',
-      position: { x: -279, y: 38, z: -858 },
+      position: { x: -290, y: 38, z: -848 },
       radius: 8,
     },
     {
@@ -147,8 +147,8 @@ export const VOLCANIC_ARCHIPELAGO_LANDING_PADS: readonly ExplorationLandingPad[]
   ] as const
 
 export const VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON = {
-  position: { x: -240, y: 43, z: -762 },
-  radius: 14,
+  position: { x: -240, y: 34, z: -720 },
+  radius: 9,
 } as const
 
 export const VOLCANIC_ARCHIPELAGO_COLLIDERS: readonly SphereObstacle[] = [
@@ -168,14 +168,24 @@ export const VOLCANIC_ARCHIPELAGO_COLLIDERS: readonly SphereObstacle[] = [
     radius: 15,
   },
   {
+    id: 'volcanic-caldera-lower-bowl',
+    center: { x: -240, y: 19, z: -824 },
+    radius: 24,
+  },
+  {
     id: 'volcanic-caldera-west',
-    center: { x: -264, y: 31, z: -824 },
+    center: { x: -259, y: 36, z: -825 },
     radius: 15,
   },
   {
     id: 'volcanic-caldera-east',
-    center: { x: -216, y: 32, z: -824 },
-    radius: 14,
+    center: { x: -221, y: 36, z: -825 },
+    radius: 15,
+  },
+  {
+    id: 'volcanic-caldera-north',
+    center: { x: -240, y: 38, z: -844 },
+    radius: 18,
   },
   {
     id: 'volcanic-causeway-west-pillar',

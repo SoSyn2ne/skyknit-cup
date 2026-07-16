@@ -234,6 +234,11 @@ describe('generated game audio', () => {
     audio.playDiscovery()
     audio.playWindEntry()
     audio.setAmbientWind(0.6)
+    audio.setVolcanicIntensity(0.7)
+    audio.playRockWarning()
+    audio.playLavaWarning()
+    audio.playCoolingSeal()
+    audio.playEruptionEscape()
     audio.setBoosting(true)
     audio.playFinish()
 
@@ -258,6 +263,12 @@ describe('generated game audio', () => {
       windEntryCues: 0,
       ambientWindStrength: 0.6,
       windBedPlaying: false,
+      volcanicAmbienceIntensity: 0.7,
+      volcanicBedPlaying: false,
+      rockWarningCues: 0,
+      lavaWarningCues: 0,
+      coolingSealCues: 0,
+      eruptionEscapeCues: 0,
     })
   })
 
@@ -370,6 +381,79 @@ describe('generated game audio', () => {
     expect(context.bufferSources[0]?.stops).toBeGreaterThan(0)
     expect(context.bufferSources[0]?.stopTimes[0]).toBeCloseTo(10.18)
     expect(audio.debugSnapshot().windBedPlaying).toBe(false)
+  })
+
+  it('clamps one looped volcanic bed and recreates it across lifecycle boundaries', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+
+    audio.setVolcanicIntensity(-2)
+    expect(audio.debugSnapshot().volcanicAmbienceIntensity).toBe(0)
+    audio.setVolcanicIntensity(1.7)
+    audio.setVolcanicIntensity(Number.NaN)
+    expect(audio.debugSnapshot()).toMatchObject({
+      volcanicAmbienceIntensity: 1,
+      volcanicBedPlaying: false,
+    })
+
+    await audio.unlock()
+    expect(context.bufferSources).toHaveLength(1)
+    expect(context.bufferSources[0]?.loop).toBe(true)
+    expect(context.filters[0]?.type).toBe('lowpass')
+    expect(audio.debugSnapshot().volcanicBedPlaying).toBe(true)
+
+    audio.setPageVisible(false)
+    expect(audio.debugSnapshot().volcanicBedPlaying).toBe(false)
+    audio.setPageVisible(true)
+    expect(context.bufferSources).toHaveLength(2)
+    expect(audio.debugSnapshot().volcanicBedPlaying).toBe(true)
+
+    audio.setMuted(true)
+    expect(audio.debugSnapshot().volcanicBedPlaying).toBe(false)
+    audio.setMuted(false)
+    expect(context.bufferSources).toHaveLength(3)
+    expect(audio.debugSnapshot().volcanicBedPlaying).toBe(true)
+
+    audio.dispose()
+    audio.setVolcanicIntensity(0.5)
+    expect(context.bufferSources).toHaveLength(3)
+    expect(audio.debugSnapshot().volcanicBedPlaying).toBe(false)
+  })
+
+  it('plays dedicated volcanic warning, seal, and escape cues only while audible', async () => {
+    const context = new FakeAudioContext()
+    const audio = createGameAudio(
+      () => context as unknown as AudioContext,
+    )
+    await audio.unlock()
+
+    audio.playRockWarning()
+    audio.playLavaWarning()
+    audio.playCoolingSeal()
+    audio.playEruptionEscape()
+
+    expect(audio.debugSnapshot()).toMatchObject({
+      rockWarningCues: 1,
+      lavaWarningCues: 1,
+      coolingSealCues: 1,
+      eruptionEscapeCues: 1,
+    })
+    expect(context.oscillators.length).toBeGreaterThanOrEqual(8)
+    expect(context.bufferSources.length).toBeGreaterThanOrEqual(2)
+
+    audio.setMuted(true)
+    audio.playRockWarning()
+    audio.playLavaWarning()
+    audio.playCoolingSeal()
+    audio.playEruptionEscape()
+    expect(audio.debugSnapshot()).toMatchObject({
+      rockWarningCues: 1,
+      lavaWarningCues: 1,
+      coolingSealCues: 1,
+      eruptionEscapeCues: 1,
+    })
   })
 
   it('plays dedicated landmark and wind-entry cues after unlock', async () => {

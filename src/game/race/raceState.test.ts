@@ -780,11 +780,11 @@ describe('race state', () => {
     expect(volcanic.config).toMatchObject({
       courseId: 'volcanic-archipelago',
       checkpointCount: 4,
-      spawnPosition: { x: -240, y: 34, z: -700 },
+      spawnPosition: { x: -240, y: 34, z: -720 },
     })
     expect(volcanic.run).toMatchObject({
       nextCheckpointIndex: 0,
-      position: { x: -240, y: 34, z: -700 },
+      position: { x: -240, y: 34, z: -720 },
     })
     expect(skyknot.config).toMatchObject({
       courseId: 'skyknot',

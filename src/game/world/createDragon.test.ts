@@ -157,6 +157,22 @@ function collectMeshes(root: THREE.Object3D): THREE.Mesh[] {
   return meshes
 }
 
+function collectMeshResources(root: THREE.Object3D): {
+  readonly geometries: readonly THREE.BufferGeometry[]
+  readonly materials: readonly THREE.Material[]
+} {
+  const geometries = new Set<THREE.BufferGeometry>()
+  const materials = new Set<THREE.Material>()
+  for (const mesh of collectMeshes(root)) {
+    geometries.add(mesh.geometry)
+    const meshMaterials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material]
+    for (const material of meshMaterials) materials.add(material)
+  }
+  return { geometries: [...geometries], materials: [...materials] }
+}
+
 describe('Sky League ghost dragon appearance', () => {
   beforeEach(() => {
     loaderMock.loadAsync.mockReset()
@@ -192,6 +208,64 @@ describe('Sky League ghost dragon appearance', () => {
         )
       }),
     ).toBe(true)
+  })
+
+  it('disposes the fallback exactly once after a GLB loads successfully', async () => {
+    loaderMock.loadAsync.mockResolvedValue({ scene: createValidDragonAsset() })
+    const dragon = createDragon(PALETTE)
+    const fallback = dragon.movementRoot.getObjectByName('M3_DragonFallback')
+    expect(fallback).toBeDefined()
+    const resources = collectMeshResources(fallback as THREE.Object3D)
+    const geometryDisposals = resources.geometries.map((geometry) =>
+      vi.spyOn(geometry, 'dispose'),
+    )
+    const materialDisposals = resources.materials.map((material) =>
+      vi.spyOn(material, 'dispose'),
+    )
+
+    await expect(dragon.ready).resolves.toBe('glb')
+
+    expect(
+      dragon.movementRoot.getObjectByName('M3_DragonFallback'),
+    ).toBeUndefined()
+    for (const dispose of [...geometryDisposals, ...materialDisposals]) {
+      expect(dispose).toHaveBeenCalledOnce()
+    }
+
+    dragon.dispose()
+    dragon.dispose()
+    for (const dispose of [...geometryDisposals, ...materialDisposals]) {
+      expect(dispose).toHaveBeenCalledOnce()
+    }
+  })
+
+  it('retains the live fallback when the GLB load fails', async () => {
+    loaderMock.loadAsync.mockRejectedValue(new Error('fallback'))
+    const dragon = createDragon(PALETTE)
+    const fallback = dragon.movementRoot.getObjectByName('M3_DragonFallback')
+    expect(fallback).toBeDefined()
+    const resources = collectMeshResources(fallback as THREE.Object3D)
+    const geometryDisposals = resources.geometries.map((geometry) =>
+      vi.spyOn(geometry, 'dispose'),
+    )
+    const materialDisposals = resources.materials.map((material) =>
+      vi.spyOn(material, 'dispose'),
+    )
+
+    await expect(dragon.ready).resolves.toBe('fallback')
+
+    expect(dragon.movementRoot.getObjectByName('M3_DragonFallback')).toBe(
+      fallback,
+    )
+    for (const dispose of [...geometryDisposals, ...materialDisposals]) {
+      expect(dispose).not.toHaveBeenCalled()
+    }
+
+    dragon.dispose()
+    dragon.dispose()
+    for (const dispose of [...geometryDisposals, ...materialDisposals]) {
+      expect(dispose).toHaveBeenCalledOnce()
+    }
   })
 
   it('renders the fallback as a translucent teal and gold no-shadow ghost', async () => {
@@ -236,6 +310,61 @@ describe('Sky League ghost dragon appearance', () => {
       appearance: 'ghost',
       shadowsEnabled: false,
     })
+  })
+
+  it('keeps the lightweight sky echo on the procedural ghost without loading assets', async () => {
+    loaderMock.loadAsync.mockResolvedValue({ scene: createValidDragonAsset() })
+
+    const dragon = createDragon(PALETTE, {
+      appearance: 'ghost',
+      ghostDetail: 'echo',
+      loadout: PHOENIX_LOADOUT,
+    })
+
+    await expect(dragon.ready).resolves.toBe('fallback')
+    expect(loaderMock.loadAsync).not.toHaveBeenCalled()
+    expect(
+      dragon.movementRoot.getObjectByName(
+        'M33_SkyLeagueGhostDragonFallback',
+      ),
+    ).toBeDefined()
+    expect(dragon.debugSnapshot()).toMatchObject({
+      appearance: 'ghost',
+      ghostDetail: 'echo',
+      loadout: PHOENIX_LOADOUT,
+      source: 'fallback',
+      meshCount: 4,
+      shadowsEnabled: false,
+    })
+    const echoMaterials = collectMeshes(dragon.movementRoot).flatMap((mesh) =>
+      Array.isArray(mesh.material) ? mesh.material : [mesh.material],
+    )
+    expect(echoMaterials).not.toHaveLength(0)
+    expect(
+      echoMaterials.every(
+        (material) => material instanceof THREE.MeshBasicMaterial,
+      ),
+    ).toBe(true)
+    expect(
+      echoMaterials.some(
+        (material) =>
+          material instanceof THREE.MeshBasicMaterial && material.wireframe,
+      ),
+    ).toBe(true)
+    expect(echoMaterials.every((material) => !material.toneMapped)).toBe(true)
+    const echoWingMeshes = collectMeshes(dragon.movementRoot).filter((mesh) => {
+      const materials = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material]
+      return materials.some(
+        (material) =>
+          material instanceof THREE.MeshBasicMaterial &&
+          material.color.getHex() ===
+            new THREE.Color(PALETTE.wingGold).getHex(),
+      )
+    })
+    expect(echoWingMeshes).toHaveLength(2)
+    expect(echoWingMeshes[0]?.geometry).toBe(echoWingMeshes[1]?.geometry)
   })
 
   it('restyles loaded GLB materials and disposes the ghost exactly once', async () => {
@@ -583,5 +712,67 @@ describe('Milestone 38 guardian visual contract', () => {
       loadout: PHOENIX_LOADOUT,
       source: 'glb',
     })
+  })
+
+  it.each([
+    [DEFAULT_LOADOUT, 'body', '#ffb35c'],
+    [{ ...PHOENIX_LOADOUT, accessoryId: 'none' }, 'body', '#ff6a2e'],
+    [{ ...WHITE_TIGER_LOADOUT, accessoryId: 'none' }, 'membrane', '#63f3ef'],
+  ] as const)(
+    'applies a clamped visual-only volcanic reaction for %s',
+    async (loadout, expectedRole, expectedColor) => {
+      loaderMock.loadAsync.mockResolvedValue({
+        scene: createRoleCharacterAsset().scene,
+      })
+      const guardian = createDragon(PALETTE, { loadout })
+      const flight = createInitialFlightState({
+        position: { x: 7, y: 11, z: -3 },
+        headingRadians: 0.4,
+      })
+      const flightBefore = structuredClone(flight)
+
+      await expect(guardian.ready).resolves.toBe('glb')
+      guardian.setVolcanicReaction(2)
+      guardian.update(flight, GUARDIAN_TEST_POSE)
+
+      expect(guardian.debugSnapshot()).toMatchObject({
+        volcanicReactionIntensity: 1,
+        volcanicReactionRole: expectedRole,
+      })
+      expect(flight).toEqual(flightBefore)
+      const reactionMaterial = collectMeshes(guardian.movementRoot)
+        .flatMap((mesh) =>
+          Array.isArray(mesh.material) ? mesh.material : [mesh.material],
+        )
+        .find(
+          (material) =>
+            material instanceof THREE.MeshStandardMaterial &&
+            material.userData.volcanicReactionRole === expectedRole,
+        ) as THREE.MeshStandardMaterial | undefined
+      expect(reactionMaterial).toBeDefined()
+      expect(reactionMaterial?.emissive.getHex()).toBe(
+        new THREE.Color(expectedColor).getHex(),
+      )
+      expect(reactionMaterial?.emissiveIntensity ?? 0).toBeGreaterThan(0)
+
+      guardian.setVolcanicReaction(Number.NaN)
+      expect(guardian.debugSnapshot().volcanicReactionIntensity).toBe(1)
+      guardian.setVolcanicReaction(-4)
+      guardian.update(flight, GUARDIAN_TEST_POSE)
+      expect(guardian.debugSnapshot().volcanicReactionIntensity).toBe(0)
+      expect(flight).toEqual(flightBefore)
+    },
+  )
+
+  it('ignores volcanic reaction changes after disposal', async () => {
+    loaderMock.loadAsync.mockRejectedValue(new Error('fallback'))
+    const guardian = createDragon(PALETTE, { loadout: DEFAULT_LOADOUT })
+    await guardian.ready
+
+    guardian.setVolcanicReaction(0.6)
+    expect(guardian.debugSnapshot().volcanicReactionIntensity).toBe(0.6)
+    guardian.dispose()
+    guardian.setVolcanicReaction(1)
+    expect(guardian.debugSnapshot().volcanicReactionIntensity).toBe(0.6)
   })
 })

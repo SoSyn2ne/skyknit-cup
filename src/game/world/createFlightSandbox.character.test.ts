@@ -73,6 +73,7 @@ function createMockDragon(
     ready,
     update: vi.fn(),
     setShadows: vi.fn(),
+    setVolcanicReaction: vi.fn(),
     debugSnapshot: vi.fn(),
     dispose: vi.fn(() => movementRoot.removeFromParent()),
   }

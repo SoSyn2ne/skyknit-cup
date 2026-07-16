@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 
+import { QA_MODE } from '../../qaMode'
+
 import type { GhostPose } from '../competition/ghostRun'
 import {
   DEFAULT_CHARACTER_LOADOUT,
@@ -46,6 +48,7 @@ export interface FlightSandboxDebugSnapshot {
   readonly windThreadOuterRadius: number
   readonly windThreadCoreRadius: number
   readonly activeGateIndex: number
+  readonly checkpointCount: number
   readonly gateProjectedDiameterCss: number
   readonly gatePassWaveActive: boolean
   readonly gatePulseScale: number
@@ -100,6 +103,8 @@ export interface FlightSandbox {
   setCharacterLoadout: (
     loadout: CharacterLoadout,
   ) => Promise<'fallback' | 'glb'>
+  setCourse: (course: readonly CourseCheckpoint[]) => void
+  setVolcanicReaction: (intensity: number) => void
   setQuality: (quality: RenderQualityBudget) => void
   dispose: () => void
   debugSnapshot?: (flight: FlightState) => FlightSandboxDebugSnapshot
@@ -259,16 +264,33 @@ function createGate(
   palette: FlightSandboxPalette,
 ): GateVisual {
   const group = new THREE.Group()
-  group.name = `M2_CourseGate_${String(index + 1).padStart(2, '0')}`
+  const gatePrefix =
+    checkpoint.kind === 'cooling-seal'
+      ? 'CoolingSeal'
+      : checkpoint.kind === 'escape'
+        ? 'EscapeGate'
+        : 'CourseGate'
+  group.name = `M2_${gatePrefix}_${String(index + 1).padStart(2, '0')}`
+  group.userData.checkpointKind = checkpoint.kind
+  const ringColor =
+    checkpoint.kind === 'cooling-seal'
+      ? palette.gateRune
+      : checkpoint.kind === 'escape'
+        ? '#ff7b32'
+        : palette.wingGold
+  const runeColor =
+    checkpoint.kind === 'escape' ? palette.wingGold : palette.gateRune
 
   const ringMaterial = new THREE.MeshStandardMaterial({
-    color: palette.wingGold,
+    color: ringColor,
+    emissive: ringColor,
+    emissiveIntensity: checkpoint.kind === 'gate' ? 0 : 0.18,
     roughness: 0.34,
     metalness: 0.18,
   })
   const runeMaterial = new THREE.MeshStandardMaterial({
-    color: palette.gateRune,
-    emissive: palette.gateRune,
+    color: runeColor,
+    emissive: runeColor,
     emissiveIntensity: 0.3,
     roughness: 0.55,
     transparent: true,
@@ -278,7 +300,7 @@ function createGate(
     ringMaterial,
   )
   const haloMaterial = new THREE.MeshBasicMaterial({
-    color: palette.wingGold,
+    color: ringColor,
     transparent: true,
     opacity: 0.12,
     depthWrite: false,
@@ -553,10 +575,12 @@ export function createFlightSandbox(
   let ghostVisible = false
   let lastGhostElapsedMs = -1
   let characterAnimationSeconds = 0
+  let volcanicReactionIntensity = 0
   let lastDragonFlight: FlightState | null = null
   let quality = initialQuality
   const world = createWorld(scene, camera, palette, quality)
-  const gates = course.map((checkpoint, index) =>
+  let activeCourse = course
+  let gates = activeCourse.map((checkpoint, index) =>
     createGate(checkpoint, index, palette),
   )
   const windThreads = [
@@ -663,7 +687,7 @@ export function createFlightSandbox(
     '(prefers-reduced-motion: reduce)',
   )
   const forceReducedMotion =
-    import.meta.env.DEV &&
+    QA_MODE &&
     new URLSearchParams(window.location.search).get('qaReducedMotion') ===
       '1'
   const reducedMotion = (): boolean =>
@@ -671,6 +695,56 @@ export function createFlightSandbox(
 
   camera.up.copy(WORLD_UP)
   camera.fov = CAMERA_DEFAULT_FOV
+
+  const disposeGate = (gate: GateVisual): void => {
+    scene.remove(gate.group)
+    const geometries = new Set<THREE.BufferGeometry>()
+    const materials = new Set<THREE.Material>()
+    gate.group.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return
+      if (!geometries.has(object.geometry)) {
+        object.geometry.dispose()
+        geometries.add(object.geometry)
+      }
+      const objectMaterials = Array.isArray(object.material)
+        ? object.material
+        : [object.material]
+      for (const material of objectMaterials) {
+        if (materials.has(material)) continue
+        material.dispose()
+        materials.add(material)
+      }
+    })
+  }
+
+  const setCourse = (nextCourse: readonly CourseCheckpoint[]): void => {
+    if (disposed) return
+    const unchanged =
+      nextCourse.length === activeCourse.length &&
+      nextCourse.every(
+        (checkpoint, index) => checkpoint.id === activeCourse[index]?.id,
+      )
+    if (unchanged) return
+
+    for (const gate of gates) disposeGate(gate)
+    activeCourse = nextCourse
+    gates = activeCourse.map((checkpoint, index) =>
+      createGate(checkpoint, index, palette),
+    )
+    for (const gate of gates) scene.add(gate.group)
+    const previousGeometry = passWave.geometry
+    passWave.geometry = new THREE.TorusGeometry(
+      activeCourse[0]?.radius ?? 22,
+      0.42,
+      8,
+      64,
+    )
+    previousGeometry.dispose()
+    passWave.visible = false
+    passWaveAgeSeconds = GATE_PASS_WAVE_SECONDS
+    currentActiveGateIndex = 0
+    lastGateProjectedDiameterCss = 0
+  }
 
   const updateGates = (
     activeGateIndex: number,
@@ -918,12 +992,17 @@ export function createFlightSandbox(
         activeCharacterLoadout.accessoryId ===
           DEFAULT_CHARACTER_LOADOUT.accessoryId
       ghostDragon = usesDefaultCharacter
-        ? createDragonVisual(palette, { appearance: 'ghost' })
+        ? createDragonVisual(palette, {
+            appearance: 'ghost',
+            ghostDetail: 'echo',
+          })
         : createDragonVisual(palette, {
             appearance: 'ghost',
+            ghostDetail: 'echo',
             loadout: activeCharacterLoadout,
           })
       ghostDragon.setShadows(false)
+      ghostDragon.setVolcanicReaction(volcanicReactionIntensity)
       ghostDragon.movementRoot.visible = false
       scene.add(ghostDragon.movementRoot)
     }
@@ -1078,6 +1157,7 @@ export function createFlightSandbox(
       loadout: normalizedLoadout,
     })
     candidate.setShadows(quality.shadows)
+    candidate.setVolcanicReaction(volcanicReactionIntensity)
 
     let candidateSource: 'fallback' | 'glb'
     try {
@@ -1184,7 +1264,7 @@ export function createFlightSandbox(
         return { point: null, diameterCss: 0 }
       }
 
-      const checkpoint = course[currentActiveGateIndex]
+      const checkpoint = activeCourse[currentActiveGateIndex]
       const center = projectedPoint(activeGate.group.position, camera)
 
       if (checkpoint === undefined) {
@@ -1218,6 +1298,14 @@ export function createFlightSandbox(
       lookVelocity.set(0, 0, 0)
     },
     setCharacterLoadout,
+    setCourse,
+    setVolcanicReaction: (intensity) => {
+      volcanicReactionIntensity = Number.isFinite(intensity)
+        ? Math.min(1, Math.max(0, intensity))
+        : 0
+      dragon.setVolcanicReaction(volcanicReactionIntensity)
+      ghostDragon?.setVolcanicReaction(volcanicReactionIntensity)
+    },
     setQuality: (nextQuality) => {
       quality = nextQuality
       world.setQuality(nextQuality)
@@ -1248,8 +1336,9 @@ export function createFlightSandbox(
         thread.outer.material.dispose()
         thread.core.material.dispose()
       }
+      for (const gate of gates) disposeGate(gate)
     },
-    ...(import.meta.env.DEV
+    ...(QA_MODE
       ? {
           debugSnapshot: (
             flight: FlightState,
@@ -1284,6 +1373,7 @@ export function createFlightSandbox(
               windThreadOuterRadius: WIND_THREAD_VISUAL_SPEC.outerRadius,
               windThreadCoreRadius: WIND_THREAD_VISUAL_SPEC.coreRadius,
               activeGateIndex: currentActiveGateIndex,
+              checkpointCount: activeCourse.length,
               gateProjectedDiameterCss: lastGateProjectedDiameterCss,
               gatePassWaveActive: passWave.visible,
               gatePulseScale: activeGate?.group.scale.x ?? 1,

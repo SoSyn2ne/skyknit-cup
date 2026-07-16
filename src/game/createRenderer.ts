@@ -1,5 +1,12 @@
 import * as THREE from 'three'
 
+import { QA_MODE } from '../qaMode'
+
+import {
+  GeometryResourceLedger,
+  type GeometryResourceLedgerSnapshot,
+} from './qa/geometryResourceLedger'
+
 import {
   createGameAudio,
   type GameAudio,
@@ -30,8 +37,10 @@ import {
   applyObstacleCollision,
   createCollisionState,
   findSweptSphereCollision,
+  resolveEscapeAwareObstacleMovement,
   stepCollisionState,
   type CollisionState,
+  type ObstacleCollisionHit,
 } from './collision/obstacleCollision'
 import {
   FIXED_STEP_SECONDS,
@@ -41,6 +50,7 @@ import {
 import {
   createInitialFlightState,
   FLIGHT_TUNING,
+  applyExternalVelocity,
   getForwardVector,
   stepFlight,
   type FlightInput,
@@ -63,6 +73,7 @@ import {
 } from './input/KeyboardInput'
 import { InputController, type InputDevice } from './input/InputController'
 import { TouchInput } from './input/TouchInput'
+import type { MissionId } from './missions/missionRules'
 import {
   DEFAULT_SETTINGS,
   readSettings,
@@ -96,7 +107,11 @@ import {
   stepRespawnImmunity,
   type OutOfBoundsTracker,
 } from './race/raceRuntime'
-import { createRaceHud, type RaceHud } from './ui/RaceHud'
+import {
+  createRaceHud,
+  type RaceHazardWarning,
+  type RaceHud,
+} from './ui/RaceHud'
 import {
   createCharacterWorkshop,
   type CharacterWorkshop,
@@ -126,7 +141,7 @@ import {
 } from './ui/gateIndicator'
 import {
   SKYKNOT_COURSE,
-  START_ANCHOR,
+  getCourseDefinition,
   getCourseSegment,
   getRespawnAnchor,
 } from './world/course'
@@ -152,6 +167,11 @@ import {
   type OpenWorldActivitiesVisual,
 } from './world/createOpenWorldActivities'
 import {
+  createVolcanicActivities,
+  type VolcanicActivitiesSnapshot,
+  type VolcanicActivitiesVisual,
+} from './world/createVolcanicActivities'
+import {
   OPEN_WORLD_REGIONS,
   getCurrentRegion,
   getDestinationGuidance,
@@ -167,12 +187,34 @@ import {
   FESTIVAL_HUB_WIND_ZONES,
   FESTIVAL_WIND_MAX_SPEED,
   getFestivalJourney,
+  isFestivalHubLandmarkId,
+  isFestivalHubWindZoneId,
   sampleFestivalWind,
   stepFestivalDiscovery,
   type FestivalHubLandmarkId,
   type FestivalHubWindZoneId,
   type FestivalJourney,
 } from './world/festivalHubActivities'
+import {
+  VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON,
+  VOLCANIC_ARCHIPELAGO_COLLIDERS,
+  VOLCANIC_ARCHIPELAGO_LANDING_PADS,
+  VOLCANIC_ARCHIPELAGO_LANDMARKS,
+  VOLCANIC_ARCHIPELAGO_THERMAL_ZONES,
+  VOLCANIC_THERMAL_MAX_SPEED,
+  isVolcanicArchipelagoLandmarkId,
+  isVolcanicThermalZoneId,
+  sampleVolcanicThermalWind,
+  stepVolcanicDiscovery,
+} from './world/volcanicArchipelagoActivities'
+import {
+  sampleVolcanicHazardCollision,
+  sampleVolcanicHazards,
+  type VolcanicHazardCollisionQuery,
+  type VolcanicHazardCollisionSample,
+  type VolcanicHazardFrame,
+  type VolcanicHazardVisualOptions,
+} from './world/volcanicHazards'
 
 export interface FlightDebugSnapshot {
   readonly gameMode: 'race' | 'explore'
@@ -196,6 +238,7 @@ export interface FlightDebugSnapshot {
   readonly inputClears: Omit<KeyboardStateSnapshot, 'input'>
   readonly race: {
     readonly phase: RaceState['phase']
+    readonly courseId: NonNullable<RaceState['config']['courseId']>
     readonly countdownRemainingMs: number
     readonly elapsedMs: number
     readonly nextCheckpointIndex: number
@@ -215,6 +258,12 @@ export interface FlightDebugSnapshot {
     readonly missionGrades: RaceState['persistent']['missionGrades']
     readonly outOfBoundsSeconds: number
     readonly respawnImmunitySeconds: number
+    readonly volcanicHazard: {
+      readonly frame: VolcanicHazardFrame | null
+      readonly handledEventKeys: readonly string[]
+      readonly announcedEventKeys: readonly string[]
+      readonly explorationClock: ExplorationVolcanicHazardClock
+    }
   }
   readonly collision: CollisionState & {
     readonly lastObstacleId: string | null
@@ -246,6 +295,7 @@ export interface FlightDebugSnapshot {
     readonly regionAssets: readonly OpenWorldRegionAssetSnapshot[]
     readonly regionMeshCount: number
     readonly windVisual: OpenWorldActivitiesSnapshot
+    readonly volcanicVisual: VolcanicActivitiesSnapshot
     readonly paused: boolean
     readonly mapOpen: boolean
     readonly coinRun: CoinRunState
@@ -275,6 +325,7 @@ export interface RendererSession {
   qaPassCheckpoint?: () => void
   qaExploreRegion?: (regionId: OpenWorldRegionId) => void
   qaExploreChallenge?: () => void
+  qaExploreVolcanicChallenge?: () => void
   qaExploreLandmark?: (landmarkId: FestivalHubLandmarkId) => void
   qaExploreLandmarkView?: (landmarkId: FestivalHubLandmarkId) => void
   qaExploreOverview?: () => void
@@ -282,6 +333,7 @@ export interface RendererSession {
   qaExploreWindZone?: (windZoneId: FestivalHubWindZoneId) => void
   qaExploreCollision?: () => void
   qaCollectCoin?: (regionId: OpenWorldRegionId, index: number) => void
+  qaGeometryLedger?: () => GeometryResourceLedgerSnapshot | null
   debugSnapshot?: () => FlightDebugSnapshot
   dispose: () => void
 }
@@ -304,6 +356,9 @@ export interface RendererRecoveryState {
   readonly coinGhostMatch: GhostProgressHint | null
   readonly raceLiveDeltaMs: number | null
   readonly coinLiveDeltaMs: number | null
+  readonly explorationVolcanicHazardClock: ExplorationVolcanicHazardClock
+  readonly volcanicHandledEventKeys: readonly string[]
+  readonly volcanicAnnouncedEventKeys: readonly string[]
   readonly musicActive: boolean
   readonly musicPlaybackPositionSeconds: number
 }
@@ -375,13 +430,132 @@ function isCoinCollectionActive(
   return simulationActive && movement === 'airborne'
 }
 
+const VOLCANIC_HAZARD_SEED = 0x39_05_17
+const ZERO_ENVIRONMENT_VELOCITY = Object.freeze({ x: 0, y: 0, z: 0 })
+
+export interface ExplorationVolcanicHazardClock {
+  readonly elapsedSeconds: number
+  readonly active: boolean
+}
+
+export interface ExplorationVolcanicHazardClockStep {
+  readonly clock: ExplorationVolcanicHazardClock
+  readonly resetEvents: boolean
+}
+
+export function isExplorationVolcanicHazardRegionActive(
+  currentRegionId: OpenWorldRegionId | null,
+  loadedRegionIds: readonly OpenWorldRegionId[],
+): boolean {
+  return (
+    currentRegionId === 'volcanic-archipelago' &&
+    loadedRegionIds.includes('volcanic-archipelago')
+  )
+}
+
+export function stepExplorationVolcanicHazardClock(
+  clock: ExplorationVolcanicHazardClock,
+  options: {
+    readonly insideRegion: boolean
+    readonly simulationActive: boolean
+    readonly fixedStepSeconds: number
+  },
+): ExplorationVolcanicHazardClockStep {
+  if (!options.insideRegion) {
+    if (!clock.active && clock.elapsedSeconds === 0) {
+      return { clock, resetEvents: false }
+    }
+    return {
+      clock: { elapsedSeconds: 0, active: false },
+      resetEvents: true,
+    }
+  }
+
+  const entered = !clock.active
+  const elapsedSeconds = entered ? 0 : clock.elapsedSeconds
+  if (!options.simulationActive) {
+    return {
+      clock: { elapsedSeconds, active: true },
+      resetEvents: entered,
+    }
+  }
+
+  return {
+    clock: {
+      elapsedSeconds: elapsedSeconds + options.fixedStepSeconds,
+      active: true,
+    },
+    resetEvents: entered,
+  }
+}
+
+export interface ExplorationVolcanicHazardStep {
+  readonly frame: VolcanicHazardFrame
+  readonly collision: VolcanicHazardCollisionSample
+}
+
+export function sampleExplorationVolcanicHazardStep(
+  currentSimulationSeconds: number,
+  fixedStepSeconds: number,
+  seed: number,
+  visualOptions: VolcanicHazardVisualOptions,
+  collisionQuery: VolcanicHazardCollisionQuery,
+): ExplorationVolcanicHazardStep {
+  const frame = sampleVolcanicHazards(
+    (currentSimulationSeconds + fixedStepSeconds) * 1_000,
+    seed,
+    visualOptions,
+  )
+  return {
+    frame,
+    collision: sampleVolcanicHazardCollision(frame, collisionQuery),
+  }
+}
+
+function selectVolcanicHazardWarning(
+  frame: VolcanicHazardFrame,
+): RaceHazardWarning | null {
+  const warnings: RaceHazardWarning[] = []
+  for (const rockfall of frame.rockfalls) {
+    if (rockfall.phase === 'cooldown') continue
+    warnings.push({
+      kind: 'rockfall',
+      phase: rockfall.phase,
+      eventKey: rockfall.eventKey,
+      remainingMs: Math.max(
+        0,
+        rockfall.phaseDurationMs - rockfall.phaseElapsedMs,
+      ),
+    })
+  }
+  if (frame.lavaWave.phase !== 'cooldown') {
+    warnings.push({
+      kind: 'lava-wave',
+      phase: frame.lavaWave.phase,
+      eventKey: frame.lavaWave.eventKey,
+      remainingMs: Math.max(
+        0,
+        frame.lavaWave.phaseDurationMs - frame.lavaWave.phaseElapsedMs,
+      ),
+    })
+  }
+  return (
+    warnings.sort((left, right) => {
+      if (left.phase !== right.phase) {
+        return left.phase === 'active' ? -1 : 1
+      }
+      return left.remainingMs - right.remainingMs
+    })[0] ?? null
+  )
+}
+
 export function createRenderer(
   host: HTMLElement,
   onContextLost: (recovery: RendererRecoveryState) => void,
   recovery?: RendererRecoveryState,
 ): RendererSession {
   if (
-    import.meta.env.DEV &&
+    QA_MODE &&
     new URLSearchParams(window.location.search).get('forceWebglFailure') ===
       '1'
   ) {
@@ -407,6 +581,7 @@ export function createRenderer(
   let pendingBoostGauge: BoostGauge | null = null
   let pendingOpenWorld: OpenWorldVisual | null = null
   let pendingOpenWorldActivities: OpenWorldActivitiesVisual | null = null
+  let pendingVolcanicActivities: VolcanicActivitiesVisual | null = null
   let pendingCoinCourseVisual: CoinCourseVisual | null = null
   let pendingGameAudio: GameAudio | null = null
   let pendingVisibilityChangeHandler: (() => void) | null = null
@@ -430,6 +605,11 @@ export function createRenderer(
     pendingScene = scene
     scene.background = new THREE.Color(palette.skyZenith)
     scene.fog = new THREE.Fog(palette.skyZenith, 120, 680)
+    const geometryLedger =
+      QA_MODE &&
+      new URLSearchParams(window.location.search).get('qaGeometryLedger') === '1'
+        ? new GeometryResourceLedger()
+        : null
 
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1_800)
     const projectedCoin = new THREE.Vector3()
@@ -478,7 +658,7 @@ export function createRenderer(
       '(prefers-reduced-motion: reduce)',
     )
     const forceReducedMotion =
-      import.meta.env.DEV &&
+      QA_MODE &&
       new URLSearchParams(window.location.search).get('qaReducedMotion') === '1'
     const navigatorCapabilities = window.navigator as Navigator & {
       readonly deviceMemory?: number
@@ -511,14 +691,25 @@ export function createRenderer(
       () => reducedMotionQuery.matches || forceReducedMotion,
     )
     pendingOpenWorldActivities = openWorldActivities
+    const volcanicActivities = createVolcanicActivities(
+      scene,
+      renderQuality.tier,
+      () => reducedMotionQuery.matches || forceReducedMotion,
+    )
+    pendingVolcanicActivities = volcanicActivities
     const coinCourseVisual = createCoinCourseVisual(scene)
     pendingCoinCourseVisual = coinCourseVisual
+    // Timed hazards reveal shader variants after their telegraph phase. Compile
+    // every synchronous scene material up front so the first lava crest or
+    // falling rock cannot stall an otherwise steady race bucket.
+    renderer.compile(scene, camera)
     let raceState =
       recovery?.raceState ??
       createInitialRaceState({
+        courseId: 'skyknot',
         checkpointCount: SKYKNOT_COURSE.length,
         boostCapacity: FLIGHT_TUNING.boostCapacity,
-        spawnPosition: START_ANCHOR.position,
+        spawnPosition: getCourseDefinition('skyknot').startAnchor.position,
         persistent: storedSettings,
       })
     if (recovery === undefined) {
@@ -529,10 +720,14 @@ export function createRenderer(
     }
     let previousBestTimeMs =
       recovery?.previousBestTimeMs ?? raceState.persistent.bestTimeMs
+    const getActiveRaceCourse = () =>
+      getCourseDefinition(raceState.config.courseId ?? 'skyknot')
+    const initialRaceCourse = getActiveRaceCourse()
+    sandbox.setCourse(initialRaceCourse.checkpoints)
     let flightState = createInitialFlightState(
       recovery?.flightState ?? {
-        position: START_ANCHOR.position,
-        headingRadians: START_ANCHOR.headingRadians,
+        position: initialRaceCourse.startAnchor.position,
+        headingRadians: initialRaceCourse.startAnchor.headingRadians,
       },
     )
     let gameMode: 'race' | 'explore' = recovery?.gameMode ?? 'race'
@@ -541,6 +736,11 @@ export function createRenderer(
         ({ id }) => id !== 'festival-hub',
       ).map((region) => region.landingPad),
       ...FESTIVAL_HUB_LANDING_PADS,
+      ...VOLCANIC_ARCHIPELAGO_LANDING_PADS.slice(1),
+    ]
+    const explorationColliders = [
+      ...FESTIVAL_HUB_COLLIDERS,
+      ...VOLCANIC_ARCHIPELAGO_COLLIDERS,
     ]
     const savedExploration = raceState.persistent.exploration
     const savedLandingPadId =
@@ -615,7 +815,10 @@ export function createRenderer(
     const selectRaceGhost = (): GhostRun | null =>
       raceState.persistent.ghosts.mission[
         raceState.mission.selectedMissionId
-      ] ?? raceState.persistent.ghosts.race
+      ] ??
+      (getActiveRaceCourse().id === 'skyknot'
+        ? raceState.persistent.ghosts.race
+        : null)
     let raceGhostComparison =
       raceGhostRecorder === null ? null : selectRaceGhost()
     let coinGhostComparison =
@@ -642,10 +845,47 @@ export function createRenderer(
     let activeWindStrength = 0
     let discoveryNotice: string | null = null
     let discoveryNoticeRemainingSeconds = 0
+    const recoveredInsideVolcanicRegion =
+      recovery !== undefined &&
+      gameMode === 'explore' &&
+      getCurrentRegion(explorationState.flight.position)?.id ===
+        'volcanic-archipelago'
+    let explorationVolcanicHazardClock: ExplorationVolcanicHazardClock =
+      recoveredInsideVolcanicRegion
+        ? { ...recovery.explorationVolcanicHazardClock }
+        : { elapsedSeconds: 0, active: false }
+    const preserveRecoveredVolcanicEvents =
+      gameMode === 'race' || explorationVolcanicHazardClock.active
+    let volcanicHandledEventKeys = preserveRecoveredVolcanicEvents
+      ? [...(recovery?.volcanicHandledEventKeys ?? [])]
+      : []
+    let volcanicAnnouncedEventKeys = preserveRecoveredVolcanicEvents
+      ? [...(recovery?.volcanicAnnouncedEventKeys ?? [])]
+      : []
+    let latestVolcanicHazardFrame: VolcanicHazardFrame | null = null
+    const dormantVolcanicHazardFrame = sampleVolcanicHazards(
+      0,
+      VOLCANIC_HAZARD_SEED,
+      { quality: renderQuality.tier, reducedMotion: true },
+    )
     let qaBoostRemainingSeconds = 0
     let qaCollisionFeedbackRemainingSeconds = 0
     let visualSimulationSeconds = recovery?.visualSimulationSeconds ?? 0
     let explorationSaveRemainingSeconds = 2
+
+    const resetVolcanicHazardState = (): void => {
+      volcanicHandledEventKeys = []
+      volcanicAnnouncedEventKeys = []
+      latestVolcanicHazardFrame = null
+    }
+
+    const resetExplorationVolcanicHazardState = (): void => {
+      explorationVolcanicHazardClock = {
+        elapsedSeconds: 0,
+        active: false,
+      }
+      resetVolcanicHazardState()
+    }
 
     const resetExplorationEnvironment = (): void => {
       explorationCollisionState = createCollisionState()
@@ -654,14 +894,30 @@ export function createRenderer(
       activeWindStrength = 0
       discoveryNotice = null
       discoveryNoticeRemainingSeconds = 0
+      resetExplorationVolcanicHazardState()
       gameAudio.setAmbientWind(0)
     }
 
+    const syncRaceCourse = () => {
+      const course = getActiveRaceCourse()
+      sandbox.setCourse(course.checkpoints)
+      if (gameMode === 'race') {
+        if (course.id === 'volcanic-archipelago') {
+          openWorld.update(flightState.position, visualSimulationSeconds)
+        } else {
+          openWorld.clear()
+        }
+      }
+      return course
+    }
+
     const resetFlight = (): void => {
+      const course = syncRaceCourse()
       flightState = createInitialFlightState({
-        position: START_ANCHOR.position,
-        headingRadians: START_ANCHOR.headingRadians,
+        position: course.startAnchor.position,
+        headingRadians: course.startAnchor.headingRadians,
       })
+      resetVolcanicHazardState()
       outOfBoundsTracker = { outsideDurationSeconds: 0 }
       respawnImmunitySeconds = 0
       collisionState = createCollisionState()
@@ -675,6 +931,8 @@ export function createRenderer(
       )
       clearInputs()
     }
+
+    syncRaceCourse()
 
     const clearRaceGhostAttempt = (): void => {
       raceGhostRecorder = null
@@ -859,7 +1117,10 @@ export function createRenderer(
       }
       const result = beginRespawn(
         flightState,
-        getRespawnAnchor(raceState.run.nextCheckpointIndex),
+        getRespawnAnchor(
+          getActiveRaceCourse(),
+          raceState.run.nextCheckpointIndex,
+        ),
       )
       flightState = result.flight
       outOfBoundsTracker = {
@@ -879,6 +1140,7 @@ export function createRenderer(
     }
 
     const passCheckpoint = (checkpointIndex: number): void => {
+      const checkpoint = getActiveRaceCourse().checkpoints[checkpointIndex]
       const persistentBeforePass = raceState.persistent
       const checkpointBeforePass = raceState.run.nextCheckpointIndex
       const phaseBeforePass = raceState.phase
@@ -886,7 +1148,13 @@ export function createRenderer(
 
       if (raceState.run.nextCheckpointIndex > checkpointBeforePass) {
         sandbox.triggerGatePass(checkpointIndex)
-        gameAudio.playGate()
+        if (checkpoint?.kind === 'cooling-seal') {
+          gameAudio.playCoolingSeal()
+        } else if (checkpoint?.kind === 'escape') {
+          gameAudio.playEruptionEscape()
+        } else {
+          gameAudio.playGate()
+        }
       }
 
       if (phaseBeforePass !== 'finished' && raceState.phase === 'finished') {
@@ -919,6 +1187,125 @@ export function createRenderer(
       raceState = recordRaceCollision(raceState)
       lastObstacleId = obstacleId
       return true
+    }
+
+    const syncVolcanicHazardCues = (
+      frame: VolcanicHazardFrame,
+    ): void => {
+      const currentEventKeys = new Set([
+        ...frame.rockfalls.map(({ eventKey }) => eventKey),
+        frame.lavaWave.eventKey,
+      ])
+      volcanicHandledEventKeys = volcanicHandledEventKeys.filter((eventKey) =>
+        currentEventKeys.has(eventKey),
+      )
+      volcanicAnnouncedEventKeys = volcanicAnnouncedEventKeys.filter(
+        (eventKey) => currentEventKeys.has(eventKey),
+      )
+
+      for (const rockfall of frame.rockfalls) {
+        if (
+          rockfall.phase === 'telegraph' &&
+          !volcanicAnnouncedEventKeys.includes(rockfall.eventKey)
+        ) {
+          volcanicAnnouncedEventKeys.push(rockfall.eventKey)
+          gameAudio.playRockWarning()
+        }
+      }
+      if (
+        frame.lavaWave.phase === 'telegraph' &&
+        !volcanicAnnouncedEventKeys.includes(frame.lavaWave.eventKey)
+      ) {
+        volcanicAnnouncedEventKeys.push(frame.lavaWave.eventKey)
+        gameAudio.playLavaWarning()
+      }
+    }
+
+    const stepVolcanicRaceHazards = (
+      previousPosition: FlightState['position'],
+      currentPosition: FlightState['position'],
+    ): void => {
+      if (getActiveRaceCourse().id !== 'volcanic-archipelago') {
+        resetVolcanicHazardState()
+        return
+      }
+
+      const frame = sampleVolcanicHazards(
+        raceState.run.elapsedMs,
+        VOLCANIC_HAZARD_SEED,
+        {
+          quality: renderQuality.tier,
+          reducedMotion: reducedMotionQuery.matches || forceReducedMotion,
+        },
+      )
+      latestVolcanicHazardFrame = frame
+      syncVolcanicHazardCues(frame)
+
+      const collision = sampleVolcanicHazardCollision(frame, {
+        previous: previousPosition,
+        current: currentPosition,
+        movingRadius: 1.2,
+        handledEventKeys: volcanicHandledEventKeys,
+      })
+      volcanicHandledEventKeys = [...collision.handledEventKeys]
+      if (collision.hit !== null) {
+        triggerCollision(
+          `volcanic-${collision.hit.obstacleId}`,
+          respawnImmunitySeconds,
+        )
+      }
+    }
+
+    const stepVolcanicExplorationHazards = (
+      previousPosition: FlightState['position'],
+      currentPosition: FlightState['position'],
+      simulationActive: boolean,
+    ): void => {
+      const insideRegion = isExplorationVolcanicHazardRegionActive(
+        getCurrentRegion(currentPosition)?.id ?? null,
+        openWorld.getLoadedRegionIds(),
+      )
+      const previousClock = explorationVolcanicHazardClock
+      const clockStep = stepExplorationVolcanicHazardClock(previousClock, {
+        insideRegion,
+        simulationActive,
+        fixedStepSeconds: FIXED_STEP_SECONDS,
+      })
+      explorationVolcanicHazardClock = clockStep.clock
+      if (clockStep.resetEvents) resetVolcanicHazardState()
+
+      if (!insideRegion || !simulationActive) {
+        return
+      }
+      const step = sampleExplorationVolcanicHazardStep(
+        previousClock.active ? previousClock.elapsedSeconds : 0,
+        FIXED_STEP_SECONDS,
+        VOLCANIC_HAZARD_SEED,
+        {
+          quality: renderQuality.tier,
+          reducedMotion: reducedMotionQuery.matches || forceReducedMotion,
+        },
+        {
+          previous: previousPosition,
+          current: currentPosition,
+          movingRadius: 1.2,
+          handledEventKeys: volcanicHandledEventKeys,
+        },
+      )
+      latestVolcanicHazardFrame = step.frame
+      syncVolcanicHazardCues(step.frame)
+      const { collision } = step
+      volcanicHandledEventKeys = [...collision.handledEventKeys]
+      if (collision.hit === null) return
+
+      const application = applyObstacleCollision(
+        explorationCollisionState,
+        0,
+      )
+      explorationCollisionState = application.state
+      if (application.triggered) {
+        lastExplorationObstacleId = `volcanic-${collision.hit.obstacleId}`
+      }
     }
 
     const savePersistentSettings = (): void => {
@@ -1047,7 +1434,14 @@ export function createRenderer(
 
     const currentFestivalJourney = (): FestivalJourney =>
       getFestivalJourney(
-        { discoveredLandmarkIds, traversedWindZoneIds },
+        {
+          discoveredLandmarkIds: discoveredLandmarkIds.filter(
+            isFestivalHubLandmarkId,
+          ),
+          traversedWindZoneIds: traversedWindZoneIds.filter(
+            isFestivalHubWindZoneId,
+          ),
+        },
         raceState.persistent.coinBestTimesMs['festival-hub'],
         raceState.persistent.bestTimeMs,
       )
@@ -1058,18 +1452,44 @@ export function createRenderer(
           !secret && discoveredLandmarkIds.includes(id),
       ).length
 
-    const isAtChallengeBeacon = (): boolean => {
-      return (
+    const getChallengeRegionId = ():
+      | 'festival-hub'
+      | 'volcanic-archipelago'
+      | null => {
+      const position = explorationState.flight.position
+      if (
         Math.hypot(
-          explorationState.flight.position.x -
-            FESTIVAL_HUB_CHALLENGE_BEACON.position.x,
-          explorationState.flight.position.z -
-            FESTIVAL_HUB_CHALLENGE_BEACON.position.z,
+          position.x - FESTIVAL_HUB_CHALLENGE_BEACON.position.x,
+          position.z - FESTIVAL_HUB_CHALLENGE_BEACON.position.z,
         ) <= FESTIVAL_HUB_CHALLENGE_BEACON.radius
-      )
+      ) {
+        return 'festival-hub'
+      }
+      if (
+        Math.hypot(
+          position.x - VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.position.x,
+          position.z - VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.position.z,
+        ) <= VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.radius
+      ) {
+        return 'volcanic-archipelago'
+      }
+      return null
     }
 
-    const startRaceFromExplore = (): void => {
+    const isAtChallengeBeacon = (): boolean =>
+      getChallengeRegionId() !== null
+
+    const startRaceFromExplore = (missionId?: MissionId): boolean => {
+      if (missionId !== undefined) {
+        const selected = selectRaceMission(raceState, missionId)
+        if (selected.mission.selectedMissionId !== missionId) {
+          discoveryNotice =
+            '태양의 심장은 ‘황금 하늘매듭’ 동메달을 획득하면 열립니다.'
+          discoveryNoticeRemainingSeconds = 3.5
+          return false
+        }
+        raceState = selected
+      }
       syncExplorationPersistence()
       resetExplorationEnvironment()
       gameMode = 'race'
@@ -1077,7 +1497,6 @@ export function createRenderer(
       resetCoinRunAttempt()
       explorationPaused = false
       mapOpen = false
-      openWorld.clear()
       if (pendingExplorationHud !== null) {
         pendingExplorationHud.element.hidden = true
       }
@@ -1089,12 +1508,20 @@ export function createRenderer(
       })
       resetFlight()
       beginRaceGhostAttempt()
+      return true
     }
 
     const performExplorationInteraction = (): void => {
       if (explorationPaused || mapOpen) return
-      if (isAtChallengeBeacon()) {
-        startRaceFromExplore()
+      const challengeRegionId = getChallengeRegionId()
+      if (challengeRegionId !== null) {
+        startRaceFromExplore(
+          challengeRegionId === 'volcanic-archipelago'
+            ? 'heart-of-sun'
+            : getActiveRaceCourse().id === 'volcanic-archipelago'
+              ? 'golden-knot'
+              : undefined,
+        )
         return
       }
       explorationState =
@@ -1227,6 +1654,7 @@ export function createRenderer(
           type: 'START',
           input: touchCapable ? 'touch' : 'keyboard',
         })
+        syncRaceCourse()
         beginRaceGhostAttempt()
       },
       startExplore: () => {
@@ -1247,11 +1675,7 @@ export function createRenderer(
       selectMission: (missionId) => {
         const previousState = raceState
         raceState = selectRaceMission(raceState, missionId)
-        if (
-          raceState !== previousState &&
-          previousState.phase === 'paused' &&
-          raceState.phase === 'ready'
-        ) {
+        if (raceState !== previousState) {
           clearRaceGhostAttempt()
           resetFlight()
         }
@@ -1372,7 +1796,7 @@ export function createRenderer(
     }
 
     if (
-      import.meta.env.DEV &&
+      QA_MODE &&
       developmentParams.get('qaCourse') === '1'
     ) {
       const qaControl = document.createElement('button')
@@ -1386,7 +1810,7 @@ export function createRenderer(
     }
 
     if (
-      import.meta.env.DEV &&
+      QA_MODE &&
       developmentParams.get('qaCollision') === '1'
     ) {
       const qaCollisionControl = document.createElement('button')
@@ -1405,7 +1829,7 @@ export function createRenderer(
     }
 
     if (
-      import.meta.env.DEV &&
+      QA_MODE &&
       developmentParams.get('qaBoost') === '1'
     ) {
       const qaBoostControl = document.createElement('button')
@@ -1422,7 +1846,7 @@ export function createRenderer(
     }
 
     if (
-      import.meta.env.DEV &&
+      QA_MODE &&
       developmentParams.get('qaWave') === '1'
     ) {
       const qaWaveControl = document.createElement('button')
@@ -1465,6 +1889,7 @@ export function createRenderer(
       sandbox.setQuality(renderQuality)
       openWorld.setQuality(renderQuality.tier)
       openWorldActivities.setQuality(renderQuality.tier)
+      volcanicActivities.setQuality(renderQuality.tier)
       renderer.shadowMap.enabled = renderQuality.shadows
       renderer.setPixelRatio(renderQuality.pixelRatio)
       renderer.setSize(width, height, false)
@@ -1526,6 +1951,11 @@ export function createRenderer(
           coinGhostMatch === null ? null : { ...coinGhostMatch },
         raceLiveDeltaMs,
         coinLiveDeltaMs,
+        explorationVolcanicHazardClock: {
+          ...explorationVolcanicHazardClock,
+        },
+        volcanicHandledEventKeys: [...volcanicHandledEventKeys],
+        volcanicAnnouncedEventKeys: [...volcanicAnnouncedEventKeys],
         musicActive,
         musicPlaybackPositionSeconds: gameAudio.getMusicPositionSeconds(),
       })
@@ -1552,6 +1982,7 @@ export function createRenderer(
             type: 'START',
             input: inputController.activeDevice,
           })
+          syncRaceCourse()
           beginRaceGhostAttempt()
           sandbox.resetCamera()
         }
@@ -1611,16 +2042,30 @@ export function createRenderer(
             explorationCollisionState,
             FIXED_STEP_SECONDS,
           )
-          const windBeforeStep = sampleFestivalWind(
+          const festivalWindBeforeStep = sampleFestivalWind(
             previousExplorationPosition,
           )
+          const volcanicWindBeforeStep = sampleVolcanicThermalWind(
+            previousExplorationPosition,
+          )
+          const windVelocity = {
+            x:
+              festivalWindBeforeStep.velocity.x +
+              volcanicWindBeforeStep.velocity.x,
+            y:
+              festivalWindBeforeStep.velocity.y +
+              volcanicWindBeforeStep.velocity.y,
+            z:
+              festivalWindBeforeStep.velocity.z +
+              volcanicWindBeforeStep.velocity.z,
+          }
           explorationState = stepExplorationFlight(
             explorationState,
             input,
             FIXED_STEP_SECONDS,
             landingPads,
             {
-              windVelocity: windBeforeStep.velocity,
+              windVelocity,
               speedMultiplier: explorationCollisionState.speedMultiplier,
             },
           )
@@ -1628,7 +2073,7 @@ export function createRenderer(
             explorationState,
             previousExplorationPosition,
             1.2,
-            FESTIVAL_HUB_COLLIDERS,
+            explorationColliders,
           )
           explorationState = collision.state
           if (collision.obstacleId !== null) {
@@ -1641,17 +2086,41 @@ export function createRenderer(
               lastExplorationObstacleId = collision.obstacleId
             }
           }
-          const windAfterStep = sampleFestivalWind(
+          stepVolcanicExplorationHazards(
+            previousExplorationPosition,
+            explorationState.flight.position,
+            !document.hidden &&
+              movementBeforeStep === 'airborne' &&
+              explorationState.movement === 'airborne',
+          )
+          const festivalWindAfterStep = sampleFestivalWind(
             explorationState.flight.position,
           )
-          activeWindZoneIds = [...windAfterStep.activeZoneIds]
+          const volcanicWindAfterStep = sampleVolcanicThermalWind(
+            explorationState.flight.position,
+          )
+          activeWindZoneIds = [
+            ...festivalWindAfterStep.activeZoneIds,
+            ...volcanicWindAfterStep.activeZoneIds,
+          ]
+          const windAfterStepVelocity = {
+            x:
+              festivalWindAfterStep.velocity.x +
+              volcanicWindAfterStep.velocity.x,
+            y:
+              festivalWindAfterStep.velocity.y +
+              volcanicWindAfterStep.velocity.y,
+            z:
+              festivalWindAfterStep.velocity.z +
+              volcanicWindAfterStep.velocity.z,
+          }
           activeWindStrength = Math.min(
             1,
             Math.hypot(
-              windAfterStep.velocity.x,
-              windAfterStep.velocity.y,
-              windAfterStep.velocity.z,
-            ) / FESTIVAL_WIND_MAX_SPEED,
+              windAfterStepVelocity.x,
+              windAfterStepVelocity.y,
+              windAfterStepVelocity.z,
+            ) / Math.max(FESTIVAL_WIND_MAX_SPEED, VOLCANIC_THERMAL_MAX_SPEED),
           )
           flightState = explorationState.flight
           if (
@@ -1669,26 +2138,68 @@ export function createRenderer(
                 FIXED_STEP_SECONDS * 1_000,
               ),
             )
-            const discovery = stepFestivalDiscovery(
-              { discoveredLandmarkIds, traversedWindZoneIds },
+            const festivalDiscovery = stepFestivalDiscovery(
+              {
+                discoveredLandmarkIds: discoveredLandmarkIds.filter(
+                  isFestivalHubLandmarkId,
+                ),
+                traversedWindZoneIds: traversedWindZoneIds.filter(
+                  isFestivalHubWindZoneId,
+                ),
+              },
               previousExplorationPosition,
               explorationState.flight.position,
             )
+            const volcanicDiscovery = stepVolcanicDiscovery(
+              {
+                discoveredLandmarkIds: discoveredLandmarkIds.filter(
+                  isVolcanicArchipelagoLandmarkId,
+                ),
+                traversedThermalZoneIds: traversedWindZoneIds.filter(
+                  isVolcanicThermalZoneId,
+                ),
+              },
+              previousExplorationPosition,
+              explorationState.flight.position,
+            )
+            const newLandmarkIds = [
+              ...festivalDiscovery.newLandmarkIds,
+              ...volcanicDiscovery.newLandmarkIds,
+            ]
+            const newWindZoneIds = [
+              ...festivalDiscovery.newWindZoneIds,
+              ...volcanicDiscovery.newThermalZoneIds,
+            ]
             if (
-              discovery.newLandmarkIds.length > 0 ||
-              discovery.newWindZoneIds.length > 0
+              newLandmarkIds.length > 0 ||
+              newWindZoneIds.length > 0
             ) {
-              discoveryNotice = formatFestivalDiscoveryNotice(discovery)
+              discoveryNotice = formatFestivalDiscoveryNotice(
+                festivalDiscovery,
+              )
+              if (discoveryNotice === null) {
+                const landmark = VOLCANIC_ARCHIPELAGO_LANDMARKS.find(
+                  ({ id }) => id === volcanicDiscovery.newLandmarkIds[0],
+                )
+                const thermal = VOLCANIC_ARCHIPELAGO_THERMAL_ZONES.find(
+                  ({ id }) => id === volcanicDiscovery.newThermalZoneIds[0],
+                )
+                discoveryNotice = landmark !== undefined
+                  ? `새 항로 발견 · ${landmark.name}`
+                  : thermal !== undefined
+                    ? `새 열기류 발견 · ${thermal.name}`
+                    : null
+              }
               discoveryNoticeRemainingSeconds =
                 discoveryNotice === null ? 0 : 2.5
-              if (discovery.newLandmarkIds.length > 0) {
+              if (newLandmarkIds.length > 0) {
                 gameAudio.playDiscovery()
               }
-              if (discovery.newWindZoneIds.length > 0) {
+              if (newWindZoneIds.length > 0) {
                 gameAudio.playWindEntry()
               }
-              discoveredLandmarkIds.push(...discovery.newLandmarkIds)
-              traversedWindZoneIds.push(...discovery.newWindZoneIds)
+              discoveredLandmarkIds.push(...newLandmarkIds)
+              traversedWindZoneIds.push(...newWindZoneIds)
               syncExplorationPersistence()
             }
           }
@@ -1731,7 +2242,7 @@ export function createRenderer(
             touchInput.read(),
           )
           const qaBoostActive =
-            import.meta.env.DEV && qaBoostRemainingSeconds > 0
+            QA_MODE && qaBoostRemainingSeconds > 0
           qaBoostRemainingSeconds = Math.max(
             0,
             qaBoostRemainingSeconds - FIXED_STEP_SECONDS,
@@ -1749,15 +2260,45 @@ export function createRenderer(
             FIXED_STEP_SECONDS,
             collisionState.speedMultiplier,
           )
+          const volcanicRaceStep =
+            getActiveRaceCourse().id === 'volcanic-archipelago'
+          const raceWindVelocity = volcanicRaceStep
+            ? sampleVolcanicThermalWind(previousPosition).velocity
+            : ZERO_ENVIRONMENT_VELOCITY
+          if (volcanicRaceStep) {
+            flightState = applyExternalVelocity(
+              flightState,
+              raceWindVelocity,
+              FIXED_STEP_SECONDS,
+            )
+          }
           if (!wasBoosting && flightState.isBoosting) {
             raceState = recordRaceBoostActivation(raceState)
           }
-          const obstacleHit = findSweptSphereCollision(
-            previousPosition,
-            flightState.position,
-            1.2,
-            WORLD_OBSTACLES,
-          )
+          let obstacleHit: ObstacleCollisionHit | null
+          if (volcanicRaceStep) {
+            const obstacleResolution = resolveEscapeAwareObstacleMovement(
+              previousPosition,
+              flightState.position,
+              1.2,
+              VOLCANIC_ARCHIPELAGO_COLLIDERS,
+            )
+            obstacleHit = obstacleResolution.hit
+            if (obstacleHit !== null) {
+              flightState = {
+                ...flightState,
+                position: { ...obstacleResolution.position },
+                isBoosting: false,
+              }
+            }
+          } else {
+            obstacleHit = findSweptSphereCollision(
+              previousPosition,
+              flightState.position,
+              1.2,
+              WORLD_OBSTACLES,
+            )
+          }
 
           if (obstacleHit !== null) {
             triggerCollision(
@@ -1765,13 +2306,14 @@ export function createRenderer(
               respawnImmunitySeconds,
             )
           }
+          stepVolcanicRaceHazards(previousPosition, flightState.position)
           const forward = getForwardVector(flightState)
           raceState = syncRaceRun(raceState, {
             position: flightState.position,
             velocity: {
-              x: forward.x * flightState.speed,
-              y: forward.y * flightState.speed,
-              z: forward.z * flightState.speed,
+              x: forward.x * flightState.speed + raceWindVelocity.x,
+              y: forward.y * flightState.speed + raceWindVelocity.y,
+              z: forward.z * flightState.speed + raceWindVelocity.z,
             },
             boost: flightState.boostRemaining,
           })
@@ -1780,7 +2322,7 @@ export function createRenderer(
             previousPosition,
             flightState.position,
             raceState.run.nextCheckpointIndex,
-            SKYKNOT_COURSE,
+            getActiveRaceCourse().checkpoints,
             1.5,
           )
 
@@ -1800,6 +2342,7 @@ export function createRenderer(
 
           if (raceState.phase === 'racing') {
             const segment = getCourseSegment(
+              getActiveRaceCourse(),
               raceState.run.nextCheckpointIndex,
             )
             const bounds = stepOutOfBounds(
@@ -1874,19 +2417,67 @@ export function createRenderer(
           ? 0.12 + activeWindStrength * 0.88
           : 0,
       )
-      if (gameMode === 'explore') {
+      const volcanicRaceActive =
+        gameMode === 'race' &&
+        getActiveRaceCourse().id === 'volcanic-archipelago'
+      if (gameMode === 'explore' || volcanicRaceActive) {
         openWorld.update(
-          explorationState.flight.position,
+          gameMode === 'explore'
+            ? explorationState.flight.position
+            : flightState.position,
           visualSimulationSeconds,
         )
       }
-      const openWorldSnapshot = openWorld.debugSnapshot()
+      const loadedRegionIds = openWorld.getLoadedRegionIds()
       const currentRegion = getCurrentRegion(explorationState.flight.position)
       openWorldActivities.update(
         visualSimulationSeconds,
-        openWorldSnapshot.loadedRegionIds,
+        loadedRegionIds,
         explorationSimulationActive,
       )
+      const volcanicLoaded = loadedRegionIds.includes('volcanic-archipelago')
+      const volcanicActive =
+        volcanicLoaded &&
+        (volcanicRaceActive ||
+          (gameMode === 'explore' &&
+            currentRegion?.id === 'volcanic-archipelago'))
+      let volcanicFrame = dormantVolcanicHazardFrame
+      if (volcanicActive) {
+        if (latestVolcanicHazardFrame !== null) {
+          volcanicFrame = latestVolcanicHazardFrame
+        } else if (volcanicRaceActive) {
+          volcanicFrame = sampleVolcanicHazards(
+            raceState.run.elapsedMs,
+            VOLCANIC_HAZARD_SEED,
+            {
+              quality: renderQuality.tier,
+              reducedMotion:
+                reducedMotionQuery.matches || forceReducedMotion,
+            },
+          )
+          latestVolcanicHazardFrame = volcanicFrame
+        }
+      }
+      volcanicActivities.update(
+        volcanicFrame,
+        visualSimulationSeconds,
+        volcanicLoaded,
+        volcanicActive,
+      )
+      const volcanicIntensity = volcanicActive
+        ? gameMode === 'explore'
+          ? Math.min(1, 0.58 + activeWindStrength * 0.32)
+          : raceState.phase === 'racing'
+            ? Math.min(
+                1,
+                0.68 + raceState.run.nextCheckpointIndex * 0.08,
+              )
+            : raceState.phase === 'countdown'
+              ? 0.54
+              : 0.4
+        : 0
+      gameAudio.setVolcanicIntensity(volcanicIntensity)
+      sandbox.setVolcanicReaction(volcanicIntensity)
       const coinCollectionActive = isCoinCollectionActive(
         explorationSimulationActive,
         explorationState.movement,
@@ -1895,7 +2486,7 @@ export function createRenderer(
         ? getCoinRunTarget(
             coinRunState,
             currentRegion?.id ?? null,
-            openWorldSnapshot.loadedRegionIds,
+            loadedRegionIds,
           )
         : null
       coinCourseVisual.update(
@@ -1907,7 +2498,7 @@ export function createRenderer(
       maxStepsPerFrame = Math.max(maxStepsPerFrame, consumed.steps)
       const projectedGate = sandbox.gateProjection(host.clientHeight)
       const projectedDiameterCss =
-        import.meta.env.DEV &&
+        QA_MODE &&
         developmentParams.get('qaGateIndicator') === '1'
           ? 20
           : projectedGate.diameterCss
@@ -1965,6 +2556,10 @@ export function createRenderer(
         liveDeltaMs: raceLiveDeltaMs,
         leagueResult: raceState.leagueResult,
         skyLeague: raceState.persistent.skyLeague,
+        hazardWarning:
+          volcanicRaceActive && raceState.phase === 'racing'
+            ? selectVolcanicHazardWarning(volcanicFrame)
+            : null,
       })
       if (explorationHud !== null) {
         const journey = currentFestivalJourney()
@@ -1998,7 +2593,9 @@ export function createRenderer(
           journey: {
             ...journey,
           publicLandmarkCount: publicFestivalLandmarkCount(),
-          windZoneCount: traversedWindZoneIds.length,
+          windZoneCount: traversedWindZoneIds.filter(
+            isFestivalHubWindZoneId,
+          ).length,
           secretDiscovered: discoveredLandmarkIds.includes(
             'whispering-grotto',
           ),
@@ -2032,6 +2629,7 @@ export function createRenderer(
           : raceState.phase,
         gameMode,
       )
+      geometryLedger?.track(scene, hostFrames)
       renderer.render(scene, camera)
     })
 
@@ -2072,7 +2670,7 @@ export function createRenderer(
       )
     }
 
-    const developmentSession = import.meta.env.DEV
+    const developmentSession = QA_MODE
       ? {
           loseContext: (): void => {
             const extension = renderer
@@ -2134,6 +2732,7 @@ export function createRenderer(
               },
               race: {
                 phase: raceState.phase,
+                courseId: getActiveRaceCourse().id,
                 countdownRemainingMs: raceState.run.countdownRemainingMs,
                 elapsedMs: raceState.run.elapsedMs,
                 nextCheckpointIndex: raceState.run.nextCheckpointIndex,
@@ -2163,6 +2762,14 @@ export function createRenderer(
                 outOfBoundsSeconds:
                   outOfBoundsTracker.outsideDurationSeconds,
                 respawnImmunitySeconds,
+                volcanicHazard: {
+                  frame: latestVolcanicHazardFrame,
+                  handledEventKeys: [...volcanicHandledEventKeys],
+                  announcedEventKeys: [...volcanicAnnouncedEventKeys],
+                  explorationClock: {
+                    ...explorationVolcanicHazardClock,
+                  },
+                },
               },
               collision: {
                 ...collisionState,
@@ -2195,6 +2802,7 @@ export function createRenderer(
                 regionAssets: openWorldSnapshot.regionAssets,
                 regionMeshCount: openWorldSnapshot.meshCount,
                 windVisual: openWorldActivities.debugSnapshot(),
+                volcanicVisual: volcanicActivities.debugSnapshot(),
                 paused: explorationPaused,
                 mapOpen,
                 coinRun: { ...coinRunState },
@@ -2227,6 +2835,8 @@ export function createRenderer(
               },
             }
           },
+          qaGeometryLedger: (): GeometryResourceLedgerSnapshot | null =>
+            geometryLedger?.snapshot() ?? null,
           qaExploreRegion: (regionId: OpenWorldRegionId): void => {
             const region = getRegionById(regionId)
             gameMode = 'explore'
@@ -2265,6 +2875,11 @@ export function createRenderer(
           },
           qaExploreChallenge: (): void => {
             placeQaExploration(FESTIVAL_HUB_CHALLENGE_BEACON.position)
+          },
+          qaExploreVolcanicChallenge: (): void => {
+            placeQaExploration(
+              VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.position,
+            )
           },
           qaExploreLandmark: (
             landmarkId: FestivalHubLandmarkId,
@@ -2474,6 +3089,7 @@ export function createRenderer(
         sandbox.dispose()
         openWorld.dispose()
         openWorldActivities.dispose()
+        volcanicActivities.dispose()
         coinCourseVisual.dispose()
         resizeObserver.disconnect()
         canvas.removeEventListener('webglcontextlost', handleContextLost)
@@ -2499,6 +3115,7 @@ export function createRenderer(
     pendingBoostGauge?.dispose()
     pendingOpenWorld?.dispose()
     pendingOpenWorldActivities?.dispose()
+    pendingVolcanicActivities?.dispose()
     pendingCoinCourseVisual?.dispose()
     if (pendingVisibilityChangeHandler !== null) {
       document.removeEventListener(

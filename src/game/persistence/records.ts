@@ -16,6 +16,12 @@ import {
   type FestivalHubWindZoneId,
 } from '../world/festivalHubActivities'
 import {
+  isVolcanicArchipelagoLandmarkId,
+  isVolcanicThermalZoneId,
+  type VolcanicArchipelagoLandmarkId,
+  type VolcanicThermalZoneId,
+} from '../world/volcanicArchipelagoActivities'
+import {
   canonicalizeGhostRun,
   cloneGhostRun,
   isCanonicalGhostRun,
@@ -46,6 +52,12 @@ export interface RecordStorage {
 export type QualityPreference = 'auto' | 'low' | 'high'
 export type MissionGrades = Partial<Record<MissionId, AwardedMissionGrade>>
 export type CoinBestTimes = Partial<Record<OpenWorldRegionId, number>>
+export type ExplorationLandmarkId =
+  | FestivalHubLandmarkId
+  | VolcanicArchipelagoLandmarkId
+export type ExplorationWindZoneId =
+  | FestivalHubWindZoneId
+  | VolcanicThermalZoneId
 
 export interface SkyLeagueGhosts {
   readonly race: GhostRun | null
@@ -59,8 +71,8 @@ export interface ExplorationProgress {
   readonly movement: 'airborne' | 'landed'
   readonly discoveredRegionIds: readonly OpenWorldRegionId[]
   readonly destinationRegionId: OpenWorldRegionId | null
-  readonly discoveredLandmarkIds: readonly FestivalHubLandmarkId[]
-  readonly traversedWindZoneIds: readonly FestivalHubWindZoneId[]
+  readonly discoveredLandmarkIds: readonly ExplorationLandmarkId[]
+  readonly traversedWindZoneIds: readonly ExplorationWindZoneId[]
 }
 
 export interface GameSettings {
@@ -126,6 +138,41 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+export function isExplorationLandmarkId(
+  value: unknown,
+): value is ExplorationLandmarkId {
+  return (
+    isFestivalHubLandmarkId(value) ||
+    isVolcanicArchipelagoLandmarkId(value)
+  )
+}
+
+export function isExplorationWindZoneId(
+  value: unknown,
+): value is ExplorationWindZoneId {
+  return isFestivalHubWindZoneId(value) || isVolcanicThermalZoneId(value)
+}
+
+function isMissionIdAvailableInVersion(
+  value: unknown,
+  includeVolcanicProgress: boolean,
+): value is MissionId {
+  return (
+    isMissionId(value) &&
+    (includeVolcanicProgress || value !== 'heart-of-sun')
+  )
+}
+
+function isRegionIdAvailableInVersion(
+  value: unknown,
+  includeVolcanicProgress: boolean,
+): value is OpenWorldRegionId {
+  return (
+    isOpenWorldRegionId(value) &&
+    (includeVolcanicProgress || value !== 'volcanic-archipelago')
+  )
+}
+
 export function createEmptySkyLeagueGhosts(): SkyLeagueGhosts {
   return { race: null, coin: {}, mission: {} }
 }
@@ -158,6 +205,7 @@ export function cloneSkyLeagueGhosts(
 
 export function canonicalizeSkyLeagueGhosts(
   value: unknown,
+  includeVolcanicProgress = true,
 ): SkyLeagueGhosts {
   if (!isObjectRecord(value)) return createEmptySkyLeagueGhosts()
 
@@ -165,7 +213,9 @@ export function canonicalizeSkyLeagueGhosts(
   const coin: Partial<Record<OpenWorldRegionId, GhostRun>> = {}
   if (isObjectRecord(value.coin)) {
     for (const [regionId, rawRun] of Object.entries(value.coin)) {
-      if (!isOpenWorldRegionId(regionId)) continue
+      if (!isRegionIdAvailableInVersion(regionId, includeVolcanicProgress)) {
+        continue
+      }
       const run = canonicalizeGhostRun(rawRun)
       if (run !== null) coin[regionId] = run
     }
@@ -174,7 +224,9 @@ export function canonicalizeSkyLeagueGhosts(
   const mission: Partial<Record<MissionId, GhostRun>> = {}
   if (isObjectRecord(value.mission)) {
     for (const [missionId, rawRun] of Object.entries(value.mission)) {
-      if (!isMissionId(missionId)) continue
+      if (!isMissionIdAvailableInVersion(missionId, includeVolcanicProgress)) {
+        continue
+      }
       const run = canonicalizeGhostRun(rawRun)
       if (run !== null) mission[missionId] = run
     }
@@ -252,26 +304,53 @@ function isMusicVolume(value: unknown): value is number {
   )
 }
 
-function parseMissionGrades(value: unknown): MissionGrades {
+function parseMissionGrades(
+  value: unknown,
+  includeVolcanicProgress: boolean,
+): MissionGrades {
   if (typeof value !== 'object' || value === null) return {}
   const grades: MissionGrades = {}
   for (const [missionId, grade] of Object.entries(value)) {
-    if (isMissionId(missionId) && isAwardedMissionGrade(grade)) {
+    if (
+      isMissionIdAvailableInVersion(missionId, includeVolcanicProgress) &&
+      isAwardedMissionGrade(grade)
+    ) {
       grades[missionId] = grade
     }
   }
   return grades
 }
 
-function parseCoinBestTimes(value: unknown): CoinBestTimes {
+function parseCoinBestTimes(
+  value: unknown,
+  includeVolcanicProgress: boolean,
+): CoinBestTimes {
   if (typeof value !== 'object' || value === null) return {}
   const bestTimes: CoinBestTimes = {}
   for (const [regionId, elapsedMs] of Object.entries(value)) {
-    if (isOpenWorldRegionId(regionId) && isValidBestTime(elapsedMs)) {
+    if (
+      isRegionIdAvailableInVersion(regionId, includeVolcanicProgress) &&
+      isValidBestTime(elapsedMs)
+    ) {
       bestTimes[regionId] = elapsedMs
     }
   }
   return bestTimes
+}
+
+function canonicalizeSkyLeagueRecordsForVersion(
+  value: unknown,
+  includeVolcanicProgress: boolean,
+): SkyLeagueRecords {
+  const records = canonicalizeSkyLeagueRecords(value)
+  if (includeVolcanicProgress) return records
+
+  const coinTop10Ms = { ...records.coinTop10Ms }
+  const missionTop10 = { ...records.missionTop10 }
+  delete coinTop10Ms['volcanic-archipelago']
+  delete missionTop10['heart-of-sun']
+
+  return { ...records, coinTop10Ms, missionTop10 }
 }
 
 function synchronizeSkyLeague(
@@ -406,6 +485,7 @@ function isValidExplorationPosition(value: unknown): value is Vec3Value {
 function parseExploration(
   value: unknown,
   includeFestivalDiscoveries: boolean,
+  includeVolcanicDiscoveries: boolean,
 ): ExplorationProgress {
   const defaults = freshDefaults().exploration
   if (typeof value !== 'object' || value === null) return defaults
@@ -427,11 +507,23 @@ function parseExploration(
       : defaults.movement
   const discoveredRegionIds =
     'discoveredRegionIds' in value && Array.isArray(value.discoveredRegionIds)
-      ? [...new Set(value.discoveredRegionIds.filter(isOpenWorldRegionId))]
+      ? [
+          ...new Set(
+            value.discoveredRegionIds.filter((regionId) =>
+              isRegionIdAvailableInVersion(
+                regionId,
+                includeVolcanicDiscoveries,
+              ),
+            ),
+          ),
+        ]
       : defaults.discoveredRegionIds
   const destinationRegionId =
     'destinationRegionId' in value &&
-    isOpenWorldRegionId(value.destinationRegionId)
+    isRegionIdAvailableInVersion(
+      value.destinationRegionId,
+      includeVolcanicDiscoveries,
+    )
       ? value.destinationRegionId
       : null
   const discoveredLandmarkIds =
@@ -440,7 +532,11 @@ function parseExploration(
     Array.isArray(value.discoveredLandmarkIds)
       ? [
           ...new Set(
-            value.discoveredLandmarkIds.filter(isFestivalHubLandmarkId),
+            value.discoveredLandmarkIds.filter(
+              includeVolcanicDiscoveries
+                ? isExplorationLandmarkId
+                : isFestivalHubLandmarkId,
+            ),
           ),
         ]
       : defaults.discoveredLandmarkIds
@@ -450,7 +546,11 @@ function parseExploration(
     Array.isArray(value.traversedWindZoneIds)
       ? [
           ...new Set(
-            value.traversedWindZoneIds.filter(isFestivalHubWindZoneId),
+            value.traversedWindZoneIds.filter(
+              includeVolcanicDiscoveries
+                ? isExplorationWindZoneId
+                : isFestivalHubWindZoneId,
+            ),
           ),
         ]
       : defaults.traversedWindZoneIds
@@ -477,7 +577,7 @@ function arrayMatches(
   )
 }
 
-function hasCanonicalFestivalDiscoveries(
+function hasCanonicalExplorationDiscoveries(
   value: unknown,
   exploration: ExplorationProgress,
 ): boolean {
@@ -568,10 +668,11 @@ function parseSettings(
     parsed.version >= 9
       ? normalizeCharacterLoadout(rawCharacterLoadout)
       : { ...DEFAULT_CHARACTER_LOADOUT }
+  const includeVolcanicProgress = parsed.version >= 11
   const missionGrades =
     parsed.version >= 3 &&
     'missionGrades' in parsed
-      ? parseMissionGrades(parsed.missionGrades)
+      ? parseMissionGrades(parsed.missionGrades, includeVolcanicProgress)
       : {}
   const rawExploration =
     parsed.version >= 4 && 'exploration' in parsed
@@ -580,10 +681,14 @@ function parseSettings(
   const exploration =
     rawExploration === undefined
       ? freshDefaults().exploration
-      : parseExploration(rawExploration, parsed.version >= 7)
+      : parseExploration(
+          rawExploration,
+          parsed.version >= 7,
+          includeVolcanicProgress,
+        )
   const coinBestTimesMs =
     parsed.version >= 5 && 'coinBestTimesMs' in parsed
-      ? parseCoinBestTimes(parsed.coinBestTimesMs)
+      ? parseCoinBestTimes(parsed.coinBestTimesMs, includeVolcanicProgress)
       : {}
   const rawSkyLeague =
     parsed.version >= 8 && 'skyLeague' in parsed
@@ -591,7 +696,10 @@ function parseSettings(
       : undefined
   const skyLeague = synchronizeSkyLeague(
     parsed.version >= 8
-      ? canonicalizeSkyLeagueRecords(rawSkyLeague)
+      ? canonicalizeSkyLeagueRecordsForVersion(
+          rawSkyLeague,
+          includeVolcanicProgress,
+        )
       : createEmptySkyLeagueRecords(),
     bestTimeMs,
     coinBestTimesMs,
@@ -604,7 +712,10 @@ function parseSettings(
   )
   const rawGhosts =
     parsed.version >= 8 && 'ghosts' in parsed ? parsed.ghosts : undefined
-  const ghosts = canonicalizeSkyLeagueGhosts(rawGhosts)
+  const ghosts = canonicalizeSkyLeagueGhosts(
+    rawGhosts,
+    includeVolcanicProgress,
+  )
 
   return {
     settings: {
@@ -622,7 +733,7 @@ function parseSettings(
     shouldMigrate:
       parsed.version !== SETTINGS_VERSION ||
       !characterLoadoutMatches(rawCharacterLoadout, characterLoadout) ||
-      !hasCanonicalFestivalDiscoveries(rawExploration, exploration) ||
+      !hasCanonicalExplorationDiscoveries(rawExploration, exploration) ||
       !isCanonicalSkyLeagueRecords(rawSkyLeague) ||
       JSON.stringify(rawSkyLeague) !== JSON.stringify(skyLeague) ||
       !isCanonicalSkyLeagueGhosts(rawGhosts) ||
@@ -683,9 +794,9 @@ function isValidSettings(settings: GameSettings): boolean {
     Array.isArray(exploration.discoveredRegionIds) &&
     exploration.discoveredRegionIds.every(isOpenWorldRegionId) &&
     Array.isArray(exploration.discoveredLandmarkIds) &&
-    exploration.discoveredLandmarkIds.every(isFestivalHubLandmarkId) &&
+    exploration.discoveredLandmarkIds.every(isExplorationLandmarkId) &&
     Array.isArray(exploration.traversedWindZoneIds) &&
-    exploration.traversedWindZoneIds.every(isFestivalHubWindZoneId) &&
+    exploration.traversedWindZoneIds.every(isExplorationWindZoneId) &&
     (exploration.destinationRegionId === null ||
       isOpenWorldRegionId(exploration.destinationRegionId))
   )

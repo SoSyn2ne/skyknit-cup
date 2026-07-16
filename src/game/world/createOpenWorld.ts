@@ -39,8 +39,15 @@ export interface OpenWorldVisual {
   update(position: Vec3Value, simulationSeconds: number): void
   setQuality(tier: RenderQualityTier): void
   clear(): void
+  getLoadedRegionIds(): readonly OpenWorldRegionId[]
   debugSnapshot(): OpenWorldDebugSnapshot
   dispose(): void
+}
+
+interface RegionAnimationTarget {
+  readonly object: THREE.Object3D
+  readonly axis: 'y' | 'z'
+  readonly radiansPerSecond: number
 }
 
 interface LoadedRegion {
@@ -51,6 +58,8 @@ interface LoadedRegion {
   lod: RenderQualityTier
   status: OpenWorldAssetStatus
   lavaTimeUniforms: Array<{ value: number }>
+  animationTargets: RegionAnimationTarget[]
+  meshCount: number
 }
 
 const REGION_BY_ID = new Map(
@@ -125,14 +134,80 @@ function createFallback(region: OpenWorldRegion): THREE.Group {
 function applyShadowPolicy(
   root: THREE.Object3D,
   tier: RenderQualityTier,
+  regionId: OpenWorldRegionId,
 ): void {
   const enabled = tier === 'high'
   root.traverse((object) => {
     if (object instanceof THREE.Mesh) {
-      object.castShadow = enabled
-      object.receiveShadow = enabled
+      const volcanicStaticEnvironment = regionId === 'volcanic-archipelago'
+      object.castShadow = enabled && !volcanicStaticEnvironment
+      object.receiveShadow =
+        enabled &&
+        (!volcanicStaticEnvironment || object.name.includes('LandingPad'))
     }
   })
+}
+
+function applyVolcanicRenderPolicy(
+  root: THREE.Object3D,
+  regionId: OpenWorldRegionId,
+): void {
+  if (regionId !== 'volcanic-archipelago') return
+
+  const convertedMaterials = new Map<THREE.Material, THREE.Material>()
+  const convertMaterial = (source: THREE.Material): THREE.Material => {
+    const existing = convertedMaterials.get(source)
+    if (existing !== undefined) return existing
+
+    if (!(source instanceof THREE.MeshStandardMaterial)) {
+      if (source.side !== THREE.FrontSide) {
+        source.side = THREE.FrontSide
+        source.needsUpdate = true
+      }
+      convertedMaterials.set(source, source)
+      return source
+    }
+
+    const converted = new THREE.MeshLambertMaterial({
+      name: `${source.name || 'VolcanicSurface'}_Lambert`,
+      color: source.color,
+      emissive: source.emissive,
+      emissiveIntensity: source.emissiveIntensity,
+      map: source.map,
+      emissiveMap: source.emissiveMap,
+      lightMap: source.lightMap,
+      lightMapIntensity: source.lightMapIntensity,
+      aoMap: source.aoMap,
+      aoMapIntensity: source.aoMapIntensity,
+      alphaMap: source.alphaMap,
+      alphaTest: source.alphaTest,
+      vertexColors: source.vertexColors,
+      fog: source.fog,
+      side: THREE.FrontSide,
+      transparent: source.transparent,
+      opacity: source.opacity,
+      depthTest: source.depthTest,
+      depthWrite: source.depthWrite,
+      blending: source.blending,
+    })
+    converted.toneMapped = source.toneMapped
+    converted.premultipliedAlpha = source.premultipliedAlpha
+    converted.dithering = source.dithering
+    converted.userData = { ...source.userData }
+    convertedMaterials.set(source, converted)
+    return converted
+  }
+
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+    object.material = Array.isArray(object.material)
+      ? object.material.map(convertMaterial)
+      : convertMaterial(object.material)
+  })
+
+  for (const [source, converted] of convertedMaterials) {
+    if (source !== converted) source.dispose()
+  }
 }
 
 function applyFestivalLanternStyle(
@@ -183,21 +258,33 @@ function disposeMaterial(
 function createVolcanicLavaMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     name: 'M39_VolcanicLava',
-    uniforms: {
-      uTime: { value: 0 },
-    },
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      { uTime: { value: 0 } },
+    ]),
     vertexColors: true,
     fog: true,
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
     toneMapped: true,
     vertexShader: /* glsl */ `
-      varying vec3 vLocalPosition;
+      uniform float uTime;
+      varying float vLavaFlow;
       #include <common>
       #include <color_pars_vertex>
       #include <fog_pars_vertex>
 
       void main() {
-        vLocalPosition = position;
+        float broadFlow = sin(
+          position.x * 0.19 +
+          position.z * 0.13 +
+          uTime * 1.25
+        );
+        float crossFlow = sin(
+          position.x * -0.31 +
+          position.z * 0.27 -
+          uTime * 1.82
+        );
+        vLavaFlow = broadFlow * 0.55 + crossFlow * 0.45;
         #include <color_vertex>
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * mvPosition;
@@ -205,31 +292,18 @@ function createVolcanicLavaMaterial(): THREE.ShaderMaterial {
       }
     `,
     fragmentShader: /* glsl */ `
-      uniform float uTime;
-      varying vec3 vLocalPosition;
+      varying float vLavaFlow;
       #include <common>
       #include <color_pars_fragment>
       #include <fog_pars_fragment>
 
       void main() {
-        float broadFlow = sin(
-          vLocalPosition.x * 0.19 +
-          vLocalPosition.y * 0.13 +
-          uTime * 1.25
-        );
-        float crossFlow = sin(
-          vLocalPosition.x * -0.31 +
-          vLocalPosition.y * 0.27 -
-          uTime * 1.82
-        );
-        float veins = smoothstep(0.50, 0.94, broadFlow * 0.55 + crossFlow * 0.45);
+        float veins = smoothstep(0.50, 0.94, vLavaFlow);
         vec3 deepLava = vec3(0.42, 0.018, 0.006);
         vec3 hotLava = vec3(1.0, 0.34, 0.035);
         vec3 lavaColor = mix(deepLava, hotLava, 0.32 + veins * 0.68);
-        #if defined(USE_COLOR_ALPHA)
+        #if defined(USE_COLOR_ALPHA) || defined(USE_COLOR)
           lavaColor *= vColor.rgb;
-        #elif defined(USE_COLOR)
-          lavaColor *= vColor;
         #endif
         gl_FragColor = vec4(lavaColor, 1.0);
         #include <tonemapping_fragment>
@@ -290,11 +364,51 @@ function disposeObject(root: THREE.Object3D): void {
   root.removeFromParent()
 }
 
+function inspectRegionAsset(root: THREE.Object3D): {
+  animationTargets: RegionAnimationTarget[]
+  meshCount: number
+} {
+  const animationTargets: RegionAnimationTarget[] = []
+  let meshCount = 0
+
+  root.traverse((object) => {
+    if (object instanceof THREE.Mesh) meshCount += 1
+
+    switch (object.userData.animate) {
+      case 'beacon':
+        animationTargets.push({
+          object,
+          axis: 'y',
+          radiansPerSecond: 0.75,
+        })
+        break
+      case 'wind':
+        animationTargets.push({
+          object,
+          axis: 'z',
+          radiansPerSecond: 0.45,
+        })
+        break
+      case 'rune':
+        animationTargets.push({
+          object,
+          axis: 'z',
+          radiansPerSecond: -0.24,
+        })
+        break
+    }
+  })
+
+  return { animationTargets, meshCount }
+}
+
 function removeCurrentAsset(entry: LoadedRegion): void {
   if (entry.asset === null) return
   disposeObject(entry.asset)
   entry.asset = null
   entry.lavaTimeUniforms = []
+  entry.animationTargets = []
+  entry.meshCount = 0
 }
 
 export function createOpenWorld(
@@ -305,7 +419,12 @@ export function createOpenWorld(
   const loader = options.assetLoader ?? createDefaultLoader()
   let qualityTier = options.qualityTier ?? 'high'
   let lastPosition: Vec3Value | null = null
+  let loadedRegionIds: readonly OpenWorldRegionId[] = []
   let disposed = false
+
+  const refreshLoadedRegionIds = (): void => {
+    loadedRegionIds = [...loaded.keys()]
+  }
 
   const clearLoadedRegions = (): void => {
     for (const entry of loaded.values()) {
@@ -313,6 +432,7 @@ export function createOpenWorld(
       disposeObject(entry.container)
     }
     loaded.clear()
+    refreshLoadedRegionIds()
     lastPosition = null
   }
 
@@ -338,8 +458,12 @@ export function createOpenWorld(
         removeCurrentAsset(entry)
         applyFestivalLanternStyle(asset, entry.region.id)
         entry.lavaTimeUniforms = applyVolcanicLavaStyle(asset, entry.region.id)
-        applyShadowPolicy(asset, requestedLod)
+        applyVolcanicRenderPolicy(asset, entry.region.id)
+        applyShadowPolicy(asset, requestedLod, entry.region.id)
+        const inspection = inspectRegionAsset(asset)
         entry.asset = asset
+        entry.animationTargets = inspection.animationTargets
+        entry.meshCount = inspection.meshCount
         entry.container.add(asset)
         entry.status = 'loaded'
       },
@@ -353,8 +477,11 @@ export function createOpenWorld(
         }
         removeCurrentAsset(entry)
         const fallback = createFallback(entry.region)
-        applyShadowPolicy(fallback, requestedLod)
+        applyShadowPolicy(fallback, requestedLod, entry.region.id)
+        const inspection = inspectRegionAsset(fallback)
         entry.asset = fallback
+        entry.animationTargets = inspection.animationTargets
+        entry.meshCount = inspection.meshCount
         entry.container.add(fallback)
         entry.status = 'fallback'
       },
@@ -395,8 +522,11 @@ export function createOpenWorld(
       lod: 'low',
       status: 'loading',
       lavaTimeUniforms: [],
+      animationTargets: [],
+      meshCount: 0,
     }
     loaded.set(region.id, entry)
+    refreshLoadedRegionIds()
     scene.add(container)
     loadRegionAsset(entry, desiredLod(entry, position))
   }
@@ -412,6 +542,7 @@ export function createOpenWorld(
         entry.requestVersion += 1
         disposeObject(entry.container)
         loaded.delete(id)
+        refreshLoadedRegionIds()
       }
       for (const id of nextIds) {
         if (loaded.has(id)) continue
@@ -423,17 +554,10 @@ export function createOpenWorld(
         for (const uniform of entry.lavaTimeUniforms) {
           uniform.value = simulationSeconds
         }
-        entry.container.traverse((object) => {
-          if (object.userData.animate === 'beacon') {
-            object.rotation.y = simulationSeconds * 0.75
-          }
-          if (object.userData.animate === 'wind') {
-            object.rotation.z = simulationSeconds * 0.45
-          }
-          if (object.userData.animate === 'rune') {
-            object.rotation.z = simulationSeconds * -0.24
-          }
-        })
+        for (const target of entry.animationTargets) {
+          target.object.rotation[target.axis] =
+            simulationSeconds * target.radiansPerSecond
+        }
       }
     },
     setQuality: (tier) => {
@@ -449,16 +573,14 @@ export function createOpenWorld(
       if (disposed) return
       clearLoadedRegions()
     },
+    getLoadedRegionIds: () => loadedRegionIds,
     debugSnapshot: () => ({
-      loadedRegionIds: [...loaded.keys()],
+      loadedRegionIds: [...loadedRegionIds],
       regionGroupCount: loaded.size,
-      meshCount: [...loaded.values()].reduce((count, entry) => {
-        let groupCount = 0
-        entry.container.traverse((object) => {
-          if (object instanceof THREE.Mesh) groupCount += 1
-        })
-        return count + groupCount
-      }, 0),
+      meshCount: [...loaded.values()].reduce(
+        (count, entry) => count + entry.meshCount,
+        0,
+      ),
       qualityTier,
       regionAssets: [...loaded.values()].map((entry) => ({
         id: entry.region.id,

@@ -4,6 +4,7 @@ import {
   applyObstacleCollision,
   createCollisionState,
   findSweptSphereCollision,
+  resolveEscapeAwareObstacleMovement,
   stepCollisionState,
 } from './obstacleCollision'
 
@@ -48,6 +49,58 @@ describe('swept obstacle collision', () => {
         obstacles,
       ),
     ).toBeNull()
+  })
+
+  it('rewinds an inward crossing to the previous safe position', () => {
+    const previous = { x: 0, y: 8, z: 0 }
+    const current = { x: 0, y: 8, z: -50 }
+
+    const resolved = resolveEscapeAwareObstacleMovement(
+      previous,
+      current,
+      1,
+      obstacles,
+    )
+
+    expect(resolved.hit?.obstacleId).toBe('island-1')
+    expect(resolved.position).toEqual(previous)
+    expect(resolved.position).not.toBe(previous)
+  })
+
+  it('lets an embedded flight move outward or tangentially to escape', () => {
+    const embedded = { x: 0, y: 8, z: -20 }
+    const outward = resolveEscapeAwareObstacleMovement(
+      embedded,
+      { x: 8, y: 8, z: -20 },
+      1,
+      obstacles,
+    )
+    const tangential = resolveEscapeAwareObstacleMovement(
+      { x: 4, y: 8, z: -20 },
+      { x: 4, y: 8, z: -19 },
+      1,
+      obstacles,
+    )
+
+    expect(outward.hit).toBeNull()
+    expect(outward.position).toEqual({ x: 8, y: 8, z: -20 })
+    expect(tangential.hit).toBeNull()
+    expect(tangential.position).toEqual({ x: 4, y: 8, z: -19 })
+  })
+
+  it('does not mistake a through-center crossing for escape', () => {
+    const previous = { x: 2, y: 8, z: -20 }
+    const current = { x: -20, y: 8, z: -20 }
+
+    const resolved = resolveEscapeAwareObstacleMovement(
+      previous,
+      current,
+      1,
+      obstacles,
+    )
+
+    expect(resolved.hit?.obstacleId).toBe('island-1')
+    expect(resolved.position).toEqual(previous)
   })
 })
 

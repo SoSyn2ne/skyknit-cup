@@ -47,6 +47,14 @@ export interface RaceHudView {
   readonly liveDeltaMs: number | null
   readonly leagueResult: RaceLeagueResult | null
   readonly skyLeague: SkyLeagueRecords
+  readonly hazardWarning?: RaceHazardWarning | null
+}
+
+export interface RaceHazardWarning {
+  readonly kind: 'rockfall' | 'lava-wave'
+  readonly phase: 'telegraph' | 'active'
+  readonly remainingMs: number
+  readonly eventKey: string
 }
 
 export interface RaceHudActions {
@@ -91,6 +99,23 @@ export function formatMusicVolumePercent(volume: number): string {
     ? Math.min(1, Math.max(0, volume))
     : 0.35
   return `${Math.round(safeVolume * 100)}%`
+}
+
+export function formatHazardWarning(
+  warning: RaceHazardWarning,
+): string {
+  const label = warning.kind === 'rockfall' ? '낙석 주의' : '용암 파도'
+  if (warning.phase === 'active') return `${label} · 회피!`
+  return `${label} · ${Math.max(0, warning.remainingMs / 1_000).toFixed(1)}초`
+}
+
+export function formatHazardAnnouncement(
+  warning: RaceHazardWarning,
+): string {
+  const label = warning.kind === 'rockfall' ? '낙석' : '용암 파도'
+  return warning.phase === 'active'
+    ? `${label} 지금 회피`
+    : `${label} 접근 주의`
 }
 
 export function formatMissionGrade(
@@ -162,7 +187,10 @@ export function formatMissionProgress(
         attempt.nextCheckpointIndex < 3
           ? `냉각 봉인 ${attempt.nextCheckpointIndex}/3`
           : '분화 탈출'
-      return `${objective} · ${elapsed} / 1:15.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/2`
+      const remaining = formatRaceTime(
+        Math.max(0, 75_000 - attempt.elapsedMs),
+      )
+      return `${objective} · 남은 ${remaining} · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/2`
     }
   }
 }
@@ -216,6 +244,21 @@ export function createRaceHud(
   const missionTrackerName = document.createElement('strong')
   const missionTrackerProgress = document.createElement('span')
   missionTracker.append(missionTrackerName, missionTrackerProgress)
+
+  const hazardWarning = document.createElement('div')
+  hazardWarning.className = 'race-hud__hazard-warning'
+  hazardWarning.dataset.hazardWarning = 'true'
+  hazardWarning.setAttribute('aria-hidden', 'true')
+  const hazardIcon = document.createElement('span')
+  hazardIcon.className = 'race-hud__hazard-icon'
+  hazardIcon.setAttribute('aria-hidden', 'true')
+  const hazardCopy = document.createElement('strong')
+  hazardWarning.append(hazardIcon, hazardCopy)
+  const hazardAnnouncement = document.createElement('p')
+  hazardAnnouncement.className = 'race-hud__hazard-announcement'
+  hazardAnnouncement.dataset.hazardAnnouncement = 'true'
+  hazardAnnouncement.setAttribute('role', 'alert')
+  hazardAnnouncement.setAttribute('aria-atomic', 'true')
 
   const countdown = document.createElement('div')
   countdown.className = 'race-hud__countdown'
@@ -428,7 +471,15 @@ export function createRaceHud(
     league,
     actionsRow,
   )
-  root.append(status, missionTracker, countdown, gateGuide, panel)
+  root.append(
+    status,
+    missionTracker,
+    hazardWarning,
+    hazardAnnouncement,
+    countdown,
+    gateGuide,
+    panel,
+  )
   host.append(root)
   let previousPhase: RacePhase | null = null
   let resultSignature: string | null = null
@@ -436,6 +487,7 @@ export function createRaceHud(
   let leagueExpanded = false
   let leagueCategory: 'race' | 'mission' = 'race'
   let latestView: RaceHudView | null = null
+  let hazardAnnouncementSignature: string | null = null
 
   const showOnly = (...buttons: HTMLButtonElement[]): void => {
     for (const button of [
@@ -705,6 +757,34 @@ export function createRaceHud(
         view.mission.selectedMissionId,
         view.mission.attempt,
         view.checkpointCount,
+      )
+      const warning = view.hazardWarning ?? null
+      hazardWarning.hidden = view.phase !== 'racing' || warning === null
+      if (warning !== null) {
+        hazardWarning.dataset.kind = warning.kind
+        hazardWarning.dataset.warningPhase = warning.phase
+        hazardIcon.textContent = warning.kind === 'rockfall' ? '◆' : '≋'
+        hazardCopy.textContent = formatHazardWarning(warning)
+      } else {
+        delete hazardWarning.dataset.kind
+        delete hazardWarning.dataset.warningPhase
+        hazardIcon.textContent = ''
+        hazardCopy.textContent = ''
+      }
+      const announcedWarning = view.phase === 'racing' ? warning : null
+      const nextHazardAnnouncementSignature =
+        announcedWarning === null
+          ? null
+          : `${announcedWarning.eventKey}:${announcedWarning.phase}`
+      hazardAnnouncementSignature = updateCachedDom(
+        hazardAnnouncementSignature,
+        nextHazardAnnouncementSignature,
+        () => {
+          hazardAnnouncement.textContent =
+            announcedWarning === null
+              ? ''
+              : formatHazardAnnouncement(announcedWarning)
+        },
       )
       countdown.hidden = view.phase !== 'countdown'
       countdown.textContent = String(

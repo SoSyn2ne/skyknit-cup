@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createRaceHud,
+  formatHazardAnnouncement,
+  formatHazardWarning,
   formatLeagueMedal,
   formatLeaguePlacement,
   formatMissionGrade,
@@ -228,10 +230,110 @@ describe('mission HUD formatting', () => {
     ],
     [
       'heart-of-sun',
-      '분화 탈출 · 1:31.250 / 1:15.000 · 충돌 1 · 리스폰 2 · 돌풍 3/2',
+      '분화 탈출 · 남은 0:00.000 · 충돌 1 · 리스폰 2 · 돌풍 3/2',
     ],
   ] as const)('formats %s progress', (missionId, label) => {
     expect(formatMissionProgress(missionId, attempt, 12)).toBe(label)
+  })
+})
+
+describe('volcanic hazard warning formatting', () => {
+  it('keeps telegraphs timed and active hazards urgent', () => {
+    expect(
+      formatHazardWarning({
+        kind: 'rockfall',
+        phase: 'telegraph',
+        eventKey: 'rockfall:1',
+        remainingMs: 1_240,
+      }),
+    ).toBe('낙석 주의 · 1.2초')
+    expect(
+      formatHazardWarning({
+        kind: 'lava-wave',
+        phase: 'active',
+        eventKey: 'lava-wave:1',
+        remainingMs: 900,
+      }),
+    ).toBe('용암 파도 · 회피!')
+    expect(
+      formatHazardAnnouncement({
+        kind: 'lava-wave',
+        phase: 'telegraph',
+        eventKey: 'lava-wave:1',
+        remainingMs: 1_200,
+      }),
+    ).toBe('용암 파도 접근 주의')
+  })
+
+  it('separates the visual countdown from one concise alert message', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    )
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: () => new TestElement(),
+      } as unknown as Document,
+    })
+
+    try {
+      const host = new TestElement()
+      const noop = (): void => {}
+      const hud = createRaceHud(host as unknown as HTMLElement, {
+        start: noop,
+        startExplore: noop,
+        selectMission: noop,
+        returnToMissionSelection: noop,
+        resume: noop,
+        restart: noop,
+        respawn: noop,
+        retry: noop,
+        nextMission: noop,
+        openCharacterWorkshop: noop,
+        openStoryPrologue: noop,
+        toggleMute: noop,
+        setMusicVolume: noop,
+        setQuality: noop,
+      })
+      const finished = createFinishedRaceHudView()
+      hud.update({
+        ...finished,
+        phase: 'racing',
+        finalElapsedMs: null,
+        leagueResult: null,
+        mission: {
+          ...finished.mission,
+          status: 'active',
+          result: null,
+        },
+        hazardWarning: {
+          kind: 'rockfall',
+          phase: 'telegraph',
+          eventKey: 'rockfall:8',
+          remainingMs: 1_200,
+        },
+      })
+
+      const root = hud.element as unknown as TestElement
+      const visual = findByDataset(root, 'hazardWarning', 'true')
+      const announcement = findByDataset(
+        root,
+        'hazardAnnouncement',
+        'true',
+      )
+      expect(visual.attributes.get('aria-hidden')).toBe('true')
+      expect(visual.attributes.get('aria-live')).toBeUndefined()
+      expect(announcement.attributes.get('role')).toBe('alert')
+      expect(announcement.attributes.get('aria-live')).toBeUndefined()
+      expect(announcement.textContent).toBe('낙석 접근 주의')
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, 'document')
+      } else {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      }
+    }
   })
 })
 
@@ -426,7 +528,7 @@ describe('Sky League HUD formatting', () => {
       )
 
       expect(picker.hidden).toBe(false)
-      expect(select.children).toHaveLength(6)
+      expect(select.children).toHaveLength(7)
       expect(select.children.map((option) => option.value)).toEqual([
         'first-skyknot',
         'boost-mastery',
@@ -434,6 +536,7 @@ describe('Sky League HUD formatting', () => {
         'time-trial',
         'clean-flight',
         'golden-knot',
+        'heart-of-sun',
       ])
       expect(select.children[0]?.disabled).toBe(false)
       expect(select.children[1]?.disabled).toBe(true)
@@ -514,7 +617,7 @@ describe('Sky League HUD formatting', () => {
         ...firstSuccess,
         mission: {
           ...firstSuccess.mission,
-          selectedMissionId: 'golden-knot',
+          selectedMissionId: 'heart-of-sun',
         },
         missionGrades: {
           'first-skyknot': 'gold',
@@ -523,6 +626,7 @@ describe('Sky League HUD formatting', () => {
           'time-trial': 'gold',
           'clean-flight': 'gold',
           'golden-knot': 'gold',
+          'heart-of-sun': 'gold',
         },
       })
 

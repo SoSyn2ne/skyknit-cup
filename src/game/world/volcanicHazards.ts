@@ -1,7 +1,4 @@
-import {
-  findSweptSphereCollision,
-  type SphereObstacle,
-} from '../collision/obstacleCollision'
+import type { SphereObstacle } from '../collision/obstacleCollision'
 import type { Vec3Value } from '../flight/flightModel'
 
 export type VolcanicHazardKind = 'rockfall' | 'lava-wave'
@@ -100,6 +97,14 @@ const LAVA_WAVE_COLLISION_BAND_RADIUS = 4
 const LAVA_WAVE_COLLISION_SEGMENTS = 40
 const FULL_TURN = Math.PI * 2
 const STEP_EPSILON = 1e-9
+const LAVA_WAVE_COLLISION_COSINES = Array.from(
+  { length: LAVA_WAVE_COLLISION_SEGMENTS },
+  (_, index) => Math.cos((index / LAVA_WAVE_COLLISION_SEGMENTS) * FULL_TURN),
+)
+const LAVA_WAVE_COLLISION_SINES = Array.from(
+  { length: LAVA_WAVE_COLLISION_SEGMENTS },
+  (_, index) => Math.sin((index / LAVA_WAVE_COLLISION_SEGMENTS) * FULL_TURN),
+)
 
 const ROCKFALL_TARGET_ANCHORS: readonly Vec3Value[] = [
   { x: -270, y: 42, z: -824 },
@@ -347,6 +352,72 @@ function canonicalHandledEventKeys(
   ]
 }
 
+interface SweptSphereHit {
+  readonly t: number
+  readonly point: Vec3Value
+}
+
+function isFinitePosition(position: Vec3Value): boolean {
+  return (
+    Number.isFinite(position.x) &&
+    Number.isFinite(position.y) &&
+    Number.isFinite(position.z)
+  )
+}
+
+function sampleSweptSphere(
+  previous: Vec3Value,
+  current: Vec3Value,
+  movingRadius: number,
+  centerX: number,
+  centerY: number,
+  centerZ: number,
+  obstacleRadius: number,
+): SweptSphereHit | null {
+  const directionX = current.x - previous.x
+  const directionY = current.y - previous.y
+  const directionZ = current.z - previous.z
+  const segmentLengthSquared =
+    directionX * directionX +
+    directionY * directionY +
+    directionZ * directionZ
+  const offsetX = previous.x - centerX
+  const offsetY = previous.y - centerY
+  const offsetZ = previous.z - centerZ
+  const expandedRadius = obstacleRadius + movingRadius
+  const c =
+    offsetX * offsetX +
+    offsetY * offsetY +
+    offsetZ * offsetZ -
+    expandedRadius * expandedRadius
+  let t: number | null = c <= 0 ? 0 : null
+
+  if (t === null && segmentLengthSquared > Number.EPSILON) {
+    const b =
+      2 *
+      (offsetX * directionX +
+        offsetY * directionY +
+        offsetZ * directionZ)
+    const discriminant = b * b - 4 * segmentLengthSquared * c
+    if (discriminant >= 0) {
+      const candidate =
+        (-b - Math.sqrt(discriminant)) / (2 * segmentLengthSquared)
+      if (candidate >= 0 && candidate <= 1) t = candidate
+    }
+  }
+
+  return t === null
+    ? null
+    : {
+        t,
+        point: {
+          x: previous.x + directionX * t,
+          y: previous.y + directionY * t,
+          z: previous.z + directionZ * t,
+        },
+      }
+}
+
 export function sampleVolcanicHazardCollision(
   frame: VolcanicHazardFrame,
   query: VolcanicHazardCollisionQuery,
@@ -356,33 +427,77 @@ export function sampleVolcanicHazardCollision(
     query.handledEventKeys ?? [],
   )
   const handled = new Set(handledEventKeys)
-  const obstacles = getVolcanicHazardCollisionObstacles(frame).filter(
-    ({ eventKey }) => !handled.has(eventKey),
-  )
-  const collision = findSweptSphereCollision(
-    query.previous,
-    query.current,
-    query.movingRadius,
-    obstacles,
-  )
-
-  if (collision === null) {
+  if (
+    !isFinitePosition(query.previous) ||
+    !isFinitePosition(query.current) ||
+    !Number.isFinite(query.movingRadius) ||
+    query.movingRadius < 0
+  ) {
     return { hit: null, handledEventKeys }
   }
 
-  const obstacle = obstacles.find(({ id }) => id === collision.obstacleId)
-  if (obstacle === undefined) {
+  let earliestHit: VolcanicHazardCollisionHit | null = null
+  for (const rockfall of frame.rockfalls) {
+    if (!rockfall.collisionActive || handled.has(rockfall.eventKey)) continue
+    const collision = sampleSweptSphere(
+      query.previous,
+      query.current,
+      query.movingRadius,
+      rockfall.collisionCenter.x,
+      rockfall.collisionCenter.y,
+      rockfall.collisionCenter.z,
+      rockfall.collisionRadius,
+    )
+    if (collision === null || (earliestHit !== null && collision.t >= earliestHit.t)) {
+      continue
+    }
+    earliestHit = {
+      eventKey: rockfall.eventKey,
+      kind: rockfall.kind,
+      obstacleId: `${rockfall.eventKey}:body`,
+      ...collision,
+    }
+  }
+
+  const wave = frame.lavaWave
+  if (wave.collisionActive && !handled.has(wave.eventKey)) {
+    const angleCosine = Math.cos(wave.angleOffsetRadians)
+    const angleSine = Math.sin(wave.angleOffsetRadians)
+    for (let index = 0; index < LAVA_WAVE_COLLISION_SEGMENTS; index += 1) {
+      const unitX = LAVA_WAVE_COLLISION_COSINES[index] ?? 0
+      const unitZ = LAVA_WAVE_COLLISION_SINES[index] ?? 0
+      const rotatedX = unitX * angleCosine - unitZ * angleSine
+      const rotatedZ = unitZ * angleCosine + unitX * angleSine
+      const collision = sampleSweptSphere(
+        query.previous,
+        query.current,
+        query.movingRadius,
+        wave.center.x + rotatedX * wave.waveRadius,
+        wave.center.y,
+        wave.center.z + rotatedZ * wave.waveRadius,
+        wave.collisionBandRadius,
+      )
+      if (
+        collision === null ||
+        (earliestHit !== null && collision.t >= earliestHit.t)
+      ) {
+        continue
+      }
+      earliestHit = {
+        eventKey: wave.eventKey,
+        kind: wave.kind,
+        obstacleId: `${wave.eventKey}:ring:${index}`,
+        ...collision,
+      }
+    }
+  }
+
+  if (earliestHit === null) {
     return { hit: null, handledEventKeys }
   }
 
   return {
-    hit: {
-      eventKey: obstacle.eventKey,
-      kind: obstacle.kind,
-      obstacleId: collision.obstacleId,
-      t: collision.t,
-      point: collision.point,
-    },
-    handledEventKeys: [...handledEventKeys, obstacle.eventKey],
+    hit: earliestHit,
+    handledEventKeys: [...handledEventKeys, earliestHit.eventKey],
   }
 }

@@ -104,6 +104,16 @@ export function resolveCoinLeagueRegionId(
   return coinRunRegionId ?? currentRegionId
 }
 
+export function getExploreCollectibleLabel(
+  coinRunRegionId: OpenWorldRegionId | null,
+  currentRegionId: OpenWorldRegionId | null,
+): '동전' | '냉각 수정' {
+  return resolveCoinLeagueRegionId(coinRunRegionId, currentRegionId) ===
+    'volcanic-archipelago'
+    ? '냉각 수정'
+    : '동전'
+}
+
 export function formatFestivalJourneyLine(
   journey: FestivalJourneyHudView,
 ): string {
@@ -124,19 +134,59 @@ export function formatFestivalJourneyLine(
   }
 }
 
-export function formatFestivalMapProgress(
+export function formatExploreJourneyLine(
+  currentRegionId: OpenWorldRegionId | null,
+  journey: FestivalJourneyHudView,
+): string {
+  return currentRegionId === 'volcanic-archipelago'
+    ? '태양의 심장 · 냉각 봉인 3개를 깨우고 분화 전에 탈출하세요'
+    : formatFestivalJourneyLine(journey)
+}
+
+function formatFestivalJourneyProgress(
   journey: FestivalJourneyHudView,
   coinBestTimeMs: number | undefined,
-  selectedMissionId: MissionId,
 ): string {
   const coinRecord =
     coinBestTimeMs === undefined
       ? '미기록'
       : formatCoinRunTime(coinBestTimeMs)
+  return `축제 여정 · 랜드마크 ${journey.publicLandmarkCount}/4 · 상승기류 ${journey.windZoneCount}/3 · 비밀 ${journey.secretDiscovered ? '발견' : '미발견'} · 동전 최고 ${coinRecord}`
+}
+
+function formatSelectedMissionGuidance(selectedMissionId: MissionId): string {
   const selectedMission =
     MISSION_CATALOG.find(({ id }) => id === selectedMissionId) ??
     MISSION_CATALOG[0]
-  return `축제 여정 · 랜드마크 ${journey.publicLandmarkCount}/4 · 상승기류 ${journey.windZoneCount}/3 · 비밀 ${journey.secretDiscovered ? '발견' : '미발견'} · 동전 최고 ${coinRecord} · 선택 미션 ${selectedMission.name} · 왕관 레이스 아치에서 도전`
+  const challengeName =
+    selectedMission.courseId === 'volcanic-archipelago'
+      ? '태양의 심장 봉인 비콘'
+      : '왕관 레이스 아치'
+  return `선택 미션 ${selectedMission.name} · ${challengeName}에서 도전`
+}
+
+export function formatFestivalMapProgress(
+  journey: FestivalJourneyHudView,
+  coinBestTimeMs: number | undefined,
+  selectedMissionId: MissionId,
+): string {
+  return `${formatFestivalJourneyProgress(journey, coinBestTimeMs)} · ${formatSelectedMissionGuidance(selectedMissionId)}`
+}
+
+export function formatExplorationMapProgress(
+  journey: FestivalJourneyHudView,
+  coinBestTimesMs: Readonly<CoinBestTimes>,
+  selectedMissionId: MissionId,
+): string {
+  const volcanicRecord = coinBestTimesMs['volcanic-archipelago']
+  const volcanicRecordLabel =
+    volcanicRecord === undefined
+      ? '미기록'
+      : formatCoinRunTime(volcanicRecord)
+  return `${formatFestivalJourneyProgress(
+    journey,
+    coinBestTimesMs['festival-hub'],
+  )} · 용암 군도 · 냉각 수정 최고 ${volcanicRecordLabel} · ${formatSelectedMissionGuidance(selectedMissionId)}`
 }
 
 export function formatFestivalDiscoveryNotice(
@@ -170,8 +220,13 @@ export function getExploreContextLabel(
   atChallenge: boolean,
   movement: ExplorationMovement,
   canLand: boolean,
+  currentRegionId: OpenWorldRegionId | null = null,
 ): string | null {
-  if (atChallenge) return '레이스 도전'
+  if (atChallenge) {
+    return currentRegionId === 'volcanic-archipelago'
+      ? '태양의 심장 · 냉각 봉인 도전'
+      : '레이스 도전'
+  }
   if (movement === 'landed') return '이륙'
   if (canLand && movement === 'airborne') return '착륙'
   return null
@@ -403,6 +458,10 @@ export function createExplorationHud(
       view.currentRegionId,
     )
     if (regionId === null) return
+    const collectibleLabel = getExploreCollectibleLabel(
+      view.coinRun.regionId,
+      view.currentRegionId,
+    )
     const regionDefinition = OPEN_WORLD_REGIONS.find(
       (entry) => entry.id === regionId,
     )
@@ -410,9 +469,13 @@ export function createExplorationHud(
     const nextSignature = `${regionId}:${board.join(',')}`
     coinLeagueToggle.setAttribute(
       'aria-label',
-      `${regionDefinition?.name ?? '현재 지역'} 하늘동전 Top 10 ${
+      `${regionDefinition?.name ?? '현재 지역'} ${collectibleLabel} Top 10 ${
         coinLeagueExpanded ? '닫기' : '보기'
       }`,
+    )
+    coinLeaderboard.setAttribute(
+      'aria-label',
+      `${regionDefinition?.name ?? '현재 지역'} ${collectibleLabel} Top 10 순위`,
     )
     coinLeaderboardSignature = updateCachedDom(
       coinLeaderboardSignature,
@@ -440,7 +503,11 @@ export function createExplorationHud(
     element: root,
     update: (view) => {
       region.textContent = view.regionName
-      coinCount.textContent = `동전 ${view.coinRun.collectedCount}/10`
+      const collectibleLabel = getExploreCollectibleLabel(
+        view.coinRun.regionId,
+        view.currentRegionId,
+      )
+      coinCount.textContent = `${collectibleLabel} ${view.coinRun.collectedCount}/10`
       coinTime.textContent = formatCoinRunTime(
         view.coinRun.finalElapsedMs ?? view.coinRun.elapsedMs,
       )
@@ -451,7 +518,9 @@ export function createExplorationHud(
           : formatGhostDelta(view.coinLiveDeltaMs)
       coinRun.dataset.phase = view.coinRun.phase
       coinRun.dataset.newBest = String(view.coinRunIsNewBest)
-      coinRun.title = view.coinRunIsNewBest ? '지역 최고 기록' : '하늘동전 기록 도전'
+      coinRun.title = view.coinRunIsNewBest
+        ? `${collectibleLabel} 지역 최고 기록`
+        : `${collectibleLabel} 기록 도전`
       coinGuide.hidden =
         view.paused ||
         view.mapOpen ||
@@ -491,11 +560,19 @@ export function createExplorationHud(
       }
       coinLeague.hidden = leagueRegionId === null || view.paused
       if (leagueRegionId !== null) updateCoinLeaderboard(view)
-      journeyProgress.textContent = `여정 ${view.journey.completedSteps}/${view.journey.totalSteps}`
-      journeyCopy.textContent = formatFestivalJourneyLine(view.journey).replace(
-        /^여정 \d+\/\d+ · /,
-        '',
+      const journeyLine = formatExploreJourneyLine(
+        view.currentRegionId,
+        view.journey,
       )
+      const journeySeparatorIndex = journeyLine.indexOf(' · ')
+      journeyProgress.textContent =
+        journeySeparatorIndex === -1
+          ? journeyLine
+          : journeyLine.slice(0, journeySeparatorIndex)
+      journeyCopy.textContent =
+        journeySeparatorIndex === -1
+          ? ''
+          : journeyLine.slice(journeySeparatorIndex + 3)
       const hasDiscoveryNotice = view.discoveryNotice !== null
       journey.dataset.notice = String(hasDiscoveryNotice)
       journeyCopy.hidden = hasDiscoveryNotice
@@ -523,14 +600,15 @@ export function createExplorationHud(
         view.atChallenge,
         view.movement,
         view.canLand,
+        view.currentRegionId,
       )
       context.hidden = label === null || view.paused || view.mapOpen
       context.textContent = label ?? ''
       context.setAttribute('aria-label', label ?? '상황 동작')
       map.hidden = !view.mapOpen || view.paused
-      festivalProgress.textContent = formatFestivalMapProgress(
+      festivalProgress.textContent = formatExplorationMapProgress(
         view.journey,
-        view.coinBestTimesMs['festival-hub'],
+        view.coinBestTimesMs,
         view.selectedMissionId,
       )
       mapButton.setAttribute('aria-expanded', String(view.mapOpen))

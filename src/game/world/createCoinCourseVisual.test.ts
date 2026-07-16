@@ -5,6 +5,7 @@ import {
   createCoinRunState,
   getCoinRunTarget,
 } from '../collectibles/coinRun'
+import { getCoinCourse } from '../collectibles/coinCourses'
 import { createCoinCourseVisual } from './createCoinCourseVisual'
 
 describe('coin course visual', () => {
@@ -21,9 +22,10 @@ describe('coin course visual', () => {
       0,
     )
     expect(visual.debugSnapshot()).toEqual({
-      totalCount: 30,
+      totalCount: 40,
       visibleCount: 1,
       activeCoinId: 'festival-hub-coin-1',
+      visualKind: 'sky-coin',
       drawCalls: 1,
     })
 
@@ -48,6 +50,69 @@ describe('coin course visual', () => {
       drawCalls: 1,
     })
     expect(scene.getObjectByName('RC6_SkyCoins')).toBeDefined()
+  })
+
+  it('reuses pooled meshes while switching from a sky coin to a cooling crystal and then hiding', () => {
+    const scene = new THREE.Scene()
+    const visual = createCoinCourseVisual(scene)
+    const skyCoinMesh = scene.getObjectByName('RC6_SkyCoins')
+    const coolingCrystalMesh = scene.getObjectByName(
+      'M39_CoolingCrystals',
+    )
+
+    expect(skyCoinMesh).toBeInstanceOf(THREE.InstancedMesh)
+    expect(coolingCrystalMesh).toBeInstanceOf(THREE.InstancedMesh)
+
+    const skyCoinGeometry = (skyCoinMesh as THREE.InstancedMesh).geometry
+    const crystalGeometry = (
+      coolingCrystalMesh as THREE.InstancedMesh
+    ).geometry
+
+    visual.update(getCoinCourse('festival-hub').coins[0], 0)
+    expect(visual.debugSnapshot()).toMatchObject({
+      visibleCount: 1,
+      activeCoinId: 'festival-hub-coin-1',
+      visualKind: 'sky-coin',
+      drawCalls: 1,
+    })
+    expect(skyCoinMesh?.visible).toBe(true)
+    expect(coolingCrystalMesh?.visible).toBe(false)
+
+    visual.update(
+      getCoinCourse('volcanic-archipelago').coins[0],
+      1,
+    )
+    expect(visual.debugSnapshot()).toMatchObject({
+      visibleCount: 1,
+      activeCoinId: 'volcanic-archipelago-coin-1',
+      visualKind: 'cooling-crystal',
+      drawCalls: 1,
+    })
+    expect(skyCoinMesh?.visible).toBe(false)
+    expect(coolingCrystalMesh?.visible).toBe(true)
+    expect(scene.getObjectByName('RC6_SkyCoins')).toBe(skyCoinMesh)
+    expect(scene.getObjectByName('M39_CoolingCrystals')).toBe(
+      coolingCrystalMesh,
+    )
+    expect((skyCoinMesh as THREE.InstancedMesh).geometry).toBe(
+      skyCoinGeometry,
+    )
+    expect((coolingCrystalMesh as THREE.InstancedMesh).geometry).toBe(
+      crystalGeometry,
+    )
+    expect(crystalGeometry.type).toBe('OctahedronGeometry')
+
+    visual.update(null, 2)
+    expect(visual.debugSnapshot()).toMatchObject({
+      visibleCount: 0,
+      activeCoinId: null,
+      visualKind: null,
+      drawCalls: 0,
+    })
+    expect(skyCoinMesh?.visible).toBe(false)
+    expect(coolingCrystalMesh?.visible).toBe(false)
+
+    visual.dispose()
   })
 
   it('does not expose two idle targets when loaded regions overlap', () => {
@@ -80,6 +145,9 @@ describe('coin course visual', () => {
 
     visual.dispose()
     expect(scene.getObjectByName('RC6_SkyCoins')).toBeUndefined()
+    expect(
+      scene.getObjectByName('M39_CoolingCrystals'),
+    ).toBeUndefined()
   })
 
   it('keeps the active coin readable through world occluders', () => {

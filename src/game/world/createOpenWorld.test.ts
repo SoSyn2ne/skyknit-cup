@@ -40,6 +40,50 @@ async function settleLoads(): Promise<void> {
 }
 
 describe('open-world region GLB streaming', () => {
+  it('does not traverse loaded region objects during a steady-state update', async () => {
+    const asset = createAsset('SteadyStateAsset')
+    const beacon = new THREE.Object3D()
+    beacon.userData.animate = 'beacon'
+    const wind = new THREE.Object3D()
+    wind.userData.animate = 'wind'
+    const rune = new THREE.Object3D()
+    rune.userData.animate = 'rune'
+    asset.add(beacon, wind, rune)
+    const world = createOpenWorld(new THREE.Scene(), {
+      assetLoader: { load: async () => asset },
+    })
+
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    await settleLoads()
+
+    const traverse = vi.spyOn(THREE.Object3D.prototype, 'traverse')
+    world.update({ x: 0, y: 8, z: -40 }, 1)
+    expect(world.getLoadedRegionIds()).toEqual(['festival-hub'])
+    expect(beacon.rotation.y).toBe(0.75)
+    expect(wind.rotation.z).toBe(0.45)
+    expect(rune.rotation.z).toBe(-0.24)
+
+    expect(traverse).not.toHaveBeenCalled()
+    traverse.mockRestore()
+    world.dispose()
+  })
+
+  it('does not traverse loaded region objects while reading a debug snapshot', async () => {
+    const world = createOpenWorld(new THREE.Scene(), {
+      assetLoader: { load: async () => createAsset('DebugSnapshotAsset') },
+    })
+
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    await settleLoads()
+
+    const traverse = vi.spyOn(THREE.Object3D.prototype, 'traverse')
+    expect(world.debugSnapshot().meshCount).toBe(1)
+
+    expect(traverse).not.toHaveBeenCalled()
+    traverse.mockRestore()
+    world.dispose()
+  })
+
   it('replaces the volcanic lava surface once and advances its shader time', async () => {
     const originalMaterial = new THREE.MeshStandardMaterial({ color: 0xff3b12 })
     const disposeOriginal = vi.spyOn(originalMaterial, 'dispose')
@@ -64,9 +108,76 @@ describe('open-world region GLB streaming', () => {
     }
     const lavaMaterial = lava.material
     expect(lavaMaterial.uniforms.uTime.value).toBe(0)
+    expect(lavaMaterial.uniforms.fogColor).toBeDefined()
+    expect(lavaMaterial.uniforms.fogNear).toBeDefined()
+    expect(lavaMaterial.uniforms.fogFar).toBeDefined()
+    expect(lavaMaterial.fragmentShader).toContain('lavaColor *= vColor.rgb')
+    expect(lavaMaterial.fragmentShader).not.toContain('lavaColor *= vColor;')
+    expect(lavaMaterial.vertexShader).toContain('position.z * 0.13')
+    expect(lavaMaterial.vertexShader).toContain('position.z * 0.27')
+    expect(lavaMaterial.vertexShader).not.toContain('position.y * 0.13')
+    expect(lavaMaterial.fragmentShader).not.toContain('sin(')
+    expect(lavaMaterial.side).toBe(THREE.FrontSide)
 
     world.update({ x: -240, y: 28, z: -820 }, 2.5)
     expect(lavaMaterial.uniforms.uTime.value).toBe(2.5)
+
+    world.dispose()
+  })
+
+  it('reuses lightweight authored volcanic materials without dynamic terrain shadows', async () => {
+    const texture = new THREE.Texture()
+    const source = new THREE.MeshStandardMaterial({
+      color: 0x231b28,
+      emissive: 0x2a0700,
+      emissiveIntensity: 0.42,
+      map: texture,
+      opacity: 0.86,
+      transparent: true,
+      side: THREE.DoubleSide,
+      vertexColors: true,
+    })
+    source.name = 'M_Volcanic_Basalt'
+    const disposeSource = vi.spyOn(source, 'dispose')
+    const asset = new THREE.Group()
+    const caldera = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), source)
+    caldera.name = 'VolcanoCaldera'
+    const islands = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), source)
+    islands.name = 'ObsidianIslands'
+    const landingPad = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial(),
+    )
+    landingPad.name = 'LandingPad'
+    asset.add(caldera, islands, landingPad)
+    const world = createOpenWorld(new THREE.Scene(), {
+      assetLoader: { load: async () => asset },
+    })
+
+    world.update({ x: -240, y: 28, z: -820 }, 0)
+    await settleLoads()
+
+    const convertedMaterial = caldera.material as THREE.Material
+    expect(convertedMaterial).toBeInstanceOf(THREE.MeshLambertMaterial)
+    expect(islands.material).toBe(caldera.material)
+    expect(disposeSource).toHaveBeenCalledOnce()
+    if (!(convertedMaterial instanceof THREE.MeshLambertMaterial)) {
+      throw new Error('volcanic authored material was not converted')
+    }
+    const converted = convertedMaterial
+    expect(converted.name).toBe('M_Volcanic_Basalt_Lambert')
+    expect(converted.color.getHex()).toBe(0x231b28)
+    expect(converted.emissive.getHex()).toBe(0x2a0700)
+    expect(converted.emissiveIntensity).toBe(0.42)
+    expect(converted.map).toBe(texture)
+    expect(converted.opacity).toBe(0.86)
+    expect(converted.transparent).toBe(true)
+    expect(converted.side).toBe(THREE.FrontSide)
+    expect(converted.vertexColors).toBe(true)
+    expect(caldera.castShadow).toBe(false)
+    expect(caldera.receiveShadow).toBe(false)
+    expect(landingPad.castShadow).toBe(false)
+    expect(landingPad.receiveShadow).toBe(true)
 
     world.dispose()
   })

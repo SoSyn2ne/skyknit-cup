@@ -50,6 +50,29 @@ export function createStoryPrologue(
     story.append(paragraph)
   }
 
+  const volcanicChapter = document.createElement('section')
+  volcanicChapter.className = 'story-prologue__chapter'
+  volcanicChapter.setAttribute(
+    'aria-labelledby',
+    `${idPrefix}-volcanic-title`,
+  )
+
+  const volcanicTitle = document.createElement('h3')
+  volcanicTitle.id = `${idPrefix}-volcanic-title`
+  volcanicTitle.textContent = '제2장 · 태양의 심장 — 용암 군도'
+  volcanicChapter.append(volcanicTitle)
+
+  for (const copy of [
+    '황금 하늘매듭을 완성한 뒤, 용암 군도의 태양의 심장이 깨어났다. 세 냉각 봉인을 차례로 깨우고 분화가 덮치기 전에 하늘길로 탈출하라.',
+    '잿불 봉황은 화산의 열기에 온기로 빛나고 폭풍 백호의 깃 가장자리는 청록빛으로 반응한다. 모습은 달라도 두 수호수와 해뜰녘 드래곤의 비행 성능은 모두 같다.',
+  ]) {
+    const paragraph = document.createElement('p')
+    paragraph.textContent = copy
+    volcanicChapter.append(paragraph)
+  }
+
+  story.append(volcanicChapter)
+
   const closeButton = document.createElement('button')
   closeButton.type = 'button'
   closeButton.textContent = '비행으로 돌아가기'
@@ -89,6 +112,7 @@ export function createStoryPrologue(
     open: (opener) => {
       openerElement = opener
       root.hidden = false
+      story.scrollTop = 0
       closeButton.focus({ preventScroll: true })
     },
     dispose: () => root.remove(),

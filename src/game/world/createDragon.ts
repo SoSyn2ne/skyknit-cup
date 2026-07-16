@@ -1,12 +1,15 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
+import { QA_MODE } from '../../qaMode'
+
 import {
   CHARACTER_ACCESSORIES,
   CHARACTER_CATALOG,
   CHARACTER_PALETTES,
   normalizeCharacterLoadout,
   type CharacterAccessoryDefinition,
+  type CharacterId,
   type CharacterLoadout,
   type CharacterMotionProfile,
   type CharacterPaletteDefinition,
@@ -25,9 +28,11 @@ export interface DragonPalette {
 }
 
 export type DragonAppearance = 'player' | 'ghost'
+export type GhostDragonDetail = 'asset' | 'echo'
 
 export interface CreateDragonOptions {
   readonly appearance?: DragonAppearance
+  readonly ghostDetail?: GhostDragonDetail
   readonly loadout?: CharacterLoadout
 }
 
@@ -40,6 +45,7 @@ export const GHOST_DRAGON_VISUAL_SPEC = Object.freeze({
 
 export interface DragonDebugSnapshot {
   readonly appearance: DragonAppearance
+  readonly ghostDetail: GhostDragonDetail
   readonly loadout: CharacterLoadout
   readonly source: 'fallback' | 'glb'
   readonly meshCount: number
@@ -49,7 +55,11 @@ export interface DragonDebugSnapshot {
   readonly blinkAmount: number
   readonly jawOpenRadians: number
   readonly shadowsEnabled: boolean
+  readonly volcanicReactionIntensity: number
+  readonly volcanicReactionRole: VolcanicReactionRole
 }
+
+export type VolcanicReactionRole = 'body' | 'membrane'
 
 export interface DragonVisual {
   readonly movementRoot: THREE.Group
@@ -59,6 +69,7 @@ export interface DragonVisual {
     pose: DragonPoseState,
   ): void
   setShadows(enabled: boolean): void
+  setVolcanicReaction(intensity: number): void
   debugSnapshot(): DragonDebugSnapshot
   dispose(): void
 }
@@ -78,7 +89,34 @@ interface MaterialState {
   readonly material: THREE.MeshStandardMaterial
   readonly emissive: THREE.Color
   readonly emissiveIntensity: number
+  readonly role: CharacterMaterialRole | null
 }
+
+interface VolcanicReactionSpec {
+  readonly role: VolcanicReactionRole
+  readonly color: THREE.ColorRepresentation
+  readonly strengths: Readonly<Record<CharacterMaterialRole, number>>
+}
+
+const VOLCANIC_REACTION_SPECS: Readonly<
+  Record<CharacterId, VolcanicReactionSpec>
+> = Object.freeze({
+  'sunrise-dragon': Object.freeze({
+    role: 'body',
+    color: '#ffb35c',
+    strengths: Object.freeze({ body: 1, membrane: 0.3, glow: 0.75 }),
+  }),
+  'ember-phoenix': Object.freeze({
+    role: 'body',
+    color: '#ff6a2e',
+    strengths: Object.freeze({ body: 1, membrane: 0.62, glow: 0.9 }),
+  }),
+  'storm-white-tiger': Object.freeze({
+    role: 'membrane',
+    color: '#63f3ef',
+    strengths: Object.freeze({ body: 0.2, membrane: 1, glow: 0.82 }),
+  }),
+})
 
 interface GuardianMotionProfile {
   readonly wingFlapScale: number
@@ -127,28 +165,50 @@ const GUARDIAN_MOTION_PROFILES: Readonly<
 })
 
 function captureMaterialStates(
-  materials: Iterable<THREE.MeshStandardMaterial>,
+  root: THREE.Object3D,
 ): readonly MaterialState[] {
-  return [...materials].map((material) => ({
-    material,
-    emissive: material.emissive.clone(),
-    emissiveIntensity: material.emissiveIntensity,
-  }))
+  const states = new Map<THREE.MeshStandardMaterial, MaterialState>()
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material]
+    for (const material of materials) {
+      if (!(material instanceof THREE.MeshStandardMaterial)) continue
+      const role = getCharacterMaterialRole(object, material)
+      const existing = states.get(material)
+      if (existing !== undefined && (existing.role !== null || role === null)) {
+        continue
+      }
+      states.set(material, {
+        material,
+        emissive: material.emissive.clone(),
+        emissiveIntensity: material.emissiveIntensity,
+        role,
+      })
+    }
+  })
+  return [...states.values()]
 }
 
 type CharacterMaterialRole = 'body' | 'membrane' | 'glow'
 
-function getCharacterMaterialRole(
-  object: THREE.Object3D,
-  material: THREE.Material,
+function getCharacterMaterialRoleForName(
+  roleName: string,
 ): CharacterMaterialRole | null {
-  const roleName = `${object.name} ${material.name}`
   if (/glow|rune|emissive/i.test(roleName)) return 'glow'
   if (/membrane|wing|feather|fin|gold/i.test(roleName)) {
     return 'membrane'
   }
   if (/body|ember|hide|fur|scale|plumage/i.test(roleName)) return 'body'
   return null
+}
+
+function getCharacterMaterialRole(
+  object: THREE.Object3D,
+  material: THREE.Material,
+): CharacterMaterialRole | null {
+  return getCharacterMaterialRoleForName(`${object.name} ${material.name}`)
 }
 
 function setTintableMaterialColor(
@@ -282,7 +342,26 @@ function ghostUsesGold(
 function createGhostMaterial(
   source: THREE.Material,
   color: THREE.ColorRepresentation,
+  detail: GhostDragonDetail,
+  wireframe: boolean,
 ): THREE.Material {
+  if (detail === 'echo') {
+    const material = new THREE.MeshBasicMaterial({
+      name: `M33_Echo_${source.name || source.type}`,
+      color,
+      transparent: true,
+      opacity: GHOST_DRAGON_VISUAL_SPEC.opacity,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      side: source.side,
+      fog: true,
+      wireframe,
+    })
+    material.toneMapped = false
+    material.userData.skyLeagueGhost = true
+    return material
+  }
+
   const material = source.clone()
   material.name = `M33_Ghost_${source.name || source.type}`
   material.transparent = true
@@ -323,6 +402,7 @@ function createGhostMaterial(
 function applyGhostAppearance(
   root: THREE.Object3D,
   palette: DragonPalette,
+  detail: GhostDragonDetail = 'asset',
 ): void {
   const replacements = new Map<string, THREE.Material>()
   const sourceMaterials = new Set<THREE.Material>()
@@ -335,14 +415,23 @@ function applyGhostAppearance(
       : [object.material]
     const ghostMaterials = materials.map((material) => {
       sourceMaterials.add(material)
-      const color = ghostUsesGold(object, material)
+      const usesGold = ghostUsesGold(object, material)
+      const color = usesGold
         ? palette.wingGold
         : GHOST_DRAGON_VISUAL_SPEC.teal
-      const replacementKey = `${material.uuid}:${color}`
+      const wireframe = detail === 'echo' && !usesGold
+      const replacementKey = detail === 'echo'
+        ? `${detail}:${color}:${wireframe}:${material.side}`
+        : `${material.uuid}:${color}`
       const existing = replacements.get(replacementKey)
       if (existing !== undefined) return existing
 
-      const replacement = createGhostMaterial(material, color)
+      const replacement = createGhostMaterial(
+        material,
+        color,
+        detail,
+        wireframe,
+      )
       replacements.set(replacementKey, replacement)
       return replacement
     })
@@ -377,6 +466,7 @@ function createWingGeometry(side: -1 | 1): THREE.BufferGeometry {
 function createFallbackDragon(
   palette: DragonPalette,
   appearance: DragonAppearance,
+  ghostDetail: GhostDragonDetail,
 ): { readonly root: THREE.Group; readonly rig: RigParts } {
   const ember = new THREE.MeshStandardMaterial({
     color: palette.dragonEmber,
@@ -427,27 +517,19 @@ function createFallbackDragon(
 
   const leftWing = new THREE.Group()
   leftWing.position.set(-0.24, 0.18, -0.25)
-  leftWing.add(new THREE.Mesh(createWingGeometry(-1), gold))
+  const wingGeometry = createWingGeometry(-1)
+  leftWing.add(new THREE.Mesh(wingGeometry, gold))
   bodyRoot.add(leftWing)
   const rightWing = new THREE.Group()
   rightWing.position.set(0.24, 0.18, -0.25)
-  rightWing.add(new THREE.Mesh(createWingGeometry(1), gold))
+  const rightWingMesh = new THREE.Mesh(wingGeometry, gold)
+  rightWingMesh.scale.x = -1
+  rightWing.add(rightWingMesh)
   bodyRoot.add(rightWing)
 
-  if (appearance === 'ghost') applyGhostAppearance(root, palette)
-
-  const materials = new Set<THREE.MeshStandardMaterial>()
-  root.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return
-    const objectMaterials = Array.isArray(object.material)
-      ? object.material
-      : [object.material]
-    for (const material of objectMaterials) {
-      if (material instanceof THREE.MeshStandardMaterial) {
-        materials.add(material)
-      }
-    }
-  })
+  if (appearance === 'ghost') {
+    applyGhostAppearance(root, palette, ghostDetail)
+  }
 
   return {
     root,
@@ -459,7 +541,7 @@ function createFallbackDragon(
       tail: [tailMesh],
       jaw: null,
       eyes: [],
-      materialStates: captureMaterialStates(materials),
+      materialStates: captureMaterialStates(root),
     },
   }
 }
@@ -487,21 +569,12 @@ function collectRig(scene: THREE.Object3D): RigParts | null {
     return null
   }
 
-  const materials = new Set<THREE.MeshStandardMaterial>()
   scene.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) {
       return
     }
 
     object.castShadow = false
-    const objectMaterials = Array.isArray(object.material)
-      ? object.material
-      : [object.material]
-    for (const material of objectMaterials) {
-      if (material instanceof THREE.MeshStandardMaterial) {
-        materials.add(material)
-      }
-    }
   })
 
   return {
@@ -512,7 +585,7 @@ function collectRig(scene: THREE.Object3D): RigParts | null {
     tail,
     jaw,
     eyes,
-    materialStates: captureMaterialStates(materials),
+    materialStates: captureMaterialStates(scene),
   }
 }
 
@@ -563,6 +636,8 @@ export function createDragon(
   options: CreateDragonOptions = {},
 ): DragonVisual {
   const appearance = options.appearance ?? 'player'
+  const ghostDetail =
+    appearance === 'ghost' ? (options.ghostDetail ?? 'asset') : 'asset'
   const loadout = normalizeCharacterLoadout(options.loadout)
   const character =
     CHARACTER_CATALOG.find((entry) => entry.id === loadout.characterId) ??
@@ -574,6 +649,8 @@ export function createDragon(
     CHARACTER_ACCESSORIES.find((entry) => entry.id === loadout.accessoryId) ??
     CHARACTER_ACCESSORIES[0]
   const motionProfile = GUARDIAN_MOTION_PROFILES[character.motionProfile]
+  const volcanicReactionSpec = VOLCANIC_REACTION_SPECS[character.id]
+  const volcanicReactionColor = new THREE.Color(volcanicReactionSpec.color)
   const isGhost = appearance === 'ghost'
   const movementRoot = new THREE.Group()
   movementRoot.name = isGhost
@@ -585,7 +662,7 @@ export function createDragon(
     ? 'M33_SkyLeagueGhostDragonPoseRoot'
     : 'M3_DragonPoseRoot'
   movementRoot.add(poseRoot)
-  const fallback = createFallbackDragon(palette, appearance)
+  const fallback = createFallbackDragon(palette, appearance, ghostDetail)
   poseRoot.add(fallback.root)
 
   let rig = fallback.rig
@@ -596,15 +673,22 @@ export function createDragon(
   let blinkAmount = 0
   let jawOpenRadians = 0
   let shadowsEnabled = false
+  let volcanicReactionIntensity = 0
   let loadedAsset: THREE.Object3D | null = null
+  let fallbackDisposed = false
+  const disposeFallback = (): void => {
+    if (fallbackDisposed) return
+    fallbackDisposed = true
+    disposeObject(fallback.root)
+  }
   const hitColor = new THREE.Color(palette.collisionCoral)
   const forceFallback =
-    import.meta.env.DEV &&
+    QA_MODE &&
     new URLSearchParams(window.location.search).get('forceDragonFailure') ===
       '1'
   const loader = new GLTFLoader()
   const ready = (async (): Promise<'fallback' | 'glb'> => {
-    if (forceFallback) return 'fallback'
+    if (forceFallback || ghostDetail === 'echo') return 'fallback'
 
     let characterAsset: THREE.Object3D | null = null
     let accessoryAsset: THREE.Object3D | null = null
@@ -663,6 +747,7 @@ export function createDragon(
       characterAsset.traverse((object) => {
         if (object instanceof THREE.Mesh) meshCount += 1
       })
+      disposeFallback()
       return source
     } catch {
       if (characterAsset !== null && characterAsset !== loadedAsset) {
@@ -724,26 +809,41 @@ export function createDragon(
 
       const feedbackActive = pose.recoilRadians < -0.01
       for (const state of rig.materialStates) {
-        state.material.emissive.copy(
-          feedbackActive ? hitColor : state.emissive,
-        )
-        state.material.emissiveIntensity = feedbackActive
-          ? 0.45
-          : state.emissiveIntensity
+        const reactionStrength =
+          state.role === null
+            ? 0
+            : volcanicReactionSpec.strengths[state.role] *
+              volcanicReactionIntensity
+        state.material.userData.volcanicReactionRole = state.role
+        if (feedbackActive) {
+          state.material.emissive.copy(hitColor)
+          state.material.emissiveIntensity = 0.45
+          continue
+        }
+        state.material.emissive
+          .copy(state.emissive)
+          .lerp(volcanicReactionColor, reactionStrength)
+        state.material.emissiveIntensity =
+          state.emissiveIntensity + reactionStrength * 0.92
       }
     },
     setShadows: (enabled) => {
       if (disposed) return
       shadowsEnabled = !isGhost && enabled
-      setObjectShadows(fallback.root, shadowsEnabled)
+      if (!fallbackDisposed) setObjectShadows(fallback.root, shadowsEnabled)
       if (source === 'glb') {
         if (loadedAsset !== null) {
           setObjectShadows(loadedAsset, shadowsEnabled)
         }
       }
     },
+    setVolcanicReaction: (intensity) => {
+      if (disposed || !Number.isFinite(intensity)) return
+      volcanicReactionIntensity = Math.min(1, Math.max(0, intensity))
+    },
     debugSnapshot: () => ({
       appearance,
+      ghostDetail,
       loadout: { ...loadout },
       source,
       meshCount,
@@ -753,11 +853,13 @@ export function createDragon(
       blinkAmount,
       jawOpenRadians,
       shadowsEnabled,
+      volcanicReactionIntensity,
+      volcanicReactionRole: volcanicReactionSpec.role,
     }),
     dispose: () => {
       if (disposed) return
       disposed = true
-      disposeObject(fallback.root)
+      disposeFallback()
       if (loadedAsset !== null) {
         disposeObject(loadedAsset)
         loadedAsset = null

@@ -130,6 +130,32 @@ export function getVisualPitchRadians(state: FlightState): number {
   return pitchRatio * FLIGHT_TUNING.maxVisualPitchRadians
 }
 
+export function applyExternalVelocity(
+  state: FlightState,
+  velocity: Vec3Value,
+  dt: number,
+): FlightState {
+  if (
+    !Number.isFinite(dt) ||
+    dt <= 0 ||
+    !Number.isFinite(velocity.x) ||
+    !Number.isFinite(velocity.y) ||
+    !Number.isFinite(velocity.z) ||
+    (velocity.x === 0 && velocity.y === 0 && velocity.z === 0)
+  ) {
+    return state
+  }
+
+  return {
+    ...state,
+    position: {
+      x: state.position.x + velocity.x * dt,
+      y: state.position.y + velocity.y * dt,
+      z: state.position.z + velocity.z * dt,
+    },
+  }
+}
+
 export function stepFlight(
   state: FlightState,
   input: FlightInput,

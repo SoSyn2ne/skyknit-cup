@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest'
 import {
   formatCoinLeagueResult,
   formatCoinRunTime,
+  formatExplorationMapProgress,
   formatExploreDistance,
+  formatExploreJourneyLine,
   formatFestivalDiscoveryNotice,
   formatFestivalJourneyLine,
   formatFestivalMapProgress,
+  getExploreCollectibleLabel,
   getExploreContextLabel,
   resolveCoinLeagueRegionId,
 } from './ExplorationHud'
@@ -21,9 +24,32 @@ describe('exploration HUD formatting', () => {
 
   it('prioritizes challenge, then takeoff, then landing actions', () => {
     expect(getExploreContextLabel(true, 'airborne', true)).toBe('레이스 도전')
+    expect(
+      getExploreContextLabel(
+        true,
+        'airborne',
+        true,
+        'volcanic-archipelago',
+      ),
+    ).toBe('태양의 심장 · 냉각 봉인 도전')
     expect(getExploreContextLabel(false, 'landed', true)).toBe('이륙')
     expect(getExploreContextLabel(false, 'airborne', true)).toBe('착륙')
     expect(getExploreContextLabel(false, 'airborne', false)).toBeNull()
+  })
+
+  it('labels an active volcanic pickup route as cooling crystals', () => {
+    expect(
+      getExploreCollectibleLabel(
+        'volcanic-archipelago',
+        'festival-hub',
+      ),
+    ).toBe('냉각 수정')
+    expect(
+      getExploreCollectibleLabel(null, 'volcanic-archipelago'),
+    ).toBe('냉각 수정')
+    expect(getExploreCollectibleLabel('festival-hub', 'volcanic-archipelago')).toBe(
+      '동전',
+    )
   })
 
   it('formats the coin run clock with a stable compact width', () => {
@@ -97,6 +123,25 @@ describe('exploration HUD formatting', () => {
     ).toBe('여정 1/5 · 다음: 랜드마크 0/4 발견')
   })
 
+  it('replaces the festival journey objective with volcanic seal guidance', () => {
+    const journey = {
+      completedSteps: 4,
+      totalSteps: 5,
+      nextObjectiveId: 'race-mission',
+      isComplete: false,
+      publicLandmarkCount: 4,
+      windZoneCount: 3,
+      secretDiscovered: true,
+    } as const
+
+    expect(formatExploreJourneyLine('volcanic-archipelago', journey)).toBe(
+      '태양의 심장 · 냉각 봉인 3개를 깨우고 분화 전에 탈출하세요',
+    )
+    expect(formatExploreJourneyLine('festival-hub', journey)).toBe(
+      '여정 4/5 · 다음: 아치 레이스 완주',
+    )
+  })
+
   it('summarizes Festival Hub progress and records inside the map', () => {
     expect(
       formatFestivalMapProgress(
@@ -151,6 +196,30 @@ describe('exploration HUD formatting', () => {
 
     expect(progress).toContain('선택 미션 황금 하늘매듭')
     expect(progress).toContain('왕관 레이스 아치에서 도전')
+  })
+
+  it('adds the volcanic crystal record and selected mission to map progress', () => {
+    const progress = formatExplorationMapProgress(
+      {
+        completedSteps: 5,
+        totalSteps: 5,
+        nextObjectiveId: null,
+        isComplete: true,
+        publicLandmarkCount: 4,
+        windZoneCount: 3,
+        secretDiscovered: true,
+      },
+      {
+        'festival-hub': 65_432,
+        'volcanic-archipelago': 42_345,
+      },
+      'heart-of-sun',
+    )
+
+    expect(progress).toContain('축제 여정 · 랜드마크 4/4')
+    expect(progress).toContain('용암 군도 · 냉각 수정 최고 0:42.345')
+    expect(progress).toContain('선택 미션 태양의 심장')
+    expect(progress).toContain('태양의 심장 봉인 비콘에서 도전')
   })
 
   it.each([

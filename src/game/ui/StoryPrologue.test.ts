@@ -171,6 +171,29 @@ describe('story prologue', () => {
     expect(findByText(root, '비행으로 돌아가기').type).toBe('button')
   })
 
+  it('continues the story with the volcanic archipelago chapter', () => {
+    const { prologue, opener } = createFixture()
+    prologue.open(opener as unknown as HTMLElement)
+    const root = prologue.element as unknown as TestElement
+    const chapterTitle = findByText(
+      root,
+      '제2장 · 태양의 심장 — 용암 군도',
+    )
+    const chapter = chapterTitle.parent
+
+    expect(chapterTitle.tagName).toBe('H3')
+    expect(chapter?.tagName).toBe('SECTION')
+    expect(chapter?.attributes.get('aria-labelledby')).toBe(chapterTitle.id)
+    expect(findByText(
+      root,
+      '황금 하늘매듭을 완성한 뒤, 용암 군도의 태양의 심장이 깨어났다. 세 냉각 봉인을 차례로 깨우고 분화가 덮치기 전에 하늘길로 탈출하라.',
+    )).toBeDefined()
+    expect(findByText(
+      root,
+      '잿불 봉황은 화산의 열기에 온기로 빛나고 폭풍 백호의 깃 가장자리는 청록빛으로 반응한다. 모습은 달라도 두 수호수와 해뜰녘 드래곤의 비행 성능은 모두 같다.',
+    )).toBeDefined()
+  })
+
   it('focuses the close action, contains Tab, and restores the opener', () => {
     const { prologue, opener, close } = createFixture()
     prologue.open(opener as unknown as HTMLElement)

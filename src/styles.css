@@ -155,6 +155,48 @@ button {
   white-space: nowrap;
 }
 
+.race-hud__hazard-warning {
+  position: absolute;
+  top: max(150px, calc(env(safe-area-inset-top) + 136px));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 76%, var(--cloud));
+  border-radius: 6px;
+  color: var(--cloud);
+  background: color-mix(in srgb, var(--danger) 72%, var(--ink));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 28%, transparent);
+  transform: translateX(-50%);
+}
+
+.race-hud__hazard-icon {
+  color: var(--active);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.race-hud__hazard-warning strong {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.race-hud__hazard-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .race-hud__countdown {
   position: absolute;
   top: 50%;
@@ -736,9 +778,11 @@ button {
 }
 
 .story-prologue__dialog {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: min(620px, 100%);
   max-height: 100%;
-  overflow: auto;
+  overflow: hidden;
   padding: 26px;
   border-left: 4px solid var(--active);
   border-radius: 8px;
@@ -764,7 +808,13 @@ button {
 .story-prologue__story {
   display: grid;
   gap: 12px;
+  min-height: 0;
   margin-top: 18px;
+  padding-right: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
 }
 
 .story-prologue__story p {
@@ -772,6 +822,23 @@ button {
   color: var(--sky-haze);
   font-size: 0.875rem;
   line-height: 1.6;
+}
+
+.story-prologue__chapter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-column: 1 / -1;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--active) 38%, transparent);
+}
+
+.story-prologue__chapter h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--active);
+  font-size: 0.9375rem;
+  line-height: 1.35;
 }
 
 .story-prologue__dialog button {
@@ -932,6 +999,10 @@ button {
     border-top: 4px solid var(--active);
     border-left: 0;
     border-radius: 10px 10px 0 0;
+  }
+
+  .story-prologue__chapter {
+    grid-template-columns: 1fr;
   }
 
   .character-workshop {
@@ -1937,6 +2008,11 @@ button {
     min-width: 0;
     width: min(180px, calc(100% - 136px));
     padding: 6px 8px;
+  }
+
+  .race-hud__hazard-warning {
+    top: max(126px, calc(env(safe-area-inset-top) + 116px));
+    max-width: calc(100% - 32px);
   }
 
   .race-hud__panel {

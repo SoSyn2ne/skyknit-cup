@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { FIXED_STEP_SECONDS } from './fixedStep'
 import {
   FLIGHT_TUNING,
+  applyExternalVelocity,
   createInitialFlightState,
   getForwardVector,
   getVisualPitchRadians,
@@ -207,5 +208,45 @@ describe('external speed multiplier', () => {
 
     expect(negative.speed).toBe(0)
     expect(excessive.speed).toBe(FLIGHT_TUNING.cruiseSpeed)
+  })
+})
+
+describe('external environmental velocity', () => {
+  it('moves every guardian equally without changing flight balance state', () => {
+    const state = createInitialFlightState({
+      position: { x: 2, y: 4, z: 6 },
+      speed: 31,
+      boostRemaining: 72,
+      distanceTravelled: 180,
+    })
+    const lifted = applyExternalVelocity(
+      state,
+      { x: -2, y: 12, z: 4 },
+      0.5,
+    )
+
+    expect(lifted.position).toEqual({ x: 1, y: 10, z: 8 })
+    expect(lifted.speed).toBe(state.speed)
+    expect(lifted.boostRemaining).toBe(state.boostRemaining)
+    expect(lifted.distanceTravelled).toBe(state.distanceTravelled)
+    expect(state.position).toEqual({ x: 2, y: 4, z: 6 })
+  })
+
+  it('ignores invalid timing and velocity components', () => {
+    const state = createInitialFlightState()
+
+    expect(
+      applyExternalVelocity(state, { x: 1, y: 2, z: 3 }, 0),
+    ).toBe(state)
+    expect(
+      applyExternalVelocity(state, { x: 0, y: 0, z: 0 }, FIXED_STEP_SECONDS),
+    ).toBe(state)
+    expect(
+      applyExternalVelocity(
+        state,
+        { x: 1, y: Number.NaN, z: 3 },
+        FIXED_STEP_SECONDS,
+      ),
+    ).toBe(state)
   })
 })

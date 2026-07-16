@@ -6,6 +6,7 @@ import {
   type RendererRecoveryState,
   type RendererSession,
 } from './game/createRenderer'
+import { QA_MODE } from './qaMode'
 
 const appElement = document.querySelector<HTMLElement>('#app')
 
@@ -42,7 +43,7 @@ if (themeColor.length > 0) {
 }
 
 function clearTestHook(): void {
-  if (import.meta.env.DEV) {
+  if (QA_MODE) {
     if (debugMirrorTimer !== null) {
       window.clearInterval(debugMirrorTimer)
       debugMirrorTimer = null
@@ -54,7 +55,7 @@ function clearTestHook(): void {
 }
 
 function retryWithoutForcedFailure(): void {
-  if (import.meta.env.DEV) {
+  if (QA_MODE) {
     const url = new URL(window.location.href)
     url.searchParams.delete('forceWebglFailure')
     window.history.replaceState(null, '', url)
@@ -121,13 +122,15 @@ function startApplication(recovery?: RendererRecoveryState): void {
     )
     app.dataset.state = 'renderer-ready'
 
-    if (import.meta.env.DEV) {
+    if (QA_MODE) {
       window.__DRAGON_RACE_TEST__ = {
         loseContext: () => rendererSession?.loseContext?.(),
         qaPassCheckpoint: () => rendererSession?.qaPassCheckpoint?.(),
         qaExploreRegion: (regionId) =>
           rendererSession?.qaExploreRegion?.(regionId),
         qaExploreChallenge: () => rendererSession?.qaExploreChallenge?.(),
+        qaExploreVolcanicChallenge: () =>
+          rendererSession?.qaExploreVolcanicChallenge?.(),
         qaExploreLandmark: (landmarkId) =>
           rendererSession?.qaExploreLandmark?.(landmarkId),
         qaExploreLandmarkView: (landmarkId) =>
@@ -140,19 +143,23 @@ function startApplication(recovery?: RendererRecoveryState): void {
         qaExploreCollision: () => rendererSession?.qaExploreCollision?.(),
         qaCollectCoin: (regionId, index) =>
           rendererSession?.qaCollectCoin?.(regionId, index),
+        qaGeometryLedger: () =>
+          rendererSession?.qaGeometryLedger?.() ?? null,
         snapshot: () => rendererSession?.debugSnapshot?.() ?? null,
       }
 
-      const mirrorDebugSnapshot = (): void => {
-        const snapshot = rendererSession?.debugSnapshot?.()
+      if (import.meta.env.DEV) {
+        const mirrorDebugSnapshot = (): void => {
+          const snapshot = rendererSession?.debugSnapshot?.()
 
-        if (snapshot !== null && snapshot !== undefined) {
-          app.dataset.flightDebug = JSON.stringify(snapshot)
+          if (snapshot !== null && snapshot !== undefined) {
+            app.dataset.flightDebug = JSON.stringify(snapshot)
+          }
         }
-      }
 
-      mirrorDebugSnapshot()
-      debugMirrorTimer = window.setInterval(mirrorDebugSnapshot, 100)
+        mirrorDebugSnapshot()
+        debugMirrorTimer = window.setInterval(mirrorDebugSnapshot, 100)
+      }
     }
   } catch {
     showRendererFailure(false)

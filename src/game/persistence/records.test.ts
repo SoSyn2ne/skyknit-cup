@@ -246,6 +246,128 @@ describe('versioned game settings', () => {
     )
   })
 
+  it('strips forward-filled M39 progress from version 10 while preserving legitimate progress', () => {
+    const storage = new MemoryStorage()
+    storage.values.set(
+      SETTINGS_KEY,
+      JSON.stringify({
+        version: 10,
+        bestTimeMs: 123_456,
+        muted: true,
+        musicVolume: 0.62,
+        quality: 'high',
+        characterLoadout: {
+          characterId: 'ember-phoenix',
+          paletteId: 'sunrise',
+          accessoryId: 'festival-ribbon',
+        },
+        missionGrades: {
+          'first-skyknot': 'gold',
+          'heart-of-sun': 'gold',
+        },
+        coinBestTimesMs: {
+          'festival-hub': 18_250,
+          'volcanic-archipelago': 19_400,
+        },
+        skyLeague: {
+          raceTop10Ms: [123_456, 130_000],
+          coinTop10Ms: {
+            'festival-hub': [18_250, 20_000],
+            'volcanic-archipelago': [19_400, 21_000],
+          },
+          missionTop10: {
+            'first-skyknot': [{ elapsedMs: 123_456, grade: 'gold' }],
+            'heart-of-sun': [{ elapsedMs: 44_500, grade: 'gold' }],
+          },
+        },
+        ghosts: {
+          race: RACE_GHOST,
+          coin: {
+            'festival-hub': COIN_GHOST,
+            'volcanic-archipelago': COIN_GHOST,
+          },
+          mission: {
+            'first-skyknot': MISSION_GHOST,
+            'heart-of-sun': MISSION_GHOST,
+          },
+        },
+        exploration: {
+          position: { x: -240, y: 40, z: -820 },
+          headingRadians: -0.75,
+          movement: 'airborne',
+          discoveredRegionIds: [
+            'festival-hub',
+            'cloud-ruins',
+            'volcanic-archipelago',
+          ],
+          destinationRegionId: 'volcanic-archipelago',
+          discoveredLandmarkIds: [
+            'dawnwing-airfield',
+            'whispering-grotto',
+            'emberwatch-landing',
+            'obsidian-causeway',
+            'cooling-ruins',
+            'sunheart-caldera',
+            'eruption-escape-arch',
+            'hidden-magma-tube',
+          ],
+          traversedWindZoneIds: [
+            'harbor-lift',
+            'spire-spiral',
+            'caldera-column',
+            'bridge-draft',
+            'ruins-vent',
+          ],
+        },
+      }),
+    )
+
+    const migrated = readSettings(storage)
+    const expected = {
+      bestTimeMs: 123_456,
+      muted: true,
+      musicVolume: 0.62,
+      quality: 'high',
+      characterLoadout: {
+        characterId: 'ember-phoenix',
+        paletteId: 'sunrise',
+        accessoryId: 'festival-ribbon',
+      },
+      missionGrades: { 'first-skyknot': 'gold' },
+      coinBestTimesMs: { 'festival-hub': 18_250 },
+      skyLeague: {
+        raceTop10Ms: [123_456, 130_000],
+        coinTop10Ms: { 'festival-hub': [18_250, 20_000] },
+        missionTop10: {
+          'first-skyknot': [{ elapsedMs: 123_456, grade: 'gold' }],
+        },
+      },
+      ghosts: {
+        race: RACE_GHOST,
+        coin: { 'festival-hub': COIN_GHOST },
+        mission: { 'first-skyknot': MISSION_GHOST },
+      },
+      exploration: {
+        position: { x: -240, y: 40, z: -820 },
+        headingRadians: -0.75,
+        movement: 'airborne',
+        discoveredRegionIds: ['festival-hub', 'cloud-ruins'],
+        destinationRegionId: null,
+        discoveredLandmarkIds: [
+          'dawnwing-airfield',
+          'whispering-grotto',
+        ],
+        traversedWindZoneIds: ['harbor-lift', 'spire-spiral'],
+      },
+    }
+
+    expect(migrated).toEqual(expected)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
+      version: 11,
+      ...expected,
+    })
+  })
+
   it('round-trips volcanic region and Heart of the Sun mission records in version 11', () => {
     const storage = new MemoryStorage()
     const settings = {
@@ -275,6 +397,11 @@ describe('versioned game settings', () => {
           'volcanic-archipelago',
         ] as const,
         destinationRegionId: 'volcanic-archipelago' as const,
+        discoveredLandmarkIds: [
+          'dawnwing-airfield',
+          'sunheart-caldera',
+        ] as const,
+        traversedWindZoneIds: ['harbor-lift', 'caldera-column'] as const,
       },
     }
 
@@ -284,6 +411,49 @@ describe('versioned game settings', () => {
       ...settings,
     })
     expect(readSettings(storage)).toEqual(settings)
+  })
+
+  it('canonicalizes version 11 festival and volcanic discoveries while rejecting unknown ids', () => {
+    const storage = new MemoryStorage()
+    storage.values.set(
+      SETTINGS_KEY,
+      JSON.stringify({
+        version: 11,
+        ...DEFAULT_SETTINGS,
+        exploration: {
+          ...DEFAULT_SETTINGS.exploration,
+          discoveredLandmarkIds: [
+            'dawnwing-airfield',
+            'unknown-landmark',
+            'sunheart-caldera',
+            'sunheart-caldera',
+          ],
+          traversedWindZoneIds: [
+            'harbor-lift',
+            'unknown-wind',
+            'caldera-column',
+            'caldera-column',
+          ],
+        },
+      }),
+    )
+
+    expect(readSettings(storage).exploration).toMatchObject({
+      discoveredLandmarkIds: [
+        'dawnwing-airfield',
+        'sunheart-caldera',
+      ],
+      traversedWindZoneIds: ['harbor-lift', 'caldera-column'],
+    })
+    expect(
+      JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').exploration,
+    ).toMatchObject({
+      discoveredLandmarkIds: [
+        'dawnwing-airfield',
+        'sunheart-caldera',
+      ],
+      traversedWindZoneIds: ['harbor-lift', 'caldera-column'],
+    })
   })
 
   it.each([
@@ -1137,6 +1307,22 @@ describe('versioned game settings', () => {
       saveSettings(storage, {
         ...DEFAULT_SETTINGS,
         exploration,
+      } as never),
+    ).toBe(false)
+    expect(storage.values.size).toBe(0)
+  })
+
+  it('rejects unknown discovery ids when saving', () => {
+    const storage = new MemoryStorage()
+
+    expect(
+      saveSettings(storage, {
+        ...DEFAULT_SETTINGS,
+        exploration: {
+          ...DEFAULT_SETTINGS.exploration,
+          discoveredLandmarkIds: ['unknown-landmark'],
+          traversedWindZoneIds: ['unknown-wind'],
+        },
       } as never),
     ).toBe(false)
     expect(storage.values.size).toBe(0)

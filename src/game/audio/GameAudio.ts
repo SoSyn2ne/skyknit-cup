@@ -18,6 +18,12 @@ export interface GameAudioDebugSnapshot {
   readonly windEntryCues: number
   readonly ambientWindStrength: number
   readonly windBedPlaying: boolean
+  readonly volcanicAmbienceIntensity: number
+  readonly volcanicBedPlaying: boolean
+  readonly rockWarningCues: number
+  readonly lavaWarningCues: number
+  readonly coolingSealCues: number
+  readonly eruptionEscapeCues: number
 }
 
 export interface GameAudio {
@@ -29,9 +35,14 @@ export interface GameAudio {
   setMusicActive(active: boolean): void
   setPageVisible(visible: boolean): void
   setAmbientWind(strength: number): void
+  setVolcanicIntensity(intensity: number): void
   playGate(): void
   playDiscovery(): void
   playWindEntry(): void
+  playRockWarning(): void
+  playLavaWarning(): void
+  playCoolingSeal(): void
+  playEruptionEscape(): void
   playWingFlap(): void
   setBoosting(boosting: boolean): void
   playFinish(): void
@@ -98,6 +109,30 @@ const WIND_ENTRY_BURST: NoiseBurst = {
   filterQ: 0.58,
   volume: 0.045,
 }
+const ROCK_WARNING_BURST: NoiseBurst = {
+  durationSeconds: 0.46,
+  attackSeconds: 0.025,
+  filterStartHz: 170,
+  filterEndHz: 74,
+  filterQ: 1.15,
+  volume: 0.072,
+}
+const LAVA_WARNING_BURST: NoiseBurst = {
+  durationSeconds: 0.62,
+  attackSeconds: 0.12,
+  filterStartHz: 95,
+  filterEndHz: 310,
+  filterQ: 0.72,
+  volume: 0.065,
+}
+const ERUPTION_ESCAPE_BURST: NoiseBurst = {
+  durationSeconds: 0.9,
+  attackSeconds: 0.04,
+  filterStartHz: 260,
+  filterEndHz: 1_450,
+  filterQ: 0.62,
+  volume: 0.09,
+}
 
 export function createGameAudio(
   contextFactory: AudioContextFactory = defaultContextFactory,
@@ -135,6 +170,15 @@ export function createGameAudio(
   let windBedFilter: BiquadFilterNode | null = null
   let windBedGain: GainNode | null = null
   let lastAppliedAmbientWindStrength = -1
+  let volcanicAmbienceIntensity = 0
+  let volcanicBedSource: AudioBufferSourceNode | null = null
+  let volcanicBedFilter: BiquadFilterNode | null = null
+  let volcanicBedGain: GainNode | null = null
+  let lastAppliedVolcanicAmbienceIntensity = -1
+  let rockWarningCues = 0
+  let lavaWarningCues = 0
+  let coolingSealCues = 0
+  let eruptionEscapeCues = 0
   let noiseBuffer: AudioBuffer | null = null
   const activeSources = new Set<AudioScheduledSourceNode>()
 
@@ -281,8 +325,42 @@ export function createGameAudio(
     }
   }
 
+  const stopVolcanicBed = (immediate = true): void => {
+    const source = volcanicBedSource
+    const filter = volcanicBedFilter
+    const gain = volcanicBedGain
+    volcanicBedSource = null
+    volcanicBedFilter = null
+    volcanicBedGain = null
+    lastAppliedVolcanicAmbienceIntensity = -1
+    if (source === null) return
+    const stopAt =
+      immediate || context === null
+        ? undefined
+        : context.currentTime + 0.24
+    try {
+      if (!immediate && gain !== null && context !== null) {
+        gain.gain.setTargetAtTime(0.0001, context.currentTime, 0.08)
+      }
+      source.stop(stopAt)
+    } catch {
+      // An already-stopped ambience source needs no further recovery.
+    }
+    if (immediate) {
+      activeSources.delete(source)
+      try {
+        source.disconnect()
+        filter?.disconnect()
+        gain?.disconnect()
+      } catch {
+        // Volcanic ambience teardown is best-effort at lifecycle boundaries.
+      }
+    }
+  }
+
   const stopActiveSources = (): void => {
     stopWindBed()
+    stopVolcanicBed()
     for (const source of [...activeSources]) {
       try {
         source.stop()
@@ -447,6 +525,90 @@ export function createGameAudio(
     lastAppliedAmbientWindStrength = ambientWindStrength
   }
 
+  const syncVolcanicAmbience = (): void => {
+    const shouldPlay =
+      !disposed &&
+      !muted &&
+      unlocked &&
+      pageVisible &&
+      volcanicAmbienceIntensity > 0.001 &&
+      context !== null
+    if (!shouldPlay || context === null) {
+      const lifecycleStop =
+        disposed || muted || !unlocked || !pageVisible || context === null
+      stopVolcanicBed(lifecycleStop)
+      return
+    }
+
+    if (
+      volcanicBedSource === null ||
+      volcanicBedFilter === null ||
+      volcanicBedGain === null
+    ) {
+      const buffer = getNoiseBuffer()
+      if (buffer === null) return
+      try {
+        const source = context.createBufferSource()
+        const filter = context.createBiquadFilter()
+        const gain = context.createGain()
+        source.buffer = buffer
+        source.loop = true
+        filter.type = 'lowpass'
+        filter.frequency.setValueAtTime(240, context.currentTime)
+        filter.Q.setValueAtTime(1.2, context.currentTime)
+        gain.gain.setValueAtTime(0.0001, context.currentTime)
+        source.connect(filter)
+        filter.connect(gain)
+        gain.connect(context.destination)
+        source.onended = () => {
+          activeSources.delete(source)
+          if (volcanicBedSource === source) {
+            volcanicBedSource = null
+            volcanicBedFilter = null
+            volcanicBedGain = null
+          }
+          try {
+            source.disconnect()
+            filter.disconnect()
+            gain.disconnect()
+          } catch {
+            // A completed volcanic bed has no resources left to recover.
+          }
+        }
+        volcanicBedSource = source
+        volcanicBedFilter = filter
+        volcanicBedGain = gain
+        activeSources.add(source)
+        source.start(context.currentTime, 0)
+      } catch {
+        stopVolcanicBed()
+        return
+      }
+    }
+
+    if (
+      Math.abs(
+        volcanicAmbienceIntensity -
+          lastAppliedVolcanicAmbienceIntensity,
+      ) < 0.01
+    ) {
+      return
+    }
+    const frequency = 210 + volcanicAmbienceIntensity * 390
+    const volume = 0.006 + volcanicAmbienceIntensity * 0.032
+    volcanicBedFilter.frequency.setTargetAtTime(
+      frequency,
+      context.currentTime,
+      0.18,
+    )
+    volcanicBedGain.gain.setTargetAtTime(
+      volume,
+      context.currentTime,
+      0.18,
+    )
+    lastAppliedVolcanicAmbienceIntensity = volcanicAmbienceIntensity
+  }
+
   const playNoiseBurst = (burst: NoiseBurst, variationIndex: number): boolean => {
     if (
       disposed ||
@@ -545,6 +707,7 @@ export function createGameAudio(
         syncMusicPlayback()
       }
       syncAmbientWind()
+      syncVolcanicAmbience()
     },
     setMuted: (nextMuted) => {
       muted = nextMuted
@@ -553,6 +716,7 @@ export function createGameAudio(
       }
       syncMusicPlayback()
       syncAmbientWind()
+      syncVolcanicAmbience()
     },
     setMusicVolume: (nextVolume) => {
       if (!Number.isFinite(nextVolume)) return
@@ -583,11 +747,17 @@ export function createGameAudio(
       }
       syncMusicPlayback()
       syncAmbientWind()
+      syncVolcanicAmbience()
     },
     setAmbientWind: (strength) => {
       if (!Number.isFinite(strength)) return
       ambientWindStrength = Math.min(1, Math.max(0, strength))
       syncAmbientWind()
+    },
+    setVolcanicIntensity: (intensity) => {
+      if (!Number.isFinite(intensity) || disposed) return
+      volcanicAmbienceIntensity = Math.min(1, Math.max(0, intensity))
+      syncVolcanicAmbience()
     },
     playGate: () => {
       if (
@@ -626,6 +796,82 @@ export function createGameAudio(
       if (playNoiseBurst(WIND_ENTRY_BURST, windEntryCues + 501)) {
         windEntryCues += 1
       }
+    },
+    playRockWarning: () => {
+      const played = [
+        playNoiseBurst(ROCK_WARNING_BURST, rockWarningCues + 701),
+        playTone({
+          frequency: 144,
+          durationSeconds: 0.36,
+          type: 'square',
+          volume: 0.045,
+        }),
+        playTone({
+          frequency: 108,
+          durationSeconds: 0.42,
+          delaySeconds: 0.16,
+          type: 'square',
+          volume: 0.04,
+        }),
+      ].some(Boolean)
+      if (played) rockWarningCues += 1
+    },
+    playLavaWarning: () => {
+      const played = [
+        playNoiseBurst(LAVA_WARNING_BURST, lavaWarningCues + 809),
+        playTone({
+          frequency: 92,
+          durationSeconds: 0.5,
+          type: 'sawtooth',
+          volume: 0.038,
+        }),
+        playTone({
+          frequency: 138,
+          durationSeconds: 0.54,
+          delaySeconds: 0.12,
+          type: 'sawtooth',
+          volume: 0.035,
+        }),
+      ].some(Boolean)
+      if (played) lavaWarningCues += 1
+    },
+    playCoolingSeal: () => {
+      const played = [
+        { frequency: 660, delaySeconds: 0 },
+        { frequency: 880, delaySeconds: 0.1 },
+        { frequency: 1_174, delaySeconds: 0.2 },
+      ]
+        .map((tone) =>
+          playTone({
+            ...tone,
+            durationSeconds: 0.38,
+            type: 'sine',
+            volume: 0.052,
+          }),
+        )
+        .some(Boolean)
+      if (played) coolingSealCues += 1
+    },
+    playEruptionEscape: () => {
+      const played = [
+        playNoiseBurst(
+          ERUPTION_ESCAPE_BURST,
+          eruptionEscapeCues + 907,
+        ),
+        ...[
+          { frequency: 262, delaySeconds: 0 },
+          { frequency: 392, delaySeconds: 0.12 },
+          { frequency: 523, delaySeconds: 0.24 },
+        ].map((tone) =>
+          playTone({
+            ...tone,
+            durationSeconds: 0.46,
+            type: 'triangle',
+            volume: 0.055,
+          }),
+        ),
+      ].some(Boolean)
+      if (played) eruptionEscapeCues += 1
     },
     setBoosting: (nextBoosting) => {
       const risingEdge = nextBoosting && !boosting
@@ -673,6 +919,12 @@ export function createGameAudio(
       windEntryCues,
       ambientWindStrength,
       windBedPlaying: windBedSource !== null,
+      volcanicAmbienceIntensity,
+      volcanicBedPlaying: volcanicBedSource !== null,
+      rockWarningCues,
+      lavaWarningCues,
+      coolingSealCues,
+      eruptionEscapeCues,
     }),
     dispose: () => {
       if (disposed) {

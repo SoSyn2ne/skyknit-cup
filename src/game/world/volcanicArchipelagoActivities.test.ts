@@ -5,6 +5,7 @@ import { EXPLORATION_TUNING } from '../exploration/explorationFlight'
 import {
   VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON,
   VOLCANIC_ARCHIPELAGO_COLLIDERS,
+  VOLCANIC_ARCHIPELAGO_CENTER,
   VOLCANIC_ARCHIPELAGO_LANDING_PADS,
   VOLCANIC_ARCHIPELAGO_LANDMARKS,
   VOLCANIC_ARCHIPELAGO_THERMAL_ZONES,
@@ -76,7 +77,22 @@ describe('volcanic archipelago activity contract', () => {
   })
 
   it('leaves landing centers, vertical approaches, and the challenge beacon clear', () => {
+    expect(
+      Math.hypot(
+        VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.position.x -
+          VOLCANIC_ARCHIPELAGO_CENTER.x,
+        VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.position.z -
+          VOLCANIC_ARCHIPELAGO_CENTER.z,
+      ),
+    ).toBeGreaterThanOrEqual(90)
+
     for (const pad of VOLCANIC_ARCHIPELAGO_LANDING_PADS) {
+      expect(
+        Math.hypot(
+          pad.position.x - VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.position.x,
+          pad.position.z - VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.position.z,
+        ),
+      ).toBeGreaterThan(VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.radius + 1.2)
       for (const collider of VOLCANIC_ARCHIPELAGO_COLLIDERS) {
         expect(distance(pad.position, collider.center)).toBeGreaterThan(
           collider.radius + 1.2,
@@ -106,6 +122,35 @@ describe('volcanic archipelago activity contract', () => {
         VOLCANIC_ARCHIPELAGO_COLLIDERS,
       ),
     ).toBeNull()
+  })
+
+  it('guards the solid caldera bowl and rim while leaving the south route open', () => {
+    expect(VOLCANIC_ARCHIPELAGO_COLLIDERS.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        'volcanic-caldera-lower-bowl',
+        'volcanic-caldera-west',
+        'volcanic-caldera-east',
+        'volcanic-caldera-north',
+      ]),
+    )
+
+    expect(
+      findSweptSphereCollision(
+        VOLCANIC_ARCHIPELAGO_CHALLENGE_BEACON.position,
+        { x: -240, y: 42, z: -796 },
+        1.2,
+        VOLCANIC_ARCHIPELAGO_COLLIDERS,
+      ),
+    ).toBeNull()
+
+    expect(
+      findSweptSphereCollision(
+        { x: -259, y: 36, z: -792 },
+        { x: -259, y: 36, z: -858 },
+        1.2,
+        VOLCANIC_ARCHIPELAGO_COLLIDERS,
+      )?.obstacleId,
+    ).toBe('volcanic-caldera-west')
   })
 })
 

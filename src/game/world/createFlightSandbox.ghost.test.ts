@@ -45,6 +45,7 @@ function createMockDragon(name: string) {
     ready: Promise.resolve('fallback' as const),
     update: vi.fn(),
     setShadows: vi.fn(),
+    setVolcanicReaction: vi.fn(),
     debugSnapshot: vi.fn(),
     dispose: vi.fn(() => movementRoot.clear()),
   }
@@ -114,7 +115,7 @@ describe('flight sandbox ghost dragon', () => {
     expect(dragonFactoryMock.create).toHaveBeenNthCalledWith(
       2,
       PALETTE,
-      { appearance: 'ghost' },
+      { appearance: 'ghost', ghostDetail: 'echo' },
     )
     expect(scene.children).toContain(ghost.movementRoot)
 
