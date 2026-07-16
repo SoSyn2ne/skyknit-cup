@@ -23,6 +23,13 @@ ASSET_VERSIONS = {
 GEOMETRY_STYLE = "handcrafted-layered"
 FESTIVAL_ROUTE_CLEARANCE = 1.2
 FESTIVAL_ROUTE_SAMPLE_STEP = 0.25
+VOLCANIC_REGION_CENTER = (-240.0, 28.0, -820.0)
+VOLCANIC_CHALLENGE_HOTSPOT = (-240.0, 34.0, -720.0)
+VOLCANIC_CHALLENGE_RADIUS = 9.0
+VOLCANIC_TRIANGLE_TARGETS = {
+    "high": (30_000, 40_000),
+    "low": (8_000, 12_000),
+}
 
 # Three.js local coordinates, before the festival region container offset.
 FESTIVAL_COIN_ROUTE = (
@@ -78,7 +85,7 @@ SEMANTIC_ORIGINS = {
         "CoolingRuins": (-39.0, 38.0, 15.5),
         "BrokenBridge": (-47.0, 4.0, 14.0),
         "LavaSurface": (0.0, 4.0, 19.2),
-        "ExpeditionBeacon": (0.0, -58.0, 15.0),
+        "ExpeditionBeacon": (0.0, -100.0, 6.0),
         "CoolingSeal_1": (-55.0, 23.0, 17.0),
         "CoolingSeal_2": (44.0, -34.0, 16.0),
         "CoolingSeal_3": (28.0, 55.0, 17.0),
@@ -186,6 +193,10 @@ def gltf_to_blender(point: tuple[float, float, float]) -> Vector:
     return Vector((point[0], -point[2], point[1]))
 
 
+def blender_to_gltf(point: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (point[0], point[2], -point[1])
+
+
 def build_world_bvhs(meshes: list[bpy.types.Object]) -> list[BVHTree]:
     trees: list[BVHTree] = []
     for obj in meshes:
@@ -245,9 +256,12 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
     varied_vertex_color_meshes = 0
     invalid_normal_meshes: list[str] = []
     non_finite_transform_nodes: list[str] = []
+    mesh_triangles: dict[str, int] = {}
     for obj in meshes:
         obj.data.calc_loop_triangles()
-        triangles += len(obj.data.loop_triangles)
+        object_triangles = len(obj.data.loop_triangles)
+        triangles += object_triangles
+        mesh_triangles[obj.name] = object_triangles
         primitives += max(1, len(obj.data.materials))
         if len(obj.data.color_attributes) > 0:
             vertex_color_meshes += 1
@@ -297,8 +311,11 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
     )
     materials = [material.name for material in material_objects]
     errors: list[str] = []
-    minimum_triangles = 12_000 if lod == "high" else 3_000
-    maximum_triangles = 60_000 if lod == "high" else 25_000
+    if region_id == "volcanic-archipelago":
+        minimum_triangles, maximum_triangles = VOLCANIC_TRIANGLE_TARGETS[lod]
+    else:
+        minimum_triangles = 12_000 if lod == "high" else 3_000
+        maximum_triangles = 60_000 if lod == "high" else 25_000
     if not minimum_triangles <= triangles <= maximum_triangles:
         errors.append(f"triangles out of range: {triangles}")
     if primitives > 12:
@@ -497,12 +514,46 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
         ):
             errors.append(f"{node} origin changed: {actual_origin}")
 
+    interaction_contract: dict[str, object] = {}
+    if region_id == "volcanic-archipelago":
+        beacon_origin = semantic_origins.get("ExpeditionBeacon")
+        if beacon_origin is not None:
+            runtime_local = blender_to_gltf(beacon_origin)
+            runtime_world = tuple(
+                region + local
+                for region, local in zip(VOLCANIC_REGION_CENTER, runtime_local)
+            )
+            hotspot_distance = math.dist(
+                runtime_world,
+                VOLCANIC_CHALLENGE_HOTSPOT,
+            )
+            within_radius = hotspot_distance <= VOLCANIC_CHALLENGE_RADIUS
+            interaction_contract["ExpeditionBeacon"] = {
+                "runtime_region_center": list(VOLCANIC_REGION_CENTER),
+                "runtime_local": [round(value, 4) for value in runtime_local],
+                "runtime_world": [round(value, 4) for value in runtime_world],
+                "challenge_hotspot": list(VOLCANIC_CHALLENGE_HOTSPOT),
+                "interaction_radius": VOLCANIC_CHALLENGE_RADIUS,
+                "distance": round(hotspot_distance, 4),
+                "within_radius": within_radius,
+            }
+            if not within_radius:
+                errors.append(
+                    "ExpeditionBeacon is outside challenge hotspot: "
+                    f"{hotspot_distance:.4f} > {VOLCANIC_CHALLENGE_RADIUS:.4f}"
+                )
+
     return {
         "file": str(path),
         "bytes": path.stat().st_size,
         "region": region_id,
         "lod": lod,
         "triangles": triangles,
+        "triangle_target": {
+            "minimum": minimum_triangles,
+            "maximum": maximum_triangles,
+        },
+        "mesh_triangles": mesh_triangles,
         "render_meshes": len(meshes),
         "primitives": primitives,
         "materials": materials,
@@ -516,6 +567,7 @@ def inspect_asset(path: Path, region_id: str, lod: str) -> dict[str, object]:
         "geometry_style": geometry_style,
         "landing_pad_origin": landing_pad_origin,
         "semantic_origins": semantic_origins,
+        "interaction_contract": interaction_contract,
         "semantic_types": semantic_types,
         "semantic_metadata": semantic_metadata,
         "accent_materials": accent_materials,
