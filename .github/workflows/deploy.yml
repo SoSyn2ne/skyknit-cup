@@ -1,0 +1,48 @@
+name: Deploy to GitHub Pages
+
+# Builds the client with the project-page base path and publishes it to
+# GitHub Pages. The base must match the repository name so that assets loaded
+# through import.meta.env.BASE_URL (GLB models, audio, textures) resolve under
+# https://sosyn2ne.github.io/skyknit-cup/ instead of the domain root.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow the workflow to publish a Pages artifact via OIDC.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once; let an in-progress deploy finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+          cache: npm
+      - run: npm ci
+      - name: Build with Pages base path
+        run: npm run build -- --base=/skyknit-cup/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

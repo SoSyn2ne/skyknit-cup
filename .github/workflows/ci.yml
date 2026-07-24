@@ -1,0 +1,27 @@
+name: CI
+
+# Fast, deterministic checks that gate every change to main. Browser- and
+# GPU-dependent suites (E2E, performance, production, asset audit) stay on the
+# local gates on purpose: running them here would trade signal for flaky
+# failures. Revisit only in a dedicated milestone.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
