@@ -20,6 +20,7 @@ export interface WorldDebugSnapshot {
   readonly cloudDeckCount: number
   readonly instancedMeshCount: number
   readonly shadowsEnabled: boolean
+  readonly shadowRadius: number
 }
 
 export interface WorldVisual {
@@ -498,6 +499,10 @@ export function createWorld(
   sun.shadow.mapSize.set(1_024, 1_024)
   sun.shadow.bias = -0.0008
   sun.shadow.normalBias = 0.045
+  // Widens the PCF Vogel disk so a 1024 map reads as a dawn shadow instead of a
+  // hard cutout. The tap count is fixed at five, so a wider radius costs no
+  // extra samples — only the spread of the ones already taken.
+  sun.shadow.radius = 2.6
   const shadowCamera = sun.shadow.camera as THREE.OrthographicCamera
   shadowCamera.left = -68
   shadowCamera.right = 68
@@ -608,6 +613,7 @@ export function createWorld(
       cloudDeckCount: cloudDeck.count,
       instancedMeshCount: 9,
       shadowsEnabled: sun.castShadow,
+      shadowRadius: sun.shadow.radius,
     }),
   }
 }

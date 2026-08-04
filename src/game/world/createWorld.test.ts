@@ -64,6 +64,25 @@ describe('RC7 world quality layers', () => {
     })
   })
 
+  it('spreads the dawn shadow filter instead of leaving a hard cutout', () => {
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera()
+    const high = resolveRenderQuality({
+      preference: 'high',
+      ...desktopSignals,
+    })
+    const world = createWorld(scene, camera, palette, high)
+    const sun = scene.getObjectByName(
+      'RC7_DawnKeyLight',
+    ) as THREE.DirectionalLight
+
+    // PCF here filters through a fixed five-tap Vogel disk scaled by this
+    // radius, so widening it softens the edge without adding samples. The
+    // default of 1 is what leaves the stair-stepped edge.
+    expect(sun.shadow.radius).toBeGreaterThan(1)
+    expect(world.debugSnapshot().shadowRadius).toBe(sun.shadow.radius)
+  })
+
   it('keeps the race islands readable as faceted authored landforms', () => {
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera()

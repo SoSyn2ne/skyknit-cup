@@ -279,6 +279,7 @@ export interface FlightDebugSnapshot {
     readonly pixelRatio: number
     readonly shadows: boolean
     readonly shadowMapSize: number
+    readonly shadowRadius: number
   }
   readonly exploration: {
     readonly movement: ExplorationFlightState['movement']
@@ -592,6 +593,9 @@ export function createRenderer(
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.05
+    // PCF in this three version already filters through a noise-rotated
+    // five-tap Vogel disk scaled by each light's shadow.radius, so softness is
+    // tuned there rather than by the deprecated PCFSoftShadowMap type.
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.setClearColor(palette.skyZenith, 1)
 
@@ -2786,6 +2790,7 @@ export function createRenderer(
                 pixelRatio: renderer.getPixelRatio(),
                 shadows: renderer.shadowMap.enabled,
                 shadowMapSize: renderQuality.shadowMapSize,
+                shadowRadius: cameraSnapshot.world.shadowRadius,
               },
               exploration: {
                 movement: explorationState.movement,
