@@ -212,6 +212,27 @@ test.describe('touch flight flow', () => {
     await page.keyboard.up('ArrowRight')
   })
 
+  test('keeps the mission tracker out of the central flight path in compact landscape', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'touch-landscape')
+    await startTouchRace(page)
+
+    const tracker = page.locator('[data-mission-tracker]')
+    await expect(tracker).toBeVisible()
+    const trackerBox = await tracker.boundingBox()
+    const viewport = page.viewportSize()
+    expect(trackerBox).not.toBeNull()
+    expect(viewport).not.toBeNull()
+    if (trackerBox === null || viewport === null) {
+      return
+    }
+
+    expect(trackerBox.x + trackerBox.width).toBeLessThanOrEqual(
+      viewport.width * 0.4,
+    )
+  })
+
   test('finishes and retries after a touch start', async ({
     page,
   }, testInfo) => {
@@ -219,7 +240,7 @@ test.describe('touch flight flow', () => {
     const joystick = page.locator('[data-touch-role="joystick"]')
     await startTouchRace(page)
 
-    for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
+    for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
       await page.evaluate(() => {
         const testWindow = window as unknown as {
           __DRAGON_RACE_TEST__?: {

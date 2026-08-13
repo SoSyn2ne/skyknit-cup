@@ -18,6 +18,7 @@ export interface VolcanicActivitiesSnapshot {
   readonly fallingRockCount: number
   readonly lavaTelegraphSegmentCount: number
   readonly lavaWaveSegmentCount: number
+  readonly lavaWaveDrawPrimed: boolean
   readonly triangles: number
   readonly drawCalls: number
   readonly disposed: boolean
@@ -30,6 +31,7 @@ export interface VolcanicActivitiesVisual {
     loaded: boolean,
     active: boolean,
   ): void
+  primeFirstLavaWaveDraw(): void
   setQuality(tier: RenderQualityTier): void
   debugSnapshot(): VolcanicActivitiesSnapshot
   dispose(): void
@@ -255,6 +257,7 @@ export function createVolcanicActivities(
   let fallingRockCount = 0
   let lavaTelegraphSegmentCount = 0
   let lavaWaveSegmentCount = 0
+  let lavaWaveDrawPrimed = false
   let triangles = 0
   let drawCalls = 0
   let disposed = false
@@ -295,6 +298,7 @@ export function createVolcanicActivities(
       }
 
       root.visible = true
+      lavaWaveMaterial.opacity = 0.92
       const safeSeconds = Number.isFinite(simulationSeconds)
         ? simulationSeconds
         : 0
@@ -514,6 +518,33 @@ export function createVolcanicActivities(
         (lavaTelegraphSegmentCount > 0 ? 1 : 0) +
         (lavaWaveSegmentCount > 0 ? 1 : 0)
     },
+    primeFirstLavaWaveDraw: () => {
+      if (disposed || !root.visible) return
+
+      const radius = 14
+      const segmentLength =
+        (FULL_TURN * radius * 1.04) / HIGH_ACTIVE_LAVA_SEGMENT_COUNT
+      for (let index = 0; index < HIGH_ACTIVE_LAVA_SEGMENT_COUNT; index += 1) {
+        const angle = (index / HIGH_ACTIVE_LAVA_SEGMENT_COUNT) * FULL_TURN
+        position.set(
+          VOLCANIC_ARCHIPELAGO_CENTER.x + Math.cos(angle) * radius,
+          VOLCANIC_ARCHIPELAGO_CENTER.y + 0.72,
+          VOLCANIC_ARCHIPELAGO_CENTER.z + Math.sin(angle) * radius,
+        )
+        euler.set(0, angle - Math.PI / 2, 0)
+        rotation.setFromEuler(euler)
+        scale.set(segmentLength, 1, 1)
+        matrix.compose(position, rotation, scale)
+        lavaWave.setMatrixAt(index, matrix)
+      }
+      lavaWave.instanceMatrix.needsUpdate = true
+      lavaWave.count = HIGH_ACTIVE_LAVA_SEGMENT_COUNT
+      lavaWave.visible = true
+      lavaWaveDrawPrimed = true
+      // The ready/countdown render uploads the dynamic instance buffer without
+      // showing an early hazard to the player.
+      lavaWaveMaterial.opacity = 0
+    },
     setQuality: (tier) => {
       if (disposed || tier === qualityTier) return
       qualityTier = tier
@@ -529,6 +560,7 @@ export function createVolcanicActivities(
       fallingRockCount,
       lavaTelegraphSegmentCount,
       lavaWaveSegmentCount,
+      lavaWaveDrawPrimed,
       triangles,
       drawCalls,
       disposed,

@@ -205,7 +205,7 @@ async function finishSelectedMission(page: Page): Promise<void> {
     })
     .toBe('racing')
 
-  for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
     await page.evaluate(() =>
       window.__DRAGON_RACE_TEST__?.qaPassCheckpoint(),
     )
@@ -226,7 +226,7 @@ async function warmRaceRenderer(page: Page): Promise<void> {
       timeout: 5_000,
     })
     .toBe('racing')
-  for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
     await page.evaluate(() =>
       window.__DRAGON_RACE_TEST__?.qaPassCheckpoint(),
     )

@@ -9,6 +9,32 @@ const DEFAULT_LOADOUT: CharacterLoadout = {
   accessoryId: 'none',
 }
 
+const GUARDIAN_FLIGHT_EVIDENCE: readonly {
+  readonly label: string
+  readonly loadout: CharacterLoadout
+}[] = [
+  {
+    label: 'sunrise dragon',
+    loadout: DEFAULT_LOADOUT,
+  },
+  {
+    label: 'ember phoenix',
+    loadout: {
+      characterId: 'ember-phoenix',
+      paletteId: 'sunrise',
+      accessoryId: 'none',
+    },
+  },
+  {
+    label: 'storm white tiger',
+    loadout: {
+      characterId: 'storm-white-tiger',
+      paletteId: 'storm',
+      accessoryId: 'none',
+    },
+  },
+]
+
 type LegacyGuardianId = 'storm-griffin' | 'cloud-manta'
 
 function createCompleteV9Fixture(characterId: LegacyGuardianId) {
@@ -275,6 +301,58 @@ test('previews a guardian safely inside every supported viewport', async ({
     .poll(async () => (await readSnapshot(page))?.camera.dragon.loadout)
     .toEqual(DEFAULT_LOADOUT)
 })
+
+for (const { label, loadout } of GUARDIAN_FLIGHT_EVIDENCE) {
+  test(`keeps the ${label} readable with its gate and wind threads in flight`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop')
+    await page.goto('/')
+    await expect(page.locator('#app')).toHaveAttribute(
+      'data-state',
+      'renderer-ready',
+    )
+
+    await page.getByRole('button', { name: '캐릭터 꾸미기' }).click()
+    await selectLoadout(page, loadout)
+    await page.getByRole('button', { name: '적용' }).click()
+    await expect(
+      page.getByRole('dialog', { name: '캐릭터 꾸미기' }),
+    ).toBeHidden()
+    await expect
+      .poll(async () => (await readSnapshot(page))?.camera.dragon)
+      .toMatchObject({ loadout, source: 'glb' })
+
+    await page.getByRole('button', { name: '비행 시작' }).click()
+    await expect
+      .poll(async () => (await readSnapshot(page))?.race.phase, {
+        timeout: 6_000,
+      })
+      .toBe('racing')
+    await page.waitForTimeout(250)
+
+    await expect
+      .poll(async () => {
+        const camera = (await readSnapshot(page))?.camera
+        return camera === undefined
+          ? null
+          : {
+              dragonVisible: camera.dragonNdc.visible,
+              gateVisible: camera.gateNdc.visible,
+              windThreads: camera.windThreadCount,
+            }
+      })
+      .toEqual({
+        dragonVisible: true,
+        gateVisible: true,
+        windThreads: 2,
+      })
+
+    await page.screenshot({
+      path: `artifacts/browser-qa/m41-guardian-motion/${loadout.characterId}-flight.png`,
+    })
+  })
+}
 
 test('ignores a stale initial model failure after a newer preview succeeds', async ({
   page,

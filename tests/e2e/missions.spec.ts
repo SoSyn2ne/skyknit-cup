@@ -53,7 +53,7 @@ async function startSelectedMission(page: Page): Promise<void> {
 
 async function finishQaCourse(page: Page): Promise<void> {
   const nextGate = page.getByRole('button', { name: 'QA 다음 관문' })
-  for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
     await nextGate.click()
   }
   await expect
@@ -246,6 +246,92 @@ test('changes the selected mission from the Escape pause dialog with the keyboar
       nextCheckpointIndex: 0,
     })
   await expect(missionSelect).toBeFocused()
+})
+
+test('preloads Heart of Sun from its volcanic start without a festival request', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await seedMissionGrades(page, { 'golden-knot': 'bronze' })
+
+  const regionGlbRequests: string[] = []
+  page.on('request', (request) => {
+    const url = request.url()
+    if (
+      url.endsWith('.glb') &&
+      (url.includes('festival-hub') || url.includes('volcanic-archipelago'))
+    ) {
+      regionGlbRequests.push(url)
+    }
+  })
+
+  await page.goto('/')
+  await expect(page.locator('#app')).toHaveAttribute(
+    'data-state',
+    'renderer-ready',
+  )
+
+  await page
+    .locator('[data-mission-select="true"]')
+    .selectOption('heart-of-sun')
+  await expect
+    .poll(async () => (await snapshot(page))?.race.mission.selectedMissionId)
+    .toBe('heart-of-sun')
+  await expect
+    .poll(
+      () => regionGlbRequests.some((url) => url.includes('volcanic-archipelago') || url.includes('festival-hub')),
+      { timeout: 2_000 },
+    )
+    .toBe(true)
+
+  expect(
+    regionGlbRequests.filter((url) => url.includes('festival-hub')),
+  ).toEqual([])
+})
+
+test('keeps the lava-wave draw primed when Heart of Sun GLB finishes after countdown', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await seedMissionGrades(page, { 'golden-knot': 'bronze' })
+
+  let releaseVolcanicResponse: () => void = () => undefined
+  const volcanicResponseGate = new Promise<void>((resolve) => {
+    releaseVolcanicResponse = resolve
+  })
+  let volcanicRequestPending = false
+  await page.route(
+    '**/assets/models/world/volcanic-archipelago-high.glb',
+    async (route) => {
+      volcanicRequestPending = true
+      await volcanicResponseGate
+      await route.continue()
+    },
+  )
+
+  await page.goto('/')
+  await expect(page.locator('#app')).toHaveAttribute(
+    'data-state',
+    'renderer-ready',
+  )
+  await page
+    .locator('[data-mission-select="true"]')
+    .selectOption('heart-of-sun')
+  await expect.poll(() => volcanicRequestPending).toBe(true)
+
+  await startSelectedMission(page)
+  releaseVolcanicResponse()
+
+  await expect
+    .poll(
+      async () => (await snapshot(page))?.exploration.volcanicVisual,
+      { timeout: 10_000 },
+    )
+    .toMatchObject({
+      loaded: true,
+      active: true,
+      lavaWaveDrawPrimed: true,
+    })
 })
 
 test('keeps mission change visible in the pause dialog at every required viewport', async ({

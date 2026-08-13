@@ -68,7 +68,7 @@ export const MISSION_CATALOG: readonly MissionDefinition[] = [
     courseId: 'skyknot',
     name: '질풍 시간전',
     objective:
-      '햇실이 흐려지기 전, 돌풍 3회 이상과 무리스폰으로 3분 30초 안에 완주하세요.',
+      '햇실이 흐려지기 전, 돌풍 3회 이상과 무리스폰으로 2분 15초 안에 완주하세요.',
   },
   {
     id: 'clean-flight',
@@ -82,7 +82,7 @@ export const MISSION_CATALOG: readonly MissionDefinition[] = [
     courseId: 'skyknot',
     name: '황금 하늘매듭',
     objective:
-      '3분 안에 충돌·리스폰 없이 돌풍을 5회 이상 사용해 황금 매듭을 완성하세요.',
+      '2분 안에 충돌·리스폰 없이 돌풍을 5회 이상 사용해 황금 매듭을 완성하세요.',
   },
   {
     id: 'heart-of-sun',
@@ -111,8 +111,8 @@ const MISSION_GRADE_THRESHOLDS: Readonly<
 > = {
   'first-skyknot': {
     bronze: {},
-    silver: { maxElapsedMs: 210_000 },
-    gold: { maxElapsedMs: 180_000 },
+    silver: { maxElapsedMs: 135_000 },
+    gold: { maxElapsedMs: 120_000 },
   },
   'boost-mastery': {
     bronze: { minBoostActivationCount: 3 },
@@ -122,48 +122,48 @@ const MISSION_GRADE_THRESHOLDS: Readonly<
   'no-respawn': {
     bronze: { maxRespawnCount: 0, minBoostActivationCount: 3 },
     silver: {
-      maxElapsedMs: 210_000,
+      maxElapsedMs: 135_000,
       maxRespawnCount: 0,
       minBoostActivationCount: 5,
     },
     gold: {
-      maxElapsedMs: 180_000,
+      maxElapsedMs: 120_000,
       maxRespawnCount: 0,
       minBoostActivationCount: 7,
     },
   },
   'time-trial': {
     bronze: {
-      maxElapsedMs: 210_000,
+      maxElapsedMs: 135_000,
       maxRespawnCount: 0,
       minBoostActivationCount: 3,
     },
     silver: {
-      maxElapsedMs: 165_000,
+      maxElapsedMs: 110_000,
       maxRespawnCount: 0,
       minBoostActivationCount: 5,
     },
     gold: {
-      maxElapsedMs: 150_000,
+      maxElapsedMs: 95_000,
       maxRespawnCount: 0,
       minBoostActivationCount: 7,
     },
   },
   'clean-flight': {
     bronze: {
-      maxElapsedMs: 210_000,
+      maxElapsedMs: 135_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 3,
     },
     silver: {
-      maxElapsedMs: 165_000,
+      maxElapsedMs: 110_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 5,
     },
     gold: {
-      maxElapsedMs: 150_000,
+      maxElapsedMs: 95_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 7,
@@ -171,19 +171,19 @@ const MISSION_GRADE_THRESHOLDS: Readonly<
   },
   'golden-knot': {
     bronze: {
-      maxElapsedMs: 180_000,
+      maxElapsedMs: 120_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 5,
     },
     silver: {
-      maxElapsedMs: 165_000,
+      maxElapsedMs: 110_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 6,
     },
     gold: {
-      maxElapsedMs: 150_000,
+      maxElapsedMs: 95_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 7,

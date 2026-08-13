@@ -15,7 +15,7 @@ function completed(
 ): MissionAttemptStats {
   return {
     elapsedMs: 200_000,
-    nextCheckpointIndex: 12,
+    nextCheckpointIndex: 8,
     collisionCount: 0,
     respawnCount: 0,
     boostActivationCount: 5,
@@ -69,9 +69,9 @@ describe('mission catalog', () => {
       '잠든 바람 관문을 순서대로 깨워 첫 매듭의 길을 복원하세요.',
       '돌풍을 세 번 이상 일으켜 바람실에 힘을 더하고 완주하세요.',
       '돌풍을 세 번 이상 일으키고 리스폰 없이 완주해 햇실 한 가닥을 끊김 없이 이으세요.',
-      '햇실이 흐려지기 전, 돌풍 3회 이상과 무리스폰으로 3분 30초 안에 완주하세요.',
+      '햇실이 흐려지기 전, 돌풍 3회 이상과 무리스폰으로 2분 15초 안에 완주하세요.',
       '시간·돌풍·무리스폰 조건을 지키고 충돌 없이 날아 햇실을 온전히 보존하세요.',
-      '3분 안에 충돌·리스폰 없이 돌풍을 5회 이상 사용해 황금 매듭을 완성하세요.',
+      '2분 안에 충돌·리스폰 없이 돌풍을 5회 이상 사용해 황금 매듭을 완성하세요.',
       '세 개의 냉각 봉인을 깨우고 분화가 덮치기 전에 태양의 심장에서 탈출하세요.',
     ])
   })
@@ -91,10 +91,10 @@ describe('mission attempt guards', () => {
 
 describe('first-skyknot evaluation', () => {
   it.each([
-    [180_000, 'gold'],
-    [180_001, 'silver'],
-    [210_000, 'silver'],
-    [210_001, 'bronze'],
+    [120_000, 'gold'],
+    [120_001, 'silver'],
+    [135_000, 'silver'],
+    [135_001, 'bronze'],
   ] as const)('grades a %sms finish as %s', (elapsedMs, grade) => {
     expect(
       evaluateMission('first-skyknot', completed({ elapsedMs })).grade,
@@ -129,12 +129,12 @@ describe('boost-mastery evaluation', () => {
 
 describe('no-respawn evaluation', () => {
   it.each([
-    [180_000, 7, 'gold'],
-    [180_001, 7, 'silver'],
-    [180_000, 6, 'silver'],
-    [210_000, 5, 'silver'],
-    [210_001, 5, 'bronze'],
-    [210_000, 4, 'bronze'],
+    [120_000, 7, 'gold'],
+    [120_001, 7, 'silver'],
+    [120_000, 6, 'silver'],
+    [135_000, 5, 'silver'],
+    [135_001, 5, 'bronze'],
+    [135_000, 4, 'bronze'],
     [999_999, 3, 'bronze'],
   ] as const)(
     'grades %sms with %s boosts as %s',
@@ -159,13 +159,13 @@ describe('no-respawn evaluation', () => {
 
 describe('time-trial evaluation', () => {
   it.each([
-    [150_000, 7, 'gold'],
-    [150_001, 7, 'silver'],
-    [150_000, 6, 'silver'],
-    [165_000, 5, 'silver'],
-    [165_001, 5, 'bronze'],
-    [165_000, 4, 'bronze'],
-    [210_000, 3, 'bronze'],
+    [95_000, 7, 'gold'],
+    [95_001, 7, 'silver'],
+    [95_000, 6, 'silver'],
+    [110_000, 5, 'silver'],
+    [110_001, 5, 'bronze'],
+    [110_000, 4, 'bronze'],
+    [135_000, 3, 'bronze'],
   ] as const)(
     'grades %sms with %s boosts as %s',
     (elapsedMs, boostActivationCount, grade) => {
@@ -182,7 +182,7 @@ describe('time-trial evaluation', () => {
     expectUnmetCriteria(
       'time-trial',
       completed({
-        elapsedMs: 210_001,
+        elapsedMs: 135_001,
         respawnCount: 1,
         boostActivationCount: 2,
       }),
@@ -193,13 +193,13 @@ describe('time-trial evaluation', () => {
 
 describe('clean-flight evaluation', () => {
   it.each([
-    [150_000, 7, 'gold'],
-    [150_001, 7, 'silver'],
-    [150_000, 6, 'silver'],
-    [165_000, 5, 'silver'],
-    [165_001, 5, 'bronze'],
-    [165_000, 4, 'bronze'],
-    [210_000, 3, 'bronze'],
+    [95_000, 7, 'gold'],
+    [95_001, 7, 'silver'],
+    [95_000, 6, 'silver'],
+    [110_000, 5, 'silver'],
+    [110_001, 5, 'bronze'],
+    [110_000, 4, 'bronze'],
+    [135_000, 3, 'bronze'],
   ] as const)(
     'grades %sms with %s boosts as %s',
     (elapsedMs, boostActivationCount, grade) => {
@@ -216,7 +216,7 @@ describe('clean-flight evaluation', () => {
     expectUnmetCriteria(
       'clean-flight',
       completed({
-        elapsedMs: 210_001,
+        elapsedMs: 135_001,
         collisionCount: 1,
         respawnCount: 1,
         boostActivationCount: 2,
@@ -228,13 +228,13 @@ describe('clean-flight evaluation', () => {
 
 describe('golden-knot evaluation', () => {
   it.each([
-    [150_000, 7, 'gold'],
-    [150_001, 7, 'silver'],
-    [150_000, 6, 'silver'],
-    [165_000, 6, 'silver'],
-    [165_001, 6, 'bronze'],
-    [165_000, 5, 'bronze'],
-    [180_000, 5, 'bronze'],
+    [95_000, 7, 'gold'],
+    [95_001, 7, 'silver'],
+    [95_000, 6, 'silver'],
+    [110_000, 6, 'silver'],
+    [110_001, 6, 'bronze'],
+    [110_000, 5, 'bronze'],
+    [120_000, 5, 'bronze'],
   ] as const)(
     'grades %sms with %s boosts as %s',
     (elapsedMs, boostActivationCount, grade) => {
@@ -251,7 +251,7 @@ describe('golden-knot evaluation', () => {
     expectUnmetCriteria(
       'golden-knot',
       completed({
-        elapsedMs: 180_001,
+        elapsedMs: 120_001,
         collisionCount: 1,
         respawnCount: 1,
         boostActivationCount: 4,

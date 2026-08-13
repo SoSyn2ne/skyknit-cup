@@ -279,6 +279,7 @@ export interface FlightDebugSnapshot {
     readonly pixelRatio: number
     readonly shadows: boolean
     readonly shadowMapSize: number
+    readonly shadowRadius: number
   }
   readonly exploration: {
     readonly movement: ExplorationFlightState['movement']
@@ -592,6 +593,9 @@ export function createRenderer(
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.05
+    // PCF in this three version already filters through a noise-rotated
+    // five-tap Vogel disk scaled by each light's shadow.radius, so softness is
+    // tuned there rather than by the deprecated PCFSoftShadowMap type.
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.setClearColor(palette.skyZenith, 1)
 
@@ -863,6 +867,7 @@ export function createRenderer(
       ? [...(recovery?.volcanicAnnouncedEventKeys ?? [])]
       : []
     let latestVolcanicHazardFrame: VolcanicHazardFrame | null = null
+    let volcanicLavaDrawPrimed = false
     const dormantVolcanicHazardFrame = sampleVolcanicHazards(
       0,
       VOLCANIC_HAZARD_SEED,
@@ -912,11 +917,12 @@ export function createRenderer(
     }
 
     const resetFlight = (): void => {
-      const course = syncRaceCourse()
+      const course = getActiveRaceCourse()
       flightState = createInitialFlightState({
         position: course.startAnchor.position,
         headingRadians: course.startAnchor.headingRadians,
       })
+      syncRaceCourse()
       resetVolcanicHazardState()
       outOfBoundsTracker = { outsideDurationSeconds: 0 }
       respawnImmunitySeconds = 0
@@ -2435,6 +2441,8 @@ export function createRenderer(
         loadedRegionIds,
         explorationSimulationActive,
       )
+      // The streaming container joins `loadedRegionIds` before its GLB resolves,
+      // so the synchronous hazard pools can be prewarmed during countdown.
       const volcanicLoaded = loadedRegionIds.includes('volcanic-archipelago')
       const volcanicActive =
         volcanicLoaded &&
@@ -2464,6 +2472,15 @@ export function createRenderer(
         volcanicLoaded,
         volcanicActive,
       )
+      if (
+        !volcanicLavaDrawPrimed &&
+        volcanicRaceActive &&
+        volcanicLoaded &&
+        raceState.phase !== 'racing'
+      ) {
+        volcanicActivities.primeFirstLavaWaveDraw()
+        volcanicLavaDrawPrimed = true
+      }
       const volcanicIntensity = volcanicActive
         ? gameMode === 'explore'
           ? Math.min(1, 0.58 + activeWindStrength * 0.32)
@@ -2786,6 +2803,7 @@ export function createRenderer(
                 pixelRatio: renderer.getPixelRatio(),
                 shadows: renderer.shadowMap.enabled,
                 shadowMapSize: renderQuality.shadowMapSize,
+                shadowRadius: cameraSnapshot.world.shadowRadius,
               },
               exploration: {
                 movement: explorationState.movement,

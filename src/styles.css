@@ -1714,6 +1714,18 @@ button {
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
+  .race-hud[data-phase='countdown'] .race-hud__mission-tracker,
+  .race-hud[data-phase='racing'] .race-hud__mission-tracker {
+    top: max(92px, calc(env(safe-area-inset-top) + 76px));
+    left: max(16px, env(safe-area-inset-left));
+    min-width: 0;
+    width: min(208px, calc(40% - 24px));
+    max-width: calc(40% - 24px);
+    padding: 6px 10px;
+    text-align: left;
+    transform: none;
+  }
+
   .race-hud[data-phase='paused'] .race-hud__panel {
     top: max(8px, env(safe-area-inset-top));
     bottom: max(8px, env(safe-area-inset-bottom));
