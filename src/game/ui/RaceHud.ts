@@ -177,11 +177,11 @@ export function formatMissionProgress(
     case 'no-respawn':
       return `${checkpoint} · 돌풍 ${attempt.boostActivationCount}/3 · 리스폰 ${attempt.respawnCount}`
     case 'time-trial':
-      return `${elapsed} / 3:30.000 · 돌풍 ${attempt.boostActivationCount}/3 · 리스폰 ${attempt.respawnCount}`
+      return `${elapsed} / 2:15.000 · 돌풍 ${attempt.boostActivationCount}/3 · 리스폰 ${attempt.respawnCount}`
     case 'clean-flight':
-      return `${elapsed} / 3:30.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/3`
+      return `${elapsed} / 2:15.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/3`
     case 'golden-knot':
-      return `${elapsed} / 3:00.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/5`
+      return `${elapsed} / 2:00.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/5`
     case 'heart-of-sun': {
       const objective =
         attempt.nextCheckpointIndex < 3

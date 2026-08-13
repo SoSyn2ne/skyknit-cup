@@ -47,16 +47,24 @@ const WHITE_TIGER_LOADOUT = {
 } as const
 
 const GUARDIAN_TEST_POSE = {
+  wingMode: 'cruise',
   shoulderBankRadians: 0.16,
   bodyBankRadians: 0.11,
+  bodyPitchRadians: 0.12,
   headPitchRadians: 0.3,
+  headYawRadians: 0.08,
   wingFoldRadians: 0.1,
+  wingSpreadRadians: 0.15,
   wingFlapRadians: 0.2,
+  boostLaunchRadians: 0,
   tailYawRadians: [0.2, 0.16, 0.12, 0.08, 0.04],
+  tailPitchRadians: [0.1, 0.08, 0.06, 0.04, 0.02],
   recoilRadians: 0,
   breathScale: 1.02,
   blinkAmount: 0,
   jawOpenRadians: 0.08,
+  boostLaunchRemainingSeconds: 0,
+  wasBoosting: false,
 } satisfies DragonPoseState
 
 function createValidDragonAsset(): THREE.Group {
@@ -346,11 +354,12 @@ describe('Sky League ghost dragon appearance', () => {
       ),
     ).toBe(true)
     expect(
-      echoMaterials.some(
+      echoMaterials.every(
         (material) =>
-          material instanceof THREE.MeshBasicMaterial && material.wireframe,
+          material instanceof THREE.MeshBasicMaterial && !material.wireframe,
       ),
     ).toBe(true)
+    expect(GHOST_DRAGON_VISUAL_SPEC.opacity).toBeLessThanOrEqual(0.34)
     expect(echoMaterials.every((material) => !material.toneMapped)).toBe(true)
     const echoWingMeshes = collectMeshes(dragon.movementRoot).filter((mesh) => {
       const materials = Array.isArray(mesh.material)
@@ -365,6 +374,11 @@ describe('Sky League ghost dragon appearance', () => {
     })
     expect(echoWingMeshes).toHaveLength(2)
     expect(echoWingMeshes[0]?.geometry).toBe(echoWingMeshes[1]?.geometry)
+
+    dragon.setGhostOpacity(0.1)
+    expect(echoMaterials.every((material) => material.opacity === 0.1)).toBe(
+      true,
+    )
   })
 
   it('restyles loaded GLB materials and disposes the ghost exactly once', async () => {
@@ -606,15 +620,19 @@ describe('Milestone 38 guardian visual contract', () => {
     expect(phoenixWing?.rotation.z).toBeCloseTo(0.318, 5)
     expect(tigerWing?.rotation.z).toBeCloseTo(0.274, 5)
     expect(dragonHead?.rotation.x).toBeCloseTo(0.3, 5)
+    expect(dragonHead?.rotation.y).toBeCloseTo(0.08, 5)
     expect(phoenixHead?.rotation.x).toBeCloseTo(0.24, 5)
     expect(tigerHead?.rotation.x).toBeCloseTo(0.18, 5)
     expect(dragonTail?.rotation.y).toBeCloseTo(0.2, 5)
+    expect(dragonTail?.rotation.x).toBeCloseTo(0.1, 5)
     expect(phoenixTail?.rotation.y).toBeCloseTo(0.25, 5)
     expect(tigerTail?.rotation.y).toBeCloseTo(0.18, 5)
     expect(dragonPoseRoot?.position.y).toBeCloseTo(0.016, 5)
     expect(phoenixPoseRoot?.position.y).toBeCloseTo(0.0072, 5)
     expect(tigerPoseRoot?.position.y).toBeCloseTo(0.00288, 5)
     expect(dragonPoseRoot?.scale.y).toBeCloseTo(1.02, 5)
+    expect(dragonWing?.rotation.x).toBeCloseTo(0.15, 5)
+    expect(dragonBody?.rotation.x).toBeCloseTo(0.12, 5)
     expect(phoenixPoseRoot?.scale.y).toBeCloseTo(1.0156, 5)
     expect(tigerPoseRoot?.scale.y).toBeCloseTo(1.008, 5)
     expect(

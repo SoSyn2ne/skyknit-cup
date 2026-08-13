@@ -23,6 +23,15 @@ export interface CoinCourseVisual {
   dispose(): void
 }
 
+export const COLLECTIBLE_FEEDBACK_SPEC = Object.freeze({
+  skyCoinBaseEmissive: 0.72,
+  skyCoinPulseEmissive: 0.28,
+  skyCoinScalePulse: 0.065,
+  coolingCrystalBaseEmissive: 1.08,
+  coolingCrystalPulseEmissive: 0.34,
+  coolingCrystalScalePulse: 0.08,
+})
+
 const ALL_COINS = COIN_COURSES.flatMap((course) => course.coins)
 const VISUAL_KIND_BY_COIN_ID = new Map(
   COIN_COURSES.flatMap((course) =>
@@ -59,7 +68,7 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
   const skyCoinMaterial = new THREE.MeshStandardMaterial({
     color: 0xffd96a,
     emissive: 0xffa51f,
-    emissiveIntensity: 0.58,
+    emissiveIntensity: COLLECTIBLE_FEEDBACK_SPEC.skyCoinBaseEmissive,
     metalness: 0.55,
     roughness: 0.32,
     transparent: true,
@@ -71,7 +80,8 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
   const coolingCrystalMaterial = new THREE.MeshStandardMaterial({
     color: 0x7defff,
     emissive: 0x16cfe8,
-    emissiveIntensity: 0.92,
+    emissiveIntensity:
+      COLLECTIBLE_FEEDBACK_SPEC.coolingCrystalBaseEmissive,
     metalness: 0.12,
     roughness: 0.2,
     flatShading: true,
@@ -109,6 +119,12 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
     update: (activeCoin, simulationSeconds) => {
       skyCoinMesh.visible = false
       coolingCrystalMesh.visible = false
+      skyCoinMaterial.emissiveIntensity =
+        COLLECTIBLE_FEEDBACK_SPEC.skyCoinBaseEmissive
+      skyCoinMaterial.opacity = 0.94
+      coolingCrystalMaterial.emissiveIntensity =
+        COLLECTIBLE_FEEDBACK_SPEC.coolingCrystalBaseEmissive
+      coolingCrystalMaterial.opacity = 0.94
 
       position.set(0, 0, 0)
       rotation.identity()
@@ -122,6 +138,9 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
           : (VISUAL_KIND_BY_COIN_ID.get(activeCoin.id) ?? 'sky-coin')
 
       if (activeCoin !== null && visualKind !== null) {
+        const pulse =
+          0.5 +
+          Math.sin(simulationSeconds * 4.2 + activeCoin.index * 0.78) * 0.5
         position.set(
           activeCoin.position.x,
           activeCoin.position.y +
@@ -140,17 +159,31 @@ export function createCoinCourseVisual(scene: THREE.Scene): CoinCourseVisual {
             Math.cos(simulationSeconds * 0.75 + activeCoin.index) * 0.1,
           )
           rotation.setFromEuler(euler)
-          scale.copy(COOLING_CRYSTAL_SCALE)
+          scale
+            .copy(COOLING_CRYSTAL_SCALE)
+            .multiplyScalar(
+              1 + pulse * COLLECTIBLE_FEEDBACK_SPEC.coolingCrystalScalePulse,
+            )
+          coolingCrystalMaterial.emissiveIntensity =
+            COLLECTIBLE_FEEDBACK_SPEC.coolingCrystalBaseEmissive +
+            pulse * COLLECTIBLE_FEEDBACK_SPEC.coolingCrystalPulseEmissive
+          coolingCrystalMaterial.opacity = 0.9 + pulse * 0.08
         } else {
           euler.set(
-            0,
-            Math.sin(
-              simulationSeconds * 1.35 + activeCoin.index * 0.22,
-            ) * 0.42,
-            0,
+            Math.sin(simulationSeconds * 1.4 + activeCoin.index * 0.22) * 0.08,
+            simulationSeconds * 2.1 + activeCoin.index * 0.28,
+            Math.cos(simulationSeconds * 1.1 + activeCoin.index * 0.31) * 0.06,
           )
           rotation.setFromEuler(euler)
-          scale.copy(SKY_COIN_SCALE)
+          scale
+            .copy(SKY_COIN_SCALE)
+            .multiplyScalar(
+              1 + pulse * COLLECTIBLE_FEEDBACK_SPEC.skyCoinScalePulse,
+            )
+          skyCoinMaterial.emissiveIntensity =
+            COLLECTIBLE_FEEDBACK_SPEC.skyCoinBaseEmissive +
+            pulse * COLLECTIBLE_FEEDBACK_SPEC.skyCoinPulseEmissive
+          skyCoinMaterial.opacity = 0.9 + pulse * 0.08
         }
         matrix.compose(position, rotation, scale)
         activeMesh.setMatrixAt(0, matrix)

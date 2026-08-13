@@ -62,14 +62,14 @@ function createSkyDome(palette: WorldPalette): THREE.Mesh {
       void main() {
         float height = clamp(vDirection.y * 0.5 + 0.5, 0.0, 1.0);
         float sunFacing = max(dot(normalize(vDirection), sunDirection), 0.0);
-        vec3 warmHaze = mix(hazeColor, sunColor, 0.16 + sunFacing * 0.18);
-        vec3 lower = mix(cloudColor, warmHaze, smoothstep(0.0, 0.42, height));
-        vec3 color = mix(lower, zenithColor * 0.78, smoothstep(0.38, 1.0, height));
+        vec3 warmHaze = mix(hazeColor, sunColor, 0.22 + sunFacing * 0.24);
+        vec3 lower = mix(cloudColor, warmHaze, smoothstep(0.0, 0.38, height));
+        vec3 color = mix(lower, zenithColor * 0.7, smoothstep(0.3, 1.0, height));
         float horizon = 1.0 - smoothstep(0.0, 0.42, abs(vDirection.y));
-        float sunGlow = pow(sunFacing, 8.0) * 0.34;
-        float sunCore = pow(sunFacing, 180.0) * 1.15;
-        color = mix(color, warmHaze, horizon * 0.12);
-        color += sunColor * (sunGlow + sunCore + horizon * 0.025);
+        float sunGlow = pow(sunFacing, 8.0) * 0.42;
+        float sunCore = pow(sunFacing, 180.0) * 1.22;
+        color = mix(color, warmHaze, horizon * 0.2);
+        color += sunColor * (sunGlow + sunCore + horizon * 0.035);
         gl_FragColor = vec4(color, 1.0);
       }
     `,
@@ -157,7 +157,7 @@ function createIslands(palette: WorldPalette): THREE.Group {
   const rockMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     emissive: rockEmissiveColor,
-    emissiveIntensity: 0.14,
+    emissiveIntensity: 0.1,
     roughness: 0.92,
     metalness: 0.02,
     flatShading: true,
@@ -477,14 +477,14 @@ export function createWorld(
   const hemisphere = new THREE.HemisphereLight(
     palette.skyHaze,
     hemisphereGroundColor,
-    1.75,
+    1.32,
   )
   hemisphere.name = 'RC7_DawnFillLight'
   const sunColor = new THREE.Color(palette.wingGold).lerp(
     new THREE.Color(0xfff1d2),
     0.58,
   )
-  const sun = new THREE.DirectionalLight(sunColor, 3.65)
+  const sun = new THREE.DirectionalLight(sunColor, 4.15)
   sun.name = 'RC7_DawnKeyLight'
   const sunTarget = new THREE.Object3D()
   sunTarget.name = 'RC7_DawnKeyTarget'
@@ -493,7 +493,7 @@ export function createWorld(
     new THREE.Color(palette.cloud),
     0.38,
   )
-  const rim = new THREE.DirectionalLight(rimColor, 0.82)
+  const rim = new THREE.DirectionalLight(rimColor, 0.96)
   rim.name = 'RC7_SkyRimLight'
   rim.target = sunTarget
   sun.shadow.mapSize.set(1_024, 1_024)
@@ -514,8 +514,8 @@ export function createWorld(
   const sunOffset = new THREE.Vector3(-58, 82, 46)
   const rimOffset = new THREE.Vector3(52, 24, -64)
   const sunDiskOffset = new THREE.Vector3(-180, 150, -440)
-  const fogColor = new THREE.Color(palette.skyHaze).lerp(sunColor, 0.1)
-  const fog = new THREE.FogExp2(fogColor, 0.00115)
+  const fogColor = new THREE.Color(palette.skyHaze).lerp(sunColor, 0.075)
+  const fog = new THREE.FogExp2(fogColor, 0.00098)
   scene.fog = fog
   const sunDisk = new THREE.Mesh(
     new THREE.CircleGeometry(1, 32),
@@ -585,7 +585,7 @@ export function createWorld(
       sun.shadow.map.dispose()
       sun.shadow.map = null
     }
-    fog.density = nextQuality.tier === 'high' ? 0.00115 : 0.00095
+    fog.density = nextQuality.tier === 'high' ? 0.00098 : 0.00084
   }
   applyQuality(quality)
 

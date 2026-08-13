@@ -788,7 +788,7 @@ describe('race state', () => {
     })
     expect(skyknot.config).toMatchObject({
       courseId: 'skyknot',
-      checkpointCount: 12,
+      checkpointCount: 8,
       spawnPosition: { x: 0, y: 8, z: 0 },
     })
   })
@@ -925,7 +925,7 @@ describe('race state', () => {
   it('evaluates the mission at the final checkpoint and saves only a higher grade', () => {
     const racing = {
       ...withRun(makeState('racing'), {
-        elapsedMs: 150_000,
+        elapsedMs: 95_000,
         nextCheckpointIndex: 2,
       }),
       mission: {
@@ -933,7 +933,7 @@ describe('race state', () => {
         selectedMissionId: 'clean-flight' as const,
         attempt: {
           ...makeState('racing').mission.attempt,
-          elapsedMs: 150_000,
+          elapsedMs: 95_000,
           nextCheckpointIndex: 2,
           boostActivationCount: 7,
         },

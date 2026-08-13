@@ -14,7 +14,7 @@ async function readPhase(page: Page): Promise<FlightDebugSnapshot['race']['phase
 }
 
 async function finishQaCourse(page: Page): Promise<void> {
-  for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
     await page.evaluate(() => {
       const testWindow = window as unknown as {
         __DRAGON_RACE_TEST__?: {

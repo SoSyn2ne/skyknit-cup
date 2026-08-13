@@ -7,6 +7,7 @@ const dragonFactoryMock = vi.hoisted(() => ({
 
 vi.mock('./createDragon', () => ({
   createDragon: (...args: unknown[]) => dragonFactoryMock.create(...args),
+  GHOST_DRAGON_VISUAL_SPEC: { opacity: 0.32 },
 }))
 
 vi.mock('./createWorld', () => ({
@@ -106,10 +107,10 @@ describe('flight sandbox course switching', () => {
     const cameraQuaternion = camera.quaternion.clone()
     const cameraFov = camera.fov
 
-    expect(initialGates).toHaveLength(12)
+    expect(initialGates).toHaveLength(8)
     expect(sandbox.debugSnapshot?.(flight)).toMatchObject({
       activeGateIndex: 0,
-      checkpointCount: 12,
+      checkpointCount: 8,
     })
 
     sandbox.setCourse(VOLCANIC_ARCHIPELAGO_COURSE)
@@ -151,5 +152,47 @@ describe('flight sandbox course switching', () => {
     }).not.toThrow()
     expect(player.dispose).toHaveBeenCalledTimes(1)
     expect(volcanicGates.every(({ parent }) => parent === null)).toBe(true)
+  })
+
+  it('gives the active gate a dedicated approach halo without changing course state', () => {
+    const player = createMockDragon()
+    dragonFactoryMock.create.mockReturnValue(player)
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera()
+    const quality = resolveRenderQuality({
+      preference: 'low',
+      coarsePointer: false,
+      viewportWidth: 1_280,
+      devicePixelRatio: 1,
+    })
+    const sandbox = createFlightSandbox(
+      scene,
+      camera,
+      PALETTE,
+      quality,
+      SKYKNOT_COURSE,
+    )
+    const flight = createInitialFlightState({
+      position: { x: 0, y: 18, z: -700 },
+    })
+
+    sandbox.step(flight, 1, 1 / 60, 0, 0, 'race')
+
+    const activeGate = scene.getObjectByName('M2_CourseGate_01')
+    const approachHalo = activeGate?.getObjectByName('M42_GateApproachHalo')
+
+    expect(approachHalo).toBeInstanceOf(THREE.Mesh)
+    expect(
+      (approachHalo as THREE.Mesh<
+        THREE.BufferGeometry,
+        THREE.MeshBasicMaterial
+      >).material.opacity,
+    ).toBeGreaterThan(0.15)
+    expect(sandbox.debugSnapshot?.(flight)).toMatchObject({
+      activeGateIndex: 0,
+      checkpointCount: 8,
+    })
+
+    sandbox.dispose()
   })
 })

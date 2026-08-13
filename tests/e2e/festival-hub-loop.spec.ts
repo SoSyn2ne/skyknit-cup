@@ -591,7 +591,7 @@ test('preserves the completed Festival Hub journey across reload and WebGL recov
       timeout: 5_000,
     })
     .toBe('racing')
-  for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
     await page.evaluate(() =>
       window.__DRAGON_RACE_TEST__?.qaPassCheckpoint(),
     )

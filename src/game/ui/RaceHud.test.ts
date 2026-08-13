@@ -125,8 +125,8 @@ function createFinishedRaceHudView(): RaceHudView {
     phase: 'finished',
     countdownRemainingMs: 0,
     elapsedMs: 80_000,
-    nextCheckpointIndex: 12,
-    checkpointCount: 12,
+    nextCheckpointIndex: 8,
+    checkpointCount: 8,
     finalElapsedMs: 80_000,
     bestTimeMs: 80_000,
     previousBestTimeMs: 90_000,
@@ -147,7 +147,7 @@ function createFinishedRaceHudView(): RaceHudView {
       status: 'finished',
       attempt: {
         elapsedMs: 80_000,
-        nextCheckpointIndex: 12,
+        nextCheckpointIndex: 8,
         collisionCount: 0,
         respawnCount: 0,
         boostActivationCount: 4,
@@ -216,24 +216,24 @@ describe('mission HUD formatting', () => {
   })
 
   it.each([
-    ['first-skyknot', '관문 4/12 · 1:31.250'],
-    ['boost-mastery', '관문 4/12 · 돌풍 3/3'],
-    ['no-respawn', '관문 4/12 · 돌풍 3/3 · 리스폰 2'],
-    ['time-trial', '1:31.250 / 3:30.000 · 돌풍 3/3 · 리스폰 2'],
+    ['first-skyknot', '관문 4/8 · 1:31.250'],
+    ['boost-mastery', '관문 4/8 · 돌풍 3/3'],
+    ['no-respawn', '관문 4/8 · 돌풍 3/3 · 리스폰 2'],
+    ['time-trial', '1:31.250 / 2:15.000 · 돌풍 3/3 · 리스폰 2'],
     [
       'clean-flight',
-      '1:31.250 / 3:30.000 · 충돌 1 · 리스폰 2 · 돌풍 3/3',
+      '1:31.250 / 2:15.000 · 충돌 1 · 리스폰 2 · 돌풍 3/3',
     ],
     [
       'golden-knot',
-      '1:31.250 / 3:00.000 · 충돌 1 · 리스폰 2 · 돌풍 3/5',
+      '1:31.250 / 2:00.000 · 충돌 1 · 리스폰 2 · 돌풍 3/5',
     ],
     [
       'heart-of-sun',
       '분화 탈출 · 남은 0:00.000 · 충돌 1 · 리스폰 2 · 돌풍 3/2',
     ],
   ] as const)('formats %s progress', (missionId, label) => {
-    expect(formatMissionProgress(missionId, attempt, 12)).toBe(label)
+    expect(formatMissionProgress(missionId, attempt, 8)).toBe(label)
   })
 })
 

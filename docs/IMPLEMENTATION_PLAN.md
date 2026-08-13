@@ -1,8 +1,12 @@
 # 하늘매듭배 구현 계획
 
-> 상태: **Milestone 39 / 태양의 심장 · 용암 군도 자동 검증 완료 / 실기기·사람 플레이테스트 대기**
+> 상태: **Milestone 42 / 자동·실브라우저 검증 완료 · 실기기 플레이테스트 대기**
 >
 > 선행 문서: `docs/PRODUCT_GOAL.md`
+>
+> 2026-08-11 사용자 지시에 따라 첫 하늘매듭은 8관문·1.5~2.5분 목표로 축소하며, 이를 재사용하는 미션 시간 기준도 함께 조정한다.
+>
+> 2026-08-11 사용자 지시에 따라 기존 조작·규칙·에셋 계약을 보존하는 게임감 그래픽 패스를 Milestone 42로 진행한다.
 
 ## 기술 방향
 
@@ -210,7 +214,7 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 ### Milestone 2: 완주 가능한 레이스
 
 **결과물**
-- 10~12개 관문 데이터
+- 8개 관문 데이터
 - 준비, 3초 카운트다운, 레이스, 일시정지, 완주, 재시도
 - 타이머, 순서 판정, 수동/자동 리스폰, 최고 기록
 
@@ -219,7 +223,7 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 - 건너뛰기, 역주행, 고속 관통, 리스폰 직후 재집계를 단위 테스트로 막는다.
 - 고도 `-12` 미만 또는 현재 코스 구간에서 65 units 초과 상태가 1.5초 지속되면 마지막 안전 앵커로 자동 리스폰한다.
 - 수동/자동 리스폰은 타이머와 체크포인트를 보존하고 1초간 충돌 면역을 적용한다.
-- 첫 플레이 기준 2~4분 안에 완주할 수 있다.
+- 첫 플레이 기준 1.5~2.5분 안에 완주할 수 있다.
 
 ### Milestone 3: 세계와 드래곤 정체성
 
@@ -734,6 +738,57 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 - ready/paused의 미션 선택·작업실·스토리, context recovery와 5개 뷰포트 접근성·safe area·reduced motion을 유지한다.
 - 전체 단위·타입·린트·빌드·E2E·production·asset audit·결정적 export·10분 soak와 visual-verdict를 통과한다.
 - 화산 탐험과 미션 모두 desktop/high 중앙값 55fps·하한 50fps, mobile/low 30fps, high 120 draw calls, gzip 10MiB를 지킨다.
+
+### Milestone 41: 수호수 3D 모션 고도화
+
+**상태: 자동 검증 완료 / 실기기·사람 플레이테스트 대기 — 2026-08-10**
+
+**결과물**
+- 세 수호수가 공유하는 순수 포즈 상태와 종족별 시각 모션 프로필
+- 활공·순항·상승·하강·돌풍의 날개 상태 전이, 어깨·몸통·머리·꼬리 지연, 충돌 recoil의 결정적 규칙
+- 기존 공통 Rig에만 적용되는 Three.js 런타임 변형과 카메라 가독성 회귀 검증
+- `docs/MILESTONE_41_GUARDIAN_MOTION_QA_REPORT.md`
+
+**검증 상태**
+- 포즈·Rig·공정성 회귀, 전체 E2E, production, 5개 뷰포트, 10분 soak와 세 수호수의 비행 스크린샷 증거를 통과했다.
+- `heart-of-sun`을 고를 때 이전 축제 시작점에서 요청되던 GLB를 막고, volcanic 스트리밍 컨테이너가 등록된 ready/countdown에 한 번 투명 draw로 VFX를 예열했다. 게임 규칙·물리·위험 타이밍은 바꾸지 않았으며 `npm run test:performance`의 화산 desktop/high은 60/56fps, mobile/low는 60/60fps(중앙값/최저 버킷)로 전역 하한을 통과했다.
+
+**완료 조건**
+- 동일한 `DragonPoseInput`과 60Hz step 시퀀스는 항상 동일한 포즈를 만들며, 30/60/120fps와 지터 host cadence가 동일한 simulation input을 전달할 때 결과가 일치한다.
+- 활공·순항·상승·하강·부스트·충돌 상태는 순수 단위 테스트로 구분되고, 부스트의 강한 하강 날갯짓과 접힘은 한 번의 의도된 전이로만 발생한다.
+- 동일 입력에서 세 프로필의 wing, body, head, tail 값이 구분되지만 모든 수호수의 `FlightState`, 카메라 목표, 관문·충돌·미션·기록 결과는 같다는 회귀 검증을 둔다.
+- 런타임은 공통 Rig가 없는 fallback과 선택 피벗 누락을 안전하게 처리하고, 기존 GLB·재질·draw call·저장·고스트 수명주기를 바꾸지 않는다.
+- 카메라는 다음 관문·두 바람실을 계속 읽히게 하며, reduced-motion에서 흔들림과 강한 FOV 변화를 새로 만들지 않는다.
+- test, typecheck, lint, build, 전체 E2E, production, 5 viewport canvas/console/a11y 확인, 수호수 3종 시각 증거, 성능·gzip·10분 soak를 M39 예산 안에서 통과한다.
+
+### Milestone 42: 게임감 그래픽 패스
+
+**상태: 자동·실브라우저 검증 완료 / 실기기·사람 플레이테스트 대기 — 2026-08-11**
+
+**플레이어 결과**
+- 정적인 하늘 섬 디오라마가 아니라, 고도·속도·목표 접근·통과 보상이 연결된 공중 레이스 세계로 읽힌다.
+- 다음 관문과 두 바람실은 항상 먼저 보이되, 관문 직전에는 빛·펄스·공기 흐름으로 도착 순간이 분명해진다.
+- 탐험 수집물은 기존 규칙을 바꾸지 않고도 가까이 갈 이유가 있는 작은 보상 신호를 가진다.
+
+**수정 소유권**
+- `src/game/world/createWorld.ts`: 기존 스카이·안개·키/림 조명과 구름 리듬의 대비 계층.
+- `src/game/world/createFlightSandbox.ts`: 활성 관문 접근/통과 피드백, 바람실·부스트 streak 리듬.
+- `src/game/world/createCoinCourseVisual.ts`: 인스턴싱을 보존하는 동전·냉각 수정 부유·발광 리듬.
+- `src/game/world/createDragon.ts`: 플레이어와 겹칠 때도 수호수 실루엣을 가리지 않는 경량 고스트의 투명도·면 처리.
+- `src/game/ui/RaceHud.ts`와 `src/styles.css`: 짧은 가로 화면에서 활성 관문 축을 비켜나는 미션 요약 배치.
+- 필요한 범위의 해당 단위 테스트와 브라우저 시각 QA만 함께 수정한다.
+
+**제약과 완료 조건**
+- 새 GLB·텍스처·외부 의존성·포스트프로세싱·입력·코스·저장 필드는 추가하지 않는다.
+- race/mission/coin 규칙, 수호수 물리와 고스트·기록 계약은 바꾸지 않는다.
+- low/reduced-motion은 강한 펄스·입자량을 줄이고, desktop/high 55/50fps, mobile/low 30fps, high 120 draw calls, gzip 10MiB를 지킨다.
+- `test`, `typecheck`, `lint`, `build`, 관련 E2E, 5개 뷰포트 실브라우저 canvas/console 확인과 `visual-verdict >= 90`을 통과한다.
+
+**검증 상태**
+- `npm test` 53 파일·620 테스트, `npm run typecheck`, `npm run lint`, `npm run build`를 통과했다.
+- 1440×900, 1280×720, 844×390, 390×844, 320×568 실브라우저 캡처에서 console 오류 없이 `visual-verdict 92/90`을 기록했고, 가로 844×390의 미션 요약은 중앙 관문 축 밖에 배치된다.
+- 탐험 4개 지역 스트리밍·동전 4개 지역 최고기록·화산 4단계 도전 E2E는 12 통과/8 의도된 프로젝트 조건 skip을 기록했다.
+- `npm run test:performance`는 7.2분에 2 통과했다. 일반·탐험·화산 desktop/high와 mobile/low가 모두 60fps였고, 가장 무거운 화산 desktop 미션은 63 draw calls·80,316 triangles였다.
 
 ## 테스트 매트릭스
 

@@ -127,7 +127,7 @@ test('gates generated audio behind gesture, edges, and mute', async ({
     .toBe(2)
   await page.keyboard.up('Space')
 
-  for (let checkpoint = 0; checkpoint < 12; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
     await page.evaluate(() => {
       const testWindow = window as unknown as {
         __DRAGON_RACE_TEST__?: { qaPassCheckpoint: () => void }
@@ -143,7 +143,7 @@ test('gates generated audio behind gesture, edges, and mute', async ({
         ? null
         : { gateCues: audio.gateCues, finishCues: audio.finishCues }
     })
-    .toEqual({ gateCues: 12, finishCues: 1 })
+    .toEqual({ gateCues: 8, finishCues: 1 })
 
   await page.getByRole('button', { name: '소리 끄기' }).click()
   await expect

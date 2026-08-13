@@ -867,6 +867,7 @@ export function createRenderer(
       ? [...(recovery?.volcanicAnnouncedEventKeys ?? [])]
       : []
     let latestVolcanicHazardFrame: VolcanicHazardFrame | null = null
+    let volcanicLavaDrawPrimed = false
     const dormantVolcanicHazardFrame = sampleVolcanicHazards(
       0,
       VOLCANIC_HAZARD_SEED,
@@ -916,11 +917,12 @@ export function createRenderer(
     }
 
     const resetFlight = (): void => {
-      const course = syncRaceCourse()
+      const course = getActiveRaceCourse()
       flightState = createInitialFlightState({
         position: course.startAnchor.position,
         headingRadians: course.startAnchor.headingRadians,
       })
+      syncRaceCourse()
       resetVolcanicHazardState()
       outOfBoundsTracker = { outsideDurationSeconds: 0 }
       respawnImmunitySeconds = 0
@@ -2439,6 +2441,8 @@ export function createRenderer(
         loadedRegionIds,
         explorationSimulationActive,
       )
+      // The streaming container joins `loadedRegionIds` before its GLB resolves,
+      // so the synchronous hazard pools can be prewarmed during countdown.
       const volcanicLoaded = loadedRegionIds.includes('volcanic-archipelago')
       const volcanicActive =
         volcanicLoaded &&
@@ -2468,6 +2472,15 @@ export function createRenderer(
         volcanicLoaded,
         volcanicActive,
       )
+      if (
+        !volcanicLavaDrawPrimed &&
+        volcanicRaceActive &&
+        volcanicLoaded &&
+        raceState.phase !== 'racing'
+      ) {
+        volcanicActivities.primeFirstLavaWaveDraw()
+        volcanicLavaDrawPrimed = true
+      }
       const volcanicIntensity = volcanicActive
         ? gameMode === 'explore'
           ? Math.min(1, 0.58 + activeWindStrength * 0.32)

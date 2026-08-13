@@ -67,7 +67,7 @@ function makeState(phase: RacePhase): RaceState {
       },
     },
     config: {
-      checkpointCount: 12,
+      checkpointCount: 8,
       boostCapacity: 100,
       spawnPosition: { x: 0, y: 10, z: 20 },
     },

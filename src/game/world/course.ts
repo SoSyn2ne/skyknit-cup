@@ -39,10 +39,6 @@ const CHECKPOINT_CENTERS: readonly Vec3Like[] = [
   { x: 830, y: 28, z: -420 },
   { x: 850, y: 44, z: -170 },
   { x: 720, y: 28, z: 45 },
-  { x: 500, y: 14, z: 170 },
-  { x: 250, y: 28, z: 180 },
-  { x: 40, y: 42, z: 50 },
-  { x: -80, y: 18, z: -170 },
 ]
 
 export const VOLCANIC_START_ANCHOR: RespawnAnchor = {
