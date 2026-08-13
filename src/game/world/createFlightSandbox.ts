@@ -4,6 +4,7 @@ import { QA_MODE } from '../../qaMode'
 
 import type { GhostPose } from '../competition/ghostRun'
 import {
+  CHARACTER_CATALOG,
   DEFAULT_CHARACTER_LOADOUT,
   normalizeCharacterLoadout,
   type CharacterLoadout,
@@ -568,6 +569,10 @@ export function createFlightSandbox(
   const initialDragonReady = dragon.ready
   dragon.setShadows(initialQuality.shadows)
   let activeCharacterLoadout = normalizedInitialLoadout
+  const getActiveMotionProfile = () =>
+    CHARACTER_CATALOG.find(
+      (character) => character.id === activeCharacterLoadout.characterId,
+    )?.motionProfile ?? 'dragon'
   let characterLoadRequestId = 0
   let ghostDragon: DragonVisual | null = null
   let dragonPose = createDragonPoseState()
@@ -957,6 +962,7 @@ export function createFlightSandbox(
           isBoosting: flight.isBoosting,
           collisionFeedbackSeconds,
           animationSeconds: characterAnimationSeconds,
+          motionProfile: getActiveMotionProfile(),
         },
         fixedDt,
       )
@@ -1025,6 +1031,7 @@ export function createFlightSandbox(
         isBoosting: pose.boost,
         collisionFeedbackSeconds: 0,
         animationSeconds: elapsedMs / 1_000,
+        motionProfile: getActiveMotionProfile(),
       },
       fixedDt,
     )

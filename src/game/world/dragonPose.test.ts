@@ -38,23 +38,125 @@ describe('procedural dragon pose', () => {
         collisionFeedbackSeconds: 0,
         animationSeconds: 0,
       },
-      0.25,
+      0.1,
+    )
+    const boostStart = stepDragonPose(
+      createDragonPoseState(),
+      {
+        bankRadians: 0,
+        pitchRadians: 0,
+        isBoosting: false,
+        collisionFeedbackSeconds: 0,
+        animationSeconds: 0,
+      },
+      0.1,
     )
     const boosting = stepDragonPose(
-      createDragonPoseState(),
+      boostStart,
       {
         bankRadians: 0,
         pitchRadians: 0,
         isBoosting: true,
         collisionFeedbackSeconds: 0,
-        animationSeconds: 0,
+        animationSeconds: 0.1,
       },
-      0.25,
+      0.1,
     )
 
     expect(boosting.wingFoldRadians).toBeGreaterThan(
       normal.wingFoldRadians,
     )
+    const boostPulse = stepDragonPose(
+      boosting,
+      {
+        bankRadians: 0,
+        pitchRadians: 0,
+        isBoosting: true,
+        collisionFeedbackSeconds: 0,
+        animationSeconds: 0.116,
+      },
+      0.016,
+    )
+
+    expect(boosting.wingMode).toBe('boost')
+    expect(boostPulse.boostLaunchRadians).toBeGreaterThan(0)
+  })
+
+  it('resolves climb, dive, cruise, and glide without changing flight physics', () => {
+    const input = {
+      bankRadians: 0,
+      pitchRadians: 0,
+      isBoosting: false,
+      collisionFeedbackSeconds: 0,
+      animationSeconds: 0,
+    }
+
+    expect(stepDragonPose(createDragonPoseState(), input, 1 / 60).wingMode).toBe(
+      'glide',
+    )
+    expect(
+      stepDragonPose(
+        createDragonPoseState(),
+        { ...input, bankRadians: 0.2 },
+        1 / 60,
+      ).wingMode,
+    ).toBe('cruise')
+    expect(
+      stepDragonPose(
+        createDragonPoseState(),
+        { ...input, pitchRadians: 0.2 },
+        1 / 60,
+      ).wingMode,
+    ).toBe('climb')
+    expect(
+      stepDragonPose(
+        createDragonPoseState(),
+        { ...input, pitchRadians: -0.2 },
+        1 / 60,
+      ).wingMode,
+    ).toBe('dive')
+  })
+
+  it('keeps the body and tail behind a sudden pitch change', () => {
+    const pose = stepDragonPose(
+      createDragonPoseState(),
+      {
+        bankRadians: 0,
+        pitchRadians: 0.6,
+        isBoosting: false,
+        collisionFeedbackSeconds: 0,
+        animationSeconds: 0,
+      },
+      1 / 60,
+    )
+
+    expect(pose.bodyPitchRadians ?? 0).toBeGreaterThan(0)
+    expect(pose.headPitchRadians).toBeGreaterThan(pose.bodyPitchRadians ?? 0)
+    expect(Math.abs(pose.tailPitchRadians?.[0] ?? 0)).toBeGreaterThan(
+      Math.abs(pose.tailPitchRadians?.[4] ?? 0),
+    )
+  })
+
+  it('gives each motion profile a distinct flap rhythm', () => {
+    const input = {
+      bankRadians: 0,
+      pitchRadians: 0,
+      isBoosting: false,
+      collisionFeedbackSeconds: 0,
+      animationSeconds: 0.19,
+    }
+    const values = new Set(
+      (['dragon', 'avian', 'feline'] as const).map(
+        (motionProfile) =>
+          stepDragonPose(
+            createDragonPoseState(),
+            { ...input, motionProfile },
+            1 / 60,
+          ).wingFlapRadians,
+      ),
+    )
+
+    expect(values.size).toBe(3)
   })
 
   it('reports one downstroke when the rendered wing crosses downward', () => {

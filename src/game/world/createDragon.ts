@@ -121,10 +121,14 @@ const VOLCANIC_REACTION_SPECS: Readonly<
 interface GuardianMotionProfile {
   readonly wingFlapScale: number
   readonly wingFoldScale: number
+  readonly wingSpreadScale: number
   readonly headPitchScale: number
+  readonly headYawScale: number
   readonly tailYawScale: number
+  readonly tailPitchScale: number
   readonly jawScale: number
   readonly bodyBobScale: number
+  readonly bodyPitchScale: number
   readonly breathScale: number
   readonly bankScale: number
 }
@@ -135,30 +139,42 @@ const GUARDIAN_MOTION_PROFILES: Readonly<
   dragon: Object.freeze({
     wingFlapScale: 1,
     wingFoldScale: 1,
+    wingSpreadScale: 1,
     headPitchScale: 1,
+    headYawScale: 1,
     tailYawScale: 1,
+    tailPitchScale: 1,
     jawScale: 1,
     bodyBobScale: 1,
+    bodyPitchScale: 1,
     breathScale: 1,
     bankScale: 1,
   }),
   avian: Object.freeze({
     wingFlapScale: 1.18,
     wingFoldScale: 0.82,
+    wingSpreadScale: 1.16,
     headPitchScale: 0.8,
+    headYawScale: 0.78,
     tailYawScale: 1.25,
+    tailPitchScale: 0.85,
     jawScale: 0.65,
     bodyBobScale: 0.45,
+    bodyPitchScale: 0.82,
     breathScale: 0.78,
     bankScale: 0.9,
   }),
   feline: Object.freeze({
     wingFlapScale: 0.92,
     wingFoldScale: 0.9,
+    wingSpreadScale: 0.74,
     headPitchScale: 0.6,
+    headYawScale: 1.12,
     tailYawScale: 0.9,
+    tailPitchScale: 1.2,
     jawScale: 0.8,
     bodyBobScale: 0.18,
+    bodyPitchScale: 1.12,
     breathScale: 0.4,
     bankScale: 0.45,
   }),
@@ -787,8 +803,12 @@ export function createDragon(
       rig.bodyRoot.rotation.z =
         (pose.bodyBankRadians - pose.shoulderBankRadians) *
         motionProfile.bankScale
+      rig.bodyRoot.rotation.x =
+        (pose.bodyPitchRadians ?? 0) * motionProfile.bodyPitchScale
       rig.head.rotation.x =
         pose.headPitchRadians * motionProfile.headPitchScale
+      rig.head.rotation.y =
+        (pose.headYawRadians ?? 0) * motionProfile.headYawScale
       if (rig.jaw !== null) {
         rig.jaw.rotation.x = pose.jawOpenRadians * motionProfile.jawScale
       }
@@ -798,13 +818,21 @@ export function createDragon(
 
       const wingRotation =
         pose.wingFlapRadians * motionProfile.wingFlapScale +
-        pose.wingFoldRadians * motionProfile.wingFoldScale
+        pose.wingFoldRadians * motionProfile.wingFoldScale +
+        (pose.boostLaunchRadians ?? 0) * motionProfile.wingFlapScale
+      const wingSpread =
+        (pose.wingSpreadRadians ?? 0) * motionProfile.wingSpreadScale
       rig.leftWing.rotation.z = wingRotation
       rig.rightWing.rotation.z = -wingRotation
+      rig.leftWing.rotation.x = wingSpread
+      rig.rightWing.rotation.x = wingSpread
 
       for (const [index, tail] of rig.tail.entries()) {
         tail.rotation.y =
           (pose.tailYawRadians[index] ?? 0) * motionProfile.tailYawScale
+        tail.rotation.x =
+          (pose.tailPitchRadians?.[index] ?? 0) *
+          motionProfile.tailPitchScale
       }
 
       const feedbackActive = pose.recoilRadians < -0.01
