@@ -14,7 +14,7 @@ async function readPhase(page: Page): Promise<FlightDebugSnapshot['race']['phase
 }
 
 async function finishQaCourse(page: Page): Promise<void> {
-  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 6; checkpoint += 1) {
     await page.evaluate(() => {
       const testWindow = window as unknown as {
         __DRAGON_RACE_TEST__?: {
@@ -28,7 +28,7 @@ async function finishQaCourse(page: Page): Promise<void> {
 
 test.describe('accessible race focus', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/?qaCourse=1')
+    await page.goto('/?mode=race&qaCourse=1')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',

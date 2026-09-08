@@ -56,7 +56,7 @@ test('gates generated audio behind gesture, edges, and mute', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -127,7 +127,7 @@ test('gates generated audio behind gesture, edges, and mute', async ({
     .toBe(2)
   await page.keyboard.up('Space')
 
-  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 6; checkpoint += 1) {
     await page.evaluate(() => {
       const testWindow = window as unknown as {
         __DRAGON_RACE_TEST__?: { qaPassCheckpoint: () => void }
@@ -143,7 +143,7 @@ test('gates generated audio behind gesture, edges, and mute', async ({
         ? null
         : { gateCues: audio.gateCues, finishCues: audio.finishCues }
     })
-    .toEqual({ gateCues: 8, finishCues: 1 })
+    .toEqual({ gateCues: 6, finishCues: 1 })
 
   await page.getByRole('button', { name: '소리 끄기' }).click()
   await expect
@@ -167,7 +167,7 @@ test('exposes BGM settings on the ready screen without starting playback', async
       testInfo.project.name !== 'touch-landscape' &&
       testInfo.project.name !== 'touch-minimum',
   )
-  await page.goto('/')
+  await page.goto('/?mode=race')
   const volume = page.locator('[data-race-music-volume="true"]')
   await expect(volume).toBeVisible()
   await expect(volume).toHaveValue('35')
@@ -284,7 +284,7 @@ test('streams, controls, persists, and keeps game BGM across modes', async ({
     }
   })
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',

@@ -441,7 +441,9 @@ async function measure(
     volcanicMissionGhost: REPRESENTATIVE_VOLCANIC_MISSION_GHOST,
     loadout: characterLoadout,
   })
-  await page.goto(BASE_URL)
+  const raceUrl = new URL(BASE_URL)
+  raceUrl.searchParams.set('mode', 'race')
+  await page.goto(raceUrl.href)
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',

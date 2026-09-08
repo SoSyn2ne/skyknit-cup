@@ -37,7 +37,9 @@ const CLOUD_DECK_CAPACITY = 20
 function createSkyDome(palette: WorldPalette): THREE.Mesh {
   const material = new THREE.ShaderMaterial({
     uniforms: {
-      zenithColor: { value: new THREE.Color(palette.skyZenith) },
+      zenithColor: {
+        value: new THREE.Color(palette.skyZenith).offsetHSL(0.035, 0.06, 0.03),
+      },
       hazeColor: { value: new THREE.Color(palette.skyHaze) },
       cloudColor: { value: new THREE.Color(palette.cloud) },
       sunColor: { value: new THREE.Color(palette.wingGold) },
@@ -60,21 +62,24 @@ function createSkyDome(palette: WorldPalette): THREE.Mesh {
       uniform vec3 sunDirection;
       varying vec3 vDirection;
       void main() {
-        float height = clamp(vDirection.y * 0.5 + 0.5, 0.0, 1.0);
-        float sunFacing = max(dot(normalize(vDirection), sunDirection), 0.0);
-        vec3 warmHaze = mix(hazeColor, sunColor, 0.22 + sunFacing * 0.24);
-        vec3 lower = mix(cloudColor, warmHaze, smoothstep(0.0, 0.38, height));
-        vec3 color = mix(lower, zenithColor * 0.7, smoothstep(0.3, 1.0, height));
-        float horizon = 1.0 - smoothstep(0.0, 0.42, abs(vDirection.y));
-        float sunGlow = pow(sunFacing, 8.0) * 0.42;
-        float sunCore = pow(sunFacing, 180.0) * 1.22;
-        color = mix(color, warmHaze, horizon * 0.2);
-        color += sunColor * (sunGlow + sunCore + horizon * 0.035);
+        vec3 direction = normalize(vDirection);
+        float sunFacing = max(dot(direction, sunDirection), 0.0);
+        float height = smoothstep(-0.18, 0.72, direction.y);
+        vec3 horizonColor = mix(hazeColor, cloudColor, 0.24);
+        vec3 lower = mix(hazeColor, cloudColor, (1.0 - smoothstep(-0.65, 0.0, direction.y)) * 0.62);
+        vec3 color = mix(lower, zenithColor, height);
+        float horizon = 1.0 - smoothstep(0.0, 0.23, abs(direction.y));
+        color = mix(color, horizonColor, horizon * 0.26);
+        float warmScatter = pow(sunFacing, 12.0);
+        color = mix(color, mix(cloudColor, sunColor, 0.5), warmScatter * 0.2);
+        color += sunColor * (pow(sunFacing, 40.0) * 0.09 + pow(sunFacing, 520.0) * 0.3);
         gl_FragColor = vec4(color, 1.0);
+        #include <colorspace_fragment>
       }
     `,
     side: THREE.BackSide,
     depthWrite: false,
+    toneMapped: false,
   })
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(900, 20, 12),
@@ -90,19 +95,20 @@ function createIslands(palette: WorldPalette): THREE.Group {
   group.name = 'M3_FloatingArchipelago'
   const rockGeometry = new THREE.LatheGeometry(
     [
-      new THREE.Vector2(0.05, -1),
-      new THREE.Vector2(0.18, -0.88),
-      new THREE.Vector2(0.32, -0.73),
-      new THREE.Vector2(0.28, -0.66),
-      new THREE.Vector2(0.58, -0.48),
-      new THREE.Vector2(0.53, -0.4),
-      new THREE.Vector2(0.82, -0.2),
+      new THREE.Vector2(0.12, -1),
+      new THREE.Vector2(0.24, -0.86),
+      new THREE.Vector2(0.39, -0.74),
+      new THREE.Vector2(0.35, -0.64),
+      new THREE.Vector2(0.67, -0.48),
+      new THREE.Vector2(0.62, -0.37),
+      new THREE.Vector2(0.9, -0.18),
       new THREE.Vector2(1, -0.045),
       new THREE.Vector2(0.95, 0),
     ],
     22,
   )
   const rockPositions = rockGeometry.getAttribute('position')
+  const rockVertexColors = new Float32Array(rockPositions.count * 3)
   for (let index = 0; index < rockPositions.count; index += 1) {
     const x = rockPositions.getX(index)
     const y = rockPositions.getY(index)
@@ -111,8 +117,8 @@ function createIslands(palette: WorldPalette): THREE.Group {
     const normalizedHeight = y + 1
     const irregularity =
       1 +
-      Math.sin(angle * 3 + normalizedHeight * 2.4) * 0.075 +
-      Math.sin(angle * 7 - normalizedHeight * 1.3) * 0.025
+      Math.sin(angle * 3 + normalizedHeight * 3.4) * 0.095 +
+      Math.sin(angle * 7 - normalizedHeight * 1.3) * 0.035
     const driftX = Math.sin(normalizedHeight * 8.3) * normalizedHeight * 0.035
     const driftZ = Math.cos(normalizedHeight * 6.7) * normalizedHeight * 0.028
     const ridgeHeight =
@@ -126,16 +132,30 @@ function createIslands(palette: WorldPalette): THREE.Group {
       y + ridgeHeight,
       z * irregularity + driftZ,
     )
+    const stratum = (Math.sin(y * 29 + Math.sin(angle * 3) * 0.7) + 1) * 0.5
+    const weathering = normalizedHeight * 0.13 + stratum * 0.16
+    rockVertexColors.set(
+      [0.64 + weathering, 0.76 + weathering * 0.72, 0.84 + weathering * 0.38],
+      index * 3,
+    )
   }
+  rockGeometry.setAttribute('color', new THREE.BufferAttribute(rockVertexColors, 3))
   rockGeometry.computeVertexNormals()
   rockGeometry.computeBoundingSphere()
   const topGeometry = new THREE.CylinderGeometry(0.78, 0.9, 0.32, 22, 2)
   const topPositions = topGeometry.getAttribute('position')
+  const topVertexColors = new Float32Array(topPositions.count * 3)
   for (let index = 0; index < topPositions.count; index += 1) {
     const x = topPositions.getX(index)
     const y = topPositions.getY(index)
     const z = topPositions.getZ(index)
     const radius = Math.hypot(x, z)
+    const meadow = (Math.sin(x * 4.8 + z * 3.2) + 1) * 0.5
+    const edge = Math.min(1, radius / 0.9)
+    topVertexColors.set(
+      [0.7 + meadow * 0.18, 0.91 - edge * 0.12, 0.67 + meadow * 0.12],
+      index * 3,
+    )
     if (radius < 0.1) continue
     const angle = Math.atan2(z, x)
     const irregularity =
@@ -143,17 +163,18 @@ function createIslands(palette: WorldPalette): THREE.Group {
 
     topPositions.setXYZ(index, x * irregularity, y, z * irregularity)
   }
+  topGeometry.setAttribute('color', new THREE.BufferAttribute(topVertexColors, 3))
   topGeometry.computeVertexNormals()
   topGeometry.computeBoundingSphere()
   const cloudColor = new THREE.Color(palette.cloud)
-  const rockBaseColor = new THREE.Color(palette.rock).lerp(cloudColor, 0.14)
+  const rockBaseColor = new THREE.Color(palette.rock).lerp(cloudColor, 0.23)
   const rockEmissiveColor = new THREE.Color(palette.rock).lerp(
     new THREE.Color(palette.skyHaze),
     0.28,
   )
   const topBaseColor = new THREE.Color(palette.gateRune)
-    .lerp(new THREE.Color(palette.wingGold), 0.14)
-    .lerp(cloudColor, 0.08)
+    .lerp(new THREE.Color(palette.wingGold), 0.3)
+    .lerp(new THREE.Color(palette.rock), 0.12)
   const rockMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     emissive: rockEmissiveColor,
@@ -161,12 +182,14 @@ function createIslands(palette: WorldPalette): THREE.Group {
     roughness: 0.92,
     metalness: 0.02,
     flatShading: true,
+    vertexColors: true,
   })
   const topMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     roughness: 0.9,
     metalness: 0.02,
     flatShading: true,
+    vertexColors: true,
   })
   const rockInstances = new THREE.InstancedMesh(
     rockGeometry,
@@ -355,12 +378,37 @@ function createIslandDecorations(palette: WorldPalette): THREE.Group {
   return group
 }
 
+function createCloudGeometry(segments: number): THREE.BufferGeometry {
+  // One continuous shell avoids overlapping transparent lobes and keeps each
+  // complete cloud in the existing instanced draw call.
+  const geometry = new THREE.SphereGeometry(1, segments, 8)
+  const positions = geometry.getAttribute('position')
+  const colors = new Float32Array(positions.count * 3)
+  for (let index = 0; index < positions.count; index += 1) {
+    const x = positions.getX(index)
+    const y = positions.getY(index)
+    const z = positions.getZ(index)
+    const crown = 0.91 + Math.cos(x * 5.2) * 0.2 + Math.sin(z * 4.1) * 0.09
+    positions.setXYZ(index, x * 1.2, y > 0 ? y * crown : y * 0.38, z)
+    const sunlight = THREE.MathUtils.smoothstep(y, -0.4, 0.7)
+    colors.set(
+      [0.67 + sunlight * 0.33, 0.8 + sunlight * 0.2, 0.88 + sunlight * 0.12],
+      index * 3,
+    )
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geometry.computeVertexNormals()
+  geometry.computeBoundingSphere()
+  return geometry
+}
+
 function createClouds(palette: WorldPalette): THREE.InstancedMesh {
-  const geometry = new THREE.IcosahedronGeometry(1, 1)
+  const geometry = createCloudGeometry(14)
   const material = new THREE.MeshBasicMaterial({
     color: palette.cloud,
+    vertexColors: true,
     transparent: true,
-    opacity: 0.22,
+    opacity: 0.52,
     depthWrite: false,
   })
   const clouds = new THREE.InstancedMesh(geometry, material, CLOUD_COUNT)
@@ -380,9 +428,9 @@ function createClouds(palette: WorldPalette): THREE.InstancedMesh {
       anchor.z + Math.sin(angle) * distance,
     )
     scale.set(
-      7 + (index % 4) * 2.5,
-      2.6 + (index % 3),
-      5 + (index % 5) * 1.4,
+      11 + (index % 4) * 3,
+      6 + (index % 3) * 1.8,
+      7 + (index % 5) * 1.8,
     )
     matrix.compose(position, quaternion, scale)
     clouds.setMatrixAt(index, matrix)
@@ -402,9 +450,10 @@ function createCloudAccentLayer(
   opacity: number,
   horizontalStretch: number,
 ): THREE.InstancedMesh {
-  const geometry = new THREE.IcosahedronGeometry(1, 0)
+  const geometry = createCloudGeometry(10)
   const material = new THREE.MeshBasicMaterial({
     color: palette.cloud,
+    vertexColors: true,
     transparent: true,
     opacity,
     depthWrite: false,
@@ -430,7 +479,7 @@ function createCloudAccentLayer(
     )
     scale.set(
       (9 + (index % 4) * 3.2) * horizontalStretch,
-      1.5 + (index % 3) * 0.7,
+      2.4 + (index % 3) * 0.9,
       5 + (index % 5) * 1.8,
     )
     matrix.compose(position, quaternion, scale)
@@ -458,7 +507,7 @@ export function createWorld(
     CLOUD_WISP_CAPACITY,
     68,
     155,
-    0.11,
+    0.2,
     1.9,
   )
   const cloudDeck = createCloudAccentLayer(
@@ -467,7 +516,7 @@ export function createWorld(
     CLOUD_DECK_CAPACITY,
     -42,
     105,
-    0.15,
+    0.3,
     1.45,
   )
   const hemisphereGroundColor = new THREE.Color(palette.rock).lerp(

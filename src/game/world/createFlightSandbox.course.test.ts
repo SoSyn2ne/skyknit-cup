@@ -107,10 +107,10 @@ describe('flight sandbox course switching', () => {
     const cameraQuaternion = camera.quaternion.clone()
     const cameraFov = camera.fov
 
-    expect(initialGates).toHaveLength(8)
+    expect(initialGates).toHaveLength(6)
     expect(sandbox.debugSnapshot?.(flight)).toMatchObject({
       activeGateIndex: 0,
-      checkpointCount: 8,
+      checkpointCount: 6,
     })
 
     sandbox.setCourse(VOLCANIC_ARCHIPELAGO_COURSE)
@@ -190,7 +190,7 @@ describe('flight sandbox course switching', () => {
     ).toBeGreaterThan(0.15)
     expect(sandbox.debugSnapshot?.(flight)).toMatchObject({
       activeGateIndex: 0,
-      checkpointCount: 8,
+      checkpointCount: 6,
     })
 
     sandbox.dispose()

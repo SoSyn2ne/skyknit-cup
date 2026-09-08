@@ -6,7 +6,11 @@ import type {
 } from '../race/raceState'
 import type { RenderQualityTier } from '../quality/qualityPolicy'
 import type { InputDevice } from '../input/InputController'
-import type { GateIndicatorState } from './gateIndicator'
+import type {
+  GateIndicatorState,
+  IndicatorAvoidanceRect,
+  IndicatorViewport,
+} from './gateIndicator'
 import { formatGhostDelta } from '../competition/ghostRun'
 import type {
   LeagueMedal,
@@ -20,6 +24,7 @@ import type {
 } from '../missions/missionRules'
 import {
   MISSION_CATALOG,
+  PLAYABLE_MISSION_CATALOG,
   deriveUnlockedMissionIds,
   getMissionLockRequirement,
   getNextMissionId,
@@ -48,6 +53,11 @@ export interface RaceHudView {
   readonly leagueResult: RaceLeagueResult | null
   readonly skyLeague: SkyLeagueRecords
   readonly hazardWarning?: RaceHazardWarning | null
+  readonly transientNotice?: RaceHudTransientNotice | null
+}
+
+export interface RaceHudTransientNotice {
+  readonly kind: 'off-course' | 'collision' | 'respawn'
 }
 
 export interface RaceHazardWarning {
@@ -77,6 +87,10 @@ export interface RaceHudActions {
 export interface RaceHud {
   readonly element: HTMLElement
   update(view: RaceHudView): void
+  measureGateIndicatorAvoidanceRects(
+    viewport: IndicatorViewport,
+    extraOccluders?: readonly HTMLElement[],
+  ): readonly IndicatorAvoidanceRect[]
   dispose(): void
 }
 
@@ -116,6 +130,19 @@ export function formatHazardAnnouncement(
   return warning.phase === 'active'
     ? `${label} 지금 회피`
     : `${label} 접근 주의`
+}
+
+export function formatTransientNotice(
+  notice: RaceHudTransientNotice,
+): string {
+  switch (notice.kind) {
+    case 'off-course':
+      return '코스 이탈 · 관문 복귀 준비'
+    case 'collision':
+      return '충돌 감속 · 곧 회복'
+    case 'respawn':
+      return '관문 복귀 · 기록 계속'
+  }
 }
 
 export function formatMissionGrade(
@@ -173,15 +200,15 @@ export function formatMissionProgress(
     case 'first-skyknot':
       return `${checkpoint} · ${elapsed}`
     case 'boost-mastery':
-      return `${checkpoint} · 돌풍 ${attempt.boostActivationCount}/3`
+      return `${checkpoint} · 돌풍 ${attempt.boostActivationCount}/2`
     case 'no-respawn':
-      return `${checkpoint} · 돌풍 ${attempt.boostActivationCount}/3 · 리스폰 ${attempt.respawnCount}`
+      return `${checkpoint} · 돌풍 ${attempt.boostActivationCount}/2 · 리스폰 ${attempt.respawnCount}`
     case 'time-trial':
-      return `${elapsed} / 2:15.000 · 돌풍 ${attempt.boostActivationCount}/3 · 리스폰 ${attempt.respawnCount}`
+      return `${elapsed} / 1:40.000 · 돌풍 ${attempt.boostActivationCount}/2 · 리스폰 ${attempt.respawnCount}`
     case 'clean-flight':
-      return `${elapsed} / 2:15.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/3`
+      return `${elapsed} / 1:40.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/2`
     case 'golden-knot':
-      return `${elapsed} / 2:00.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/5`
+      return `${elapsed} / 1:30.000 · 충돌 ${attempt.collisionCount} · 리스폰 ${attempt.respawnCount} · 돌풍 ${attempt.boostActivationCount}/4`
     case 'heart-of-sun': {
       const objective =
         attempt.nextCheckpointIndex < 3
@@ -306,7 +333,7 @@ export function createRaceHud(
   missionSelect.id = 'race-mission-select'
   missionSelect.dataset.missionSelect = 'true'
   const missionOptions = new Map<MissionId, HTMLOptionElement>()
-  for (const mission of MISSION_CATALOG) {
+  for (const mission of PLAYABLE_MISSION_CATALOG) {
     const option = document.createElement('option')
     option.value = mission.id
     option.textContent = mission.name
@@ -488,6 +515,9 @@ export function createRaceHud(
   let leagueCategory: 'race' | 'mission' = 'race'
   let latestView: RaceHudView | null = null
   let hazardAnnouncementSignature: string | null = null
+  let gateIndicatorAvoidanceSignature: string | null = null
+  let gateIndicatorAvoidanceRects: readonly IndicatorAvoidanceRect[] = []
+  let gateIndicatorAvoidanceRevision = 'initial'
 
   const showOnly = (...buttons: HTMLButtonElement[]): void => {
     for (const button of [
@@ -714,10 +744,10 @@ export function createRaceHud(
         view.missionGrades,
       )
       const unlockedMissions = new Set(unlockedMissionIds)
-      const nextLockedMission = MISSION_CATALOG.find(
+      const nextLockedMission = PLAYABLE_MISSION_CATALOG.find(
         (mission) => !unlockedMissions.has(mission.id),
       )
-      for (const mission of MISSION_CATALOG) {
+      for (const mission of PLAYABLE_MISSION_CATALOG) {
         const option = missionOptions.get(mission.id)
         if (option === undefined) continue
         const unlocked = unlockedMissions.has(mission.id)
@@ -753,11 +783,16 @@ export function createRaceHud(
       missionTracker.hidden =
         view.phase !== 'countdown' && view.phase !== 'racing'
       missionTrackerName.textContent = missionDefinition?.name ?? ''
-      missionTrackerProgress.textContent = formatMissionProgress(
-        view.mission.selectedMissionId,
-        view.mission.attempt,
-        view.checkpointCount,
-      )
+      const displayedNotice =
+        view.phase === 'racing' ? (view.transientNotice ?? null) : null
+      missionTrackerProgress.textContent =
+        displayedNotice === null
+          ? formatMissionProgress(
+              view.mission.selectedMissionId,
+              view.mission.attempt,
+              view.checkpointCount,
+            )
+          : formatTransientNotice(displayedNotice)
       const warning = view.hazardWarning ?? null
       hazardWarning.hidden = view.phase !== 'racing' || warning === null
       if (warning !== null) {
@@ -796,6 +831,13 @@ export function createRaceHud(
       gateGuide.style.left = `${view.gateIndicator.left}px`
       gateGuide.style.top = `${view.gateIndicator.top}px`
       gateGuide.style.transform = `translate(-50%, -50%) rotate(${view.gateIndicator.angleRadians}rad)`
+      gateIndicatorAvoidanceRevision = JSON.stringify({
+        phase: view.phase,
+        missionId: view.mission.selectedMissionId,
+        notice: displayedNotice?.kind ?? null,
+        warning:
+          warning === null ? null : `${warning.kind}:${warning.phase}`,
+      })
       panel.hidden = view.phase === 'countdown' || view.phase === 'racing'
       result.hidden = view.phase !== 'finished'
       league.hidden = view.phase !== 'finished'
@@ -851,8 +893,8 @@ export function createRaceHud(
         title.textContent = '하늘매듭배'
         detail.textContent =
           view.inputDevice === 'touch'
-            ? '미션을 고르고 비행 시작을 누르세요.'
-            : '미션을 고른 뒤 Enter 또는 비행 키로 출발하세요.'
+            ? '왼쪽 스틱으로 비행 · 오른쪽 버튼으로 돌풍'
+            : 'Enter 시작 · 방향키/WASD 비행 · Space/Shift 돌풍'
         clearResult()
         showOnly()
       } else if (view.phase === 'paused') {
@@ -907,6 +949,81 @@ export function createRaceHud(
 
       previousPhase = view.phase
     },
+    measureGateIndicatorAvoidanceRects: (
+      viewport,
+      extraOccluders = [],
+    ) => {
+      const extraSignature = extraOccluders
+        .map((element) =>
+          [
+            element.className,
+            String(element.hidden),
+            element.dataset.phase ?? '',
+            element.dataset.mode ?? '',
+            element.dataset.inputDevice ?? '',
+            element.dataset.state ?? '',
+          ].join(':'),
+        )
+        .join('|')
+      const nextSignature = `${viewport.width}x${viewport.height}:${gateIndicatorAvoidanceRevision}:${extraSignature}`
+      if (gateIndicatorAvoidanceSignature === nextSignature) {
+        return gateIndicatorAvoidanceRects
+      }
+
+      const rects: IndicatorAvoidanceRect[] = []
+      appendAvoidanceRect(rects, timerBlock, viewport)
+      appendAvoidanceRect(rects, gateBlock, viewport)
+      appendAvoidanceRect(rects, missionTracker, viewport)
+      appendAvoidanceRect(rects, hazardWarning, viewport)
+      for (const element of extraOccluders) {
+        if (element.dataset.touchControls === 'true') {
+          for (const touchControl of Array.from(
+            element.querySelectorAll<HTMLElement>('[data-touch-control="true"]'),
+          )) {
+            appendAvoidanceRect(rects, touchControl, viewport)
+          }
+          continue
+        }
+        appendAvoidanceRect(rects, element, viewport)
+      }
+
+      gateIndicatorAvoidanceSignature = nextSignature
+      gateIndicatorAvoidanceRects = rects
+      return gateIndicatorAvoidanceRects
+    },
     dispose: () => root.remove(),
   }
+}
+
+function appendAvoidanceRect(
+  rects: IndicatorAvoidanceRect[],
+  element: HTMLElement,
+  viewport: IndicatorViewport,
+): void {
+  if (element.hidden) return
+
+  const bounds = element.getBoundingClientRect()
+  if (
+    !Number.isFinite(bounds.left) ||
+    !Number.isFinite(bounds.top) ||
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height) ||
+    bounds.width <= 0 ||
+    bounds.height <= 0
+  ) {
+    return
+  }
+
+  const left = Math.max(0, bounds.left)
+  const top = Math.max(0, bounds.top)
+  const right = Math.min(viewport.width, bounds.left + bounds.width)
+  const bottom = Math.min(viewport.height, bounds.top + bounds.height)
+  if (right <= left || bottom <= top) return
+
+  rects.push({
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+  })
 }

@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
-import { createGateIndicator } from './gateIndicator'
+import {
+  createGateIndicator,
+  type IndicatorAvoidanceRect,
+} from './gateIndicator'
 
 const viewport = { width: 320, height: 568 }
+
+function overlaps(
+  indicator: { readonly left: number; readonly top: number },
+  rect: IndicatorAvoidanceRect,
+): boolean {
+  return !(
+    indicator.left + 22 <= rect.left ||
+    indicator.left - 22 >= rect.left + rect.width ||
+    indicator.top + 22 <= rect.top ||
+    indicator.top - 22 >= rect.top + rect.height
+  )
+}
 
 describe('active gate edge indicator', () => {
   it('stays hidden when the on-screen gate is at least 48 CSS pixels', () => {
@@ -55,5 +70,62 @@ describe('active gate edge indicator', () => {
     const indicator = createGateIndicator(null, 0, viewport)
 
     expect(indicator.show).toBe(false)
+  })
+
+  it('shows the guide when an on-screen gate is visually covered by the HUD', () => {
+    const landscapeViewport = { width: 844, height: 390 }
+    const topRightMetric = {
+      left: 680,
+      top: 16,
+      width: 148,
+      height: 54,
+    }
+
+    const indicator = createGateIndicator(
+      {
+        x: (725.99 - landscapeViewport.width / 2) / (landscapeViewport.width / 2),
+        y: (landscapeViewport.height / 2 - 70.65) / (landscapeViewport.height / 2),
+        z: 0.5,
+      },
+      64,
+      landscapeViewport,
+      [topRightMetric],
+    )
+
+    expect(indicator.show).toBe(true)
+    expect(indicator.angleRadians).toBeLessThan(0)
+    expect(overlaps(indicator, topRightMetric)).toBe(false)
+  })
+
+  it('moves an off-screen guide inward when the edge cue would sit under HUD chrome', () => {
+    const blockedEdge = {
+      left: viewport.width - 58,
+      top: 252,
+      width: 52,
+      height: 76,
+    }
+
+    const indicator = createGateIndicator(
+      { x: 2, y: 0.25, z: 0.5 },
+      80,
+      viewport,
+      [blockedEdge],
+    )
+
+    expect(indicator.show).toBe(true)
+    expect(indicator.left).toBeLessThan(viewport.width - 32)
+    expect(overlaps(indicator, blockedEdge)).toBe(false)
+  })
+
+  it('preserves the old edge placement when no avoidance rectangles are supplied', () => {
+    const indicator = createGateIndicator(
+      { x: 2, y: 0.25, z: 0.5 },
+      80,
+      viewport,
+      [],
+    )
+
+    expect(indicator.show).toBe(true)
+    expect(indicator.left).toBe(viewport.width - 32)
   })
 })

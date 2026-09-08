@@ -153,4 +153,39 @@ describe('RC7 world quality layers', () => {
         .getHSL({ h: 0, s: 0, l: 0 }).l,
     ).toBeGreaterThan(paletteRockColor.getHSL({ h: 0, s: 0, l: 0 }).l)
   })
+
+  it('keeps the colored landforms and billowy clouds in the existing draw budget', () => {
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera()
+    const world = createWorld(scene, camera, palette, resolveRenderQuality({
+      preference: 'high',
+      ...desktopSignals,
+    }))
+    const batches: THREE.InstancedMesh[] = []
+    scene.traverse((object) => {
+      if (object instanceof THREE.InstancedMesh) batches.push(object)
+    })
+
+    expect(batches).toHaveLength(9)
+    expect(world.debugSnapshot().instancedMeshCount).toBe(batches.length)
+    let cloudTriangles = 0
+    for (const name of [
+      'M3_IslandRockInstances',
+      'M3_IslandTopInstances',
+      'M3_CloudInstances',
+      'M7_HighCloudWisps',
+      'M7_LowerCloudDeck',
+    ]) {
+      const batch = scene.getObjectByName(name) as THREE.InstancedMesh
+      const color = batch.geometry.getAttribute('color')
+      expect(color.count).toBe(batch.geometry.getAttribute('position').count)
+      expect(Array.from(color.array).every((value) => Number.isFinite(value) && value >= 0 && value <= 1)).toBe(true)
+      expect(new Set(Array.from(color.array)).size).toBeGreaterThan(6)
+      expect((batch.material as THREE.MeshBasicMaterial).map).toBeNull()
+      if (name.includes('Cloud')) {
+        cloudTriangles += (batch.geometry.index!.count / 3) * batch.count
+      }
+    }
+    expect(cloudTriangles).toBeLessThan(10_000)
+  })
 })

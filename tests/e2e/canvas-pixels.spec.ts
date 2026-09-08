@@ -65,7 +65,7 @@ async function sampleCanvas(page: Page): Promise<CanvasSample | null> {
 test('renders nonblank pixels that change over time', async ({
   page,
 }, testInfo) => {
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',

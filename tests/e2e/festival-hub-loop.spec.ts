@@ -114,7 +114,7 @@ test('runs festival discovery, wind, collision, and recovery without changing ra
   })
   page.on('pageerror', (error) => errors.push(error.message))
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await expect
     .poll(() =>
@@ -342,7 +342,7 @@ test('cycles every Festival Hub landing pad before entering the selected golden-
   test.setTimeout(45_000)
 
   await unlockAllMissions(page)
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page
     .locator('[data-mission-select="true"]')
     .selectOption('golden-knot')
@@ -385,7 +385,7 @@ test('restores takeoff at every saved Festival Hub landing pad', async ({
   test.skip(testInfo.project.name !== 'desktop', 'single persistence contract')
   test.setTimeout(45_000)
 
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   const contextAction = page.locator('[data-explore-context]')
 
@@ -460,7 +460,7 @@ test('freezes flight and discovery progress while the Festival map is open', asy
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single simulation contract')
 
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await page.getByRole('button', { name: '군도 지도 열기' }).click()
   await page.evaluate(() =>
@@ -492,7 +492,7 @@ test('blocks landing controls beneath the open Festival map', async ({
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single interaction contract')
 
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await page.evaluate(() =>
     window.__DRAGON_RACE_TEST__?.qaExploreLandingPad('festival-tower-pad'),
@@ -513,7 +513,7 @@ test('shows the selected race mission guidance inside the Festival map', async (
   test.skip(testInfo.project.name !== 'desktop', 'single map guidance contract')
 
   await unlockAllMissions(page)
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page
     .locator('[data-mission-select="true"]')
     .selectOption('golden-knot')
@@ -533,7 +533,7 @@ test('preserves the completed Festival Hub journey across reload and WebGL recov
   )
   test.setTimeout(60_000)
 
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page
     .locator('[data-mission-select="true"]')
     .selectOption('first-skyknot')
@@ -591,7 +591,7 @@ test('preserves the completed Festival Hub journey across reload and WebGL recov
       timeout: 5_000,
     })
     .toBe('racing')
-  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 6; checkpoint += 1) {
     await page.evaluate(() =>
       window.__DRAGON_RACE_TEST__?.qaPassCheckpoint(),
     )
@@ -624,7 +624,7 @@ test('captures the authored Festival Hub landmarks in the runtime renderer', asy
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'desktop visual evidence')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await expect
     .poll(() =>
@@ -669,7 +669,7 @@ test('captures the authored Festival Hub landmarks in the runtime renderer', asy
 test('keeps the festival journey readable in every required viewport', async ({
   page,
 }, testInfo) => {
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await page.evaluate(() =>
     window.__DRAGON_RACE_TEST__?.qaExploreRegion('festival-hub'),

@@ -10,6 +10,7 @@ import {
   formatMissionProgress,
   formatMusicVolumePercent,
   formatRaceTime,
+  formatTransientNotice,
   updateCachedDom,
   type RaceHudView,
 } from './RaceHud'
@@ -36,6 +37,7 @@ class TestElement {
   focusCalls = 0
   parent: TestElement | null = null
   readonly listeners = new Map<string, (() => void)[]>()
+  bounds = { left: 0, top: 0, width: 0, height: 0 }
 
   append(...elements: TestElement[]): void {
     for (const element of elements) {
@@ -52,6 +54,10 @@ class TestElement {
 
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value)
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null
   }
 
   removeAttribute(name: string): void {
@@ -77,6 +83,31 @@ class TestElement {
     const index = this.parent.children.indexOf(this)
     if (index >= 0) this.parent.children.splice(index, 1)
     this.parent = null
+  }
+
+  querySelectorAll<T extends TestElement = TestElement>(selector: string): T[] {
+    const match = selector.match(/^\[data-([a-z0-9-]+)="([^"]+)"\]$/i)
+    if (match === null) return []
+    const [, rawKey, value] = match
+    const key = rawKey.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())
+    const results: TestElement[] = []
+    const visit = (node: TestElement): void => {
+      if (node.dataset[key] === value) results.push(node)
+      for (const child of node.children) visit(child)
+    }
+    visit(this)
+    return results as T[]
+  }
+
+  getBoundingClientRect(): DOMRect {
+    return {
+      ...this.bounds,
+      x: this.bounds.left,
+      y: this.bounds.top,
+      right: this.bounds.left + this.bounds.width,
+      bottom: this.bounds.top + this.bounds.height,
+      toJSON: () => ({}),
+    } as DOMRect
   }
 }
 
@@ -125,8 +156,8 @@ function createFinishedRaceHudView(): RaceHudView {
     phase: 'finished',
     countdownRemainingMs: 0,
     elapsedMs: 80_000,
-    nextCheckpointIndex: 8,
-    checkpointCount: 8,
+    nextCheckpointIndex: 6,
+    checkpointCount: 6,
     finalElapsedMs: 80_000,
     bestTimeMs: 80_000,
     previousBestTimeMs: 90_000,
@@ -147,7 +178,7 @@ function createFinishedRaceHudView(): RaceHudView {
       status: 'finished',
       attempt: {
         elapsedMs: 80_000,
-        nextCheckpointIndex: 8,
+        nextCheckpointIndex: 6,
         collisionCount: 0,
         respawnCount: 0,
         boostActivationCount: 4,
@@ -179,6 +210,7 @@ function createFinishedRaceHudView(): RaceHudView {
         'time-trial': [{ elapsedMs: 80_000, grade: 'gold' }],
       },
     },
+    transientNotice: null,
   }
 }
 
@@ -216,24 +248,32 @@ describe('mission HUD formatting', () => {
   })
 
   it.each([
-    ['first-skyknot', '관문 4/8 · 1:31.250'],
-    ['boost-mastery', '관문 4/8 · 돌풍 3/3'],
-    ['no-respawn', '관문 4/8 · 돌풍 3/3 · 리스폰 2'],
-    ['time-trial', '1:31.250 / 2:15.000 · 돌풍 3/3 · 리스폰 2'],
+    ['first-skyknot', '관문 4/6 · 1:31.250'],
+    ['boost-mastery', '관문 4/6 · 돌풍 3/2'],
+    ['no-respawn', '관문 4/6 · 돌풍 3/2 · 리스폰 2'],
+    ['time-trial', '1:31.250 / 1:40.000 · 돌풍 3/2 · 리스폰 2'],
     [
       'clean-flight',
-      '1:31.250 / 2:15.000 · 충돌 1 · 리스폰 2 · 돌풍 3/3',
+      '1:31.250 / 1:40.000 · 충돌 1 · 리스폰 2 · 돌풍 3/2',
     ],
     [
       'golden-knot',
-      '1:31.250 / 2:00.000 · 충돌 1 · 리스폰 2 · 돌풍 3/5',
+      '1:31.250 / 1:30.000 · 충돌 1 · 리스폰 2 · 돌풍 3/4',
     ],
     [
       'heart-of-sun',
       '분화 탈출 · 남은 0:00.000 · 충돌 1 · 리스폰 2 · 돌풍 3/2',
     ],
   ] as const)('formats %s progress', (missionId, label) => {
-    expect(formatMissionProgress(missionId, attempt, 8)).toBe(label)
+    expect(formatMissionProgress(missionId, attempt, 6)).toBe(label)
+  })
+
+  it.each([
+    [{ kind: 'off-course' }, '코스 이탈 · 관문 복귀 준비'],
+    [{ kind: 'collision' }, '충돌 감속 · 곧 회복'],
+    [{ kind: 'respawn' }, '관문 복귀 · 기록 계속'],
+  ] as const)('formats transient notice %o', (notice, label) => {
+    expect(formatTransientNotice(notice)).toBe(label)
   })
 })
 
@@ -528,10 +568,9 @@ describe('Sky League HUD formatting', () => {
       )
 
       expect(picker.hidden).toBe(false)
-      expect(select.children).toHaveLength(7)
+      expect(select.children).toHaveLength(6)
       expect(select.children.map((option) => option.value)).toEqual([
         'first-skyknot',
-        'boost-mastery',
         'no-respawn',
         'time-trial',
         'clean-flight',
@@ -807,6 +846,206 @@ describe('Sky League HUD formatting', () => {
 
       hud.update(finished)
       expect(opener.hidden).toBe(true)
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, 'document')
+      } else {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      }
+    }
+  })
+
+  it('spells out ready controls and temporarily swaps mission progress for recovery notices', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    )
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: () => new TestElement(),
+      } as unknown as Document,
+    })
+
+    try {
+      const host = new TestElement()
+      const noop = (): void => {}
+      const hud = createRaceHud(host as unknown as HTMLElement, {
+        start: noop,
+        startExplore: noop,
+        selectMission: noop,
+        returnToMissionSelection: noop,
+        resume: noop,
+        restart: noop,
+        respawn: noop,
+        retry: noop,
+        nextMission: noop,
+        openCharacterWorkshop: noop,
+        openStoryPrologue: noop,
+        toggleMute: noop,
+        setMusicVolume: noop,
+        setQuality: noop,
+      })
+      const base = createFinishedRaceHudView()
+      const ready: RaceHudView = {
+        ...base,
+        phase: 'ready',
+        finalElapsedMs: null,
+        inputDevice: 'keyboard',
+        mission: {
+          ...base.mission,
+          selectedMissionId: 'first-skyknot',
+          status: 'idle',
+          result: null,
+        },
+        missionGrades: {},
+      }
+
+      hud.update(ready)
+      const root = hud.element as unknown as TestElement
+      const detail = findByClass(root, 'race-hud__detail')
+      const tracker = findByDataset(root, 'missionTracker', 'true')
+      const trackerProgress = tracker.children[1]
+
+      expect(detail.textContent).toBe(
+        'Enter 시작 · 방향키/WASD 비행 · Space/Shift 돌풍',
+      )
+
+      hud.update({
+        ...ready,
+        inputDevice: 'touch',
+      })
+      expect(detail.textContent).toBe(
+        '왼쪽 스틱으로 비행 · 오른쪽 버튼으로 돌풍',
+      )
+
+      const racing: RaceHudView = {
+        ...ready,
+        phase: 'racing',
+        inputDevice: 'keyboard',
+        nextCheckpointIndex: 4,
+        mission: {
+          ...ready.mission,
+          status: 'active',
+          attempt: {
+            ...ready.mission.attempt,
+            elapsedMs: 80_000,
+            nextCheckpointIndex: 4,
+          },
+        },
+      }
+      hud.update({
+        ...racing,
+        transientNotice: { kind: 'respawn' },
+      })
+      expect(tracker.hidden).toBe(false)
+      expect(trackerProgress.textContent).toBe('관문 복귀 · 기록 계속')
+
+      hud.update(racing)
+      expect(trackerProgress.textContent).toBe('관문 4/6 · 1:20.000')
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, 'document')
+      } else {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      }
+    }
+  })
+
+  it('measures visible HUD and control occluders once per stable layout', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    )
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: () => new TestElement(),
+      } as unknown as Document,
+    })
+
+    try {
+      const host = new TestElement()
+      const noop = (): void => {}
+      const hud = createRaceHud(host as unknown as HTMLElement, {
+        start: noop,
+        startExplore: noop,
+        selectMission: noop,
+        returnToMissionSelection: noop,
+        resume: noop,
+        restart: noop,
+        respawn: noop,
+        retry: noop,
+        nextMission: noop,
+        openCharacterWorkshop: noop,
+        openStoryPrologue: noop,
+        toggleMute: noop,
+        setMusicVolume: noop,
+        setQuality: noop,
+      })
+      const base = createFinishedRaceHudView()
+      const view: RaceHudView = {
+        ...base,
+        phase: 'racing',
+        finalElapsedMs: null,
+        leagueResult: null,
+        mission: {
+          ...base.mission,
+          selectedMissionId: 'first-skyknot',
+          status: 'active',
+          result: null,
+        },
+        missionGrades: {},
+      }
+      hud.update(view)
+
+      const root = hud.element as unknown as TestElement
+      const status = findByClass(root, 'race-hud__status')
+      const tracker = findByDataset(root, 'missionTracker', 'true')
+      status.children[0]!.bounds = { left: 16, top: 16, width: 148, height: 54 }
+      status.children[1]!.bounds = { left: 680, top: 16, width: 148, height: 54 }
+      tracker.bounds = { left: 18, top: 92, width: 208, height: 52 }
+
+      const boost = new TestElement()
+      boost.className = 'boost-gauge'
+      boost.bounds = { left: 710, top: 272, width: 112, height: 52 }
+      const touchRoot = new TestElement()
+      touchRoot.dataset.touchControls = 'true'
+      const pause = new TestElement()
+      pause.dataset.touchControl = 'true'
+      pause.bounds = { left: 780, top: 78, width: 48, height: 48 }
+      touchRoot.append(pause)
+
+      const firstRects = hud.measureGateIndicatorAvoidanceRects(
+        { width: 844, height: 390 },
+        [boost as unknown as HTMLElement, touchRoot as unknown as HTMLElement],
+      )
+
+      expect(firstRects).toEqual([
+        { left: 16, top: 16, width: 148, height: 54 },
+        { left: 680, top: 16, width: 148, height: 54 },
+        { left: 18, top: 92, width: 208, height: 52 },
+        { left: 710, top: 272, width: 112, height: 52 },
+        { left: 780, top: 78, width: 48, height: 48 },
+      ])
+      expect(
+        hud.measureGateIndicatorAvoidanceRects(
+          { width: 844, height: 390 },
+          [boost as unknown as HTMLElement, touchRoot as unknown as HTMLElement],
+        ),
+      ).toBe(firstRects)
+
+      hud.update({
+        ...view,
+        transientNotice: { kind: 'respawn' },
+      })
+
+      expect(
+        hud.measureGateIndicatorAvoidanceRects(
+          { width: 844, height: 390 },
+          [boost as unknown as HTMLElement, touchRoot as unknown as HTMLElement],
+        ),
+      ).not.toBe(firstRects)
     } finally {
       if (previousDocument === undefined) {
         Reflect.deleteProperty(globalThis, 'document')

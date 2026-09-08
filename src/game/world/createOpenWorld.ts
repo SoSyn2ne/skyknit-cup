@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { createStaticPrelitMaterial, getStaticWorldLighting } from './staticPrelitMaterial'
 
 import type { Vec3Value } from '../flight/flightModel'
 import type { RenderQualityTier } from '../quality/qualityPolicy'
@@ -242,6 +243,26 @@ function applyFestivalLanternStyle(
   })
 }
 
+function applyFestivalStaticLighting(root: THREE.Object3D, scene: THREE.Scene, regionId: OpenWorldRegionId): void {
+  if (regionId !== 'festival-hub') return
+  const lighting = getStaticWorldLighting(scene)
+  if (!lighting) return
+  const converted = new Map<THREE.Material, THREE.Material>()
+  const convert = (source: THREE.Material): THREE.Material => {
+    let material = converted.get(source)
+    if (!material) {
+      material = createStaticPrelitMaterial(source, lighting)
+      converted.set(source, material)
+    }
+    return material
+  }
+  root.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return
+    object.material = Array.isArray(object.material) ? object.material.map(convert) : convert(object.material)
+  })
+  for (const [source, material] of converted) if (source !== material) source.dispose()
+}
+
 function disposeMaterial(
   material: THREE.Material,
   disposedTextures: Set<THREE.Texture>,
@@ -457,6 +478,7 @@ export function createOpenWorld(
         }
         removeCurrentAsset(entry)
         applyFestivalLanternStyle(asset, entry.region.id)
+        applyFestivalStaticLighting(asset, scene, entry.region.id)
         entry.lavaTimeUniforms = applyVolcanicLavaStyle(asset, entry.region.id)
         applyVolcanicRenderPolicy(asset, entry.region.id)
         applyShadowPolicy(asset, requestedLod, entry.region.id)

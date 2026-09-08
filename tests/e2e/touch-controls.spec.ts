@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test.describe('touch controls', () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(!testInfo.project.name.startsWith('touch'))
-    await page.goto('/')
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',
@@ -81,7 +81,7 @@ test('hides touch controls for a fine pointer desktop', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
-  await page.goto('/')
+  await page.goto('/?mode=race')
 
   await expect(page.locator('[data-touch-controls]')).toBeHidden()
 })

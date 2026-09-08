@@ -20,7 +20,7 @@ function wrapRadians(value: number): number {
 }
 
 describe('Skyknot course playthrough', () => {
-  it('completes all eight checkpoints within the shortened flight window without boost', () => {
+  it('completes all six checkpoints within the sprint window without boost', () => {
     let flight = createInitialFlightState({
       position: START_ANCHOR.position,
       headingRadians: START_ANCHOR.headingRadians,
@@ -73,9 +73,9 @@ describe('Skyknot course playthrough', () => {
 
     expect(nextCheckpointIndex).toBe(SKYKNOT_COURSE.length)
     expect(completedAtSeconds).not.toBeNull()
-    expect(completedAtSeconds ?? 0).toBeGreaterThanOrEqual(75)
+    expect(completedAtSeconds ?? 0).toBeGreaterThanOrEqual(60)
     expect(completedAtSeconds ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
-      150,
+      105,
     )
   })
 })

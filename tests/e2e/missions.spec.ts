@@ -53,7 +53,7 @@ async function startSelectedMission(page: Page): Promise<void> {
 
 async function finishQaCourse(page: Page): Promise<void> {
   const nextGate = page.getByRole('button', { name: 'QA 다음 관문' })
-  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 6; checkpoint += 1) {
     await nextGate.click()
   }
   await expect
@@ -70,7 +70,7 @@ test('selects, fails, and retries a collision-free mission', async ({
     'no-respawn': 'bronze',
     'time-trial': 'bronze',
   })
-  await page.goto('/?qaCourse=1&qaCollision=1')
+  await page.goto('/?mode=race&qaCourse=1&qaCollision=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -124,7 +124,7 @@ test('selects, fails, and retries a collision-free mission', async ({
 test('completes a mission, saves its grade, and advances to the unlocked next mission', async ({
   page,
 }, testInfo) => {
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -160,7 +160,7 @@ test('completes a mission, saves its grade, and advances to the unlocked next mi
     return raw === null ? null : (JSON.parse(raw) as unknown)
   })
   expect(stored).toMatchObject({
-    version: 11,
+    version: 12,
     missionGrades: { 'first-skyknot': 'gold' },
     skyLeague: {
       raceTop10Ms: [expect.any(Number)],
@@ -188,12 +188,12 @@ test('completes a mission, saves its grade, and advances to the unlocked next mi
   await expect
     .poll(async () => (await snapshot(page))?.race.phase)
     .toBe('ready')
-  await expect(missionSelect).toHaveValue('boost-mastery')
+  await expect(missionSelect).toHaveValue('no-respawn')
   await expect(
     missionSelect.locator('option[value="boost-mastery"]'),
-  ).toBeEnabled()
+  ).toHaveCount(0)
   await expect(page.locator('[data-mission-unlock-status="true"]')).toContainText(
-    '끊기지 않는 매듭',
+    '질풍 시간전',
   )
   await capture(page, testInfo.project.name, 'mission-selection-return')
 })
@@ -208,7 +208,7 @@ test('changes the selected mission from the Escape pause dialog with the keyboar
     'no-respawn': 'bronze',
     'time-trial': 'bronze',
   })
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -265,7 +265,7 @@ test('preloads Heart of Sun from its volcanic start without a festival request',
     }
   })
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -309,7 +309,7 @@ test('keeps the lava-wave draw primed when Heart of Sun GLB finishes after count
     },
   )
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -337,7 +337,7 @@ test('keeps the lava-wave draw primed when Heart of Sun GLB finishes after count
 test('keeps mission change visible in the pause dialog at every required viewport', async ({
   page,
 }, testInfo) => {
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -358,13 +358,13 @@ test('keeps mission change visible in the pause dialog at every required viewpor
   await expect(missionSelect).toBeInViewport()
   const selectBox = await missionSelect.boundingBox()
   expect(selectBox?.height ?? 0).toBeGreaterThanOrEqual(44)
-  await expect(missionSelect.locator('option')).toHaveCount(7)
+  await expect(missionSelect.locator('option')).toHaveCount(6)
   await expect(
     missionSelect.locator('option[value="first-skyknot"]'),
   ).toBeEnabled()
   await expect(
     missionSelect.locator('option[value="boost-mastery"]'),
-  ).toBeDisabled()
+  ).toHaveCount(0)
   await expect(
     missionSelect.locator('option[value="heart-of-sun"]'),
   ).toBeDisabled()

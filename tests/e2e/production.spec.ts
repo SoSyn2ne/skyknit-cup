@@ -98,7 +98,7 @@ test('ships a clean production race in every required viewport', async ({
   })
 
   await page.goto(
-    '/?qaCourse=1&qaCollision=1&qaBoost=1&qaWave=1&qaGateIndicator=1&qaReducedMotion=1&forceWebglFailure=1&forceDragonFailure=1',
+    '/?mode=race&qaCourse=1&qaCollision=1&qaBoost=1&qaWave=1&qaGateIndicator=1&qaReducedMotion=1&forceWebglFailure=1&forceDragonFailure=1',
   )
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
@@ -166,6 +166,74 @@ test('ships a clean production race in every required viewport', async ({
     path: `artifacts/browser-qa/${QA_SCOPE}/production-${testInfo.project.name}.png`,
   })
 
+  expect(errors).toEqual([])
+  expect(warnings).toEqual([])
+  expect(failedRequests).toEqual([])
+})
+
+test('ships the default M46 adventure without QA hooks in every required viewport', async ({ page }, testInfo) => {
+  const errors: string[] = []
+  const warnings: string[] = []
+  const failedRequests: string[] = []
+  const loadedModels: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text())
+    if (message.type() === 'warning' && !message.text().includes('GPU stall due to ReadPixels')) warnings.push(message.text())
+  })
+  page.on('requestfailed', request => {
+    if (request.url().includes('/assets/audio/') && request.failure()?.errorText.includes('ERR_ABORTED')) return
+    failedRequests.push(`${request.method()} ${request.url()}`)
+  })
+  page.on('response', response => {
+    if (response.status() >= 400) failedRequests.push(`${response.status()} ${response.url()}`)
+    else if (new URL(response.url()).pathname.endsWith('.glb')) loadedModels.push(response.url())
+  })
+
+  // No seeded progress, QA parameters, state mutation, or debug snapshot reads.
+  await page.goto('/')
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'renderer-ready')
+  await expect(page.locator('#app')).toHaveAttribute('data-game-mode', 'explore')
+  await expect(page.locator('canvas.game-canvas')).toHaveCount(1)
+  await expect.poll(() => loadedModels.some(url => url.endsWith('/world/adventure-hub.glb'))).toBe(true)
+  await expect.poll(() => loadedModels.some(url => url.endsWith('/characters/skyknit-dragon.glb'))).toBe(true)
+  await expect(page.locator('.resource-notice:visible')).toHaveCount(0)
+  expect(await page.evaluate(() => ({
+    testHook: '__DRAGON_RACE_TEST__' in window,
+    debugMirror: document.querySelector('#app')?.hasAttribute('data-flight-debug'),
+  }))).toEqual({ testHook: false, debugMirror: false })
+
+  const start = page.locator('[data-adventure-start]')
+  await expect(start).toBeVisible()
+  await expect(start).toBeInViewport()
+  const startBox = await start.boundingBox()
+  expect(startBox?.width ?? 0).toBeGreaterThanOrEqual(44)
+  expect(startBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+  await page.screenshot({ path: `artifacts/browser-qa/${QA_SCOPE}/production-adventure-${testInfo.project.name}-intro.png` })
+  if (testInfo.project.name.startsWith('touch')) await start.tap()
+  else { await start.focus(); await page.keyboard.press('Enter') }
+  await expect(page.locator('[data-adventure-objective]')).toHaveText('누리와 이야기하기')
+  const interact = page.locator('[data-adventure-interact]')
+  await expect(interact).toBeVisible()
+  await expect(interact).toBeInViewport()
+  if (testInfo.project.name.startsWith('touch')) await interact.tap()
+  else { await page.locator('canvas.game-canvas').focus(); await page.keyboard.press('KeyE') }
+  await expect(page.locator('[data-adventure-objective]')).toHaveText('절벽 선반의 바람새 구조하기')
+
+  const first = await sampleCanvas(page)
+  await page.waitForTimeout(1100)
+  const second = await sampleCanvas(page)
+  expect(first).not.toBeNull()
+  expect(second).not.toBeNull()
+  expect((first?.maximumLuma ?? 0) - (first?.minimumLuma ?? 255)).toBeGreaterThan(40)
+  expect(second?.hash).not.toBe(first?.hash)
+  const layout = await page.evaluate(() => ({
+    width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight,
+    viewportWidth: innerWidth, viewportHeight: innerHeight,
+  }))
+  expect(layout.width).toBe(layout.viewportWidth)
+  expect(layout.height).toBe(layout.viewportHeight)
+  await page.screenshot({ path: `artifacts/browser-qa/${QA_SCOPE}/production-adventure-${testInfo.project.name}-quest.png` })
   expect(errors).toEqual([])
   expect(warnings).toEqual([])
   expect(failedRequests).toEqual([])

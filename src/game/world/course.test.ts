@@ -17,8 +17,8 @@ import {
 } from './course'
 
 describe('Skyknot course data', () => {
-  it('defines eight finite, forward-facing checkpoints', () => {
-    expect(SKYKNOT_COURSE).toHaveLength(8)
+  it('defines six finite, forward-facing checkpoints', () => {
+    expect(SKYKNOT_COURSE).toHaveLength(6)
 
     for (const checkpoint of SKYKNOT_COURSE) {
       const normalLength = Math.hypot(
@@ -35,13 +35,29 @@ describe('Skyknot course data', () => {
     }
   })
 
-  it('targets a shortened 75-to-135 second direct flight before steering losses', () => {
+  it('keeps the original first six gates and finishes at gate-06', () => {
+    expect(SKYKNOT_COURSE.map((checkpoint) => checkpoint.id)).toEqual([
+      'gate-01',
+      'gate-02',
+      'gate-03',
+      'gate-04',
+      'gate-05',
+      'gate-06',
+    ])
+    expect(SKYKNOT_COURSE.at(-1)?.center).toEqual({
+      x: 830,
+      y: 28,
+      z: -420,
+    })
+  })
+
+  it('targets a 60-to-105 second sprint before steering losses', () => {
     const directSeconds =
       getCourseDistance(SKYKNOT_COURSE, START_ANCHOR.position) /
       FLIGHT_TUNING.cruiseSpeed
 
-    expect(directSeconds).toBeGreaterThanOrEqual(75)
-    expect(directSeconds).toBeLessThanOrEqual(135)
+    expect(directSeconds).toBeGreaterThanOrEqual(60)
+    expect(directSeconds).toBeLessThanOrEqual(105)
   })
 
   it('uses the previous checkpoint and active checkpoint as course bounds', () => {

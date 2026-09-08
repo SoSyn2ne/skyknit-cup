@@ -18,7 +18,7 @@ test('removes camera pulses, shake, and boost rings for reduced motion', async (
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/?qaBoost=1&qaCollision=1&qaCourse=1')
+  await page.goto('/?mode=race&qaBoost=1&qaCollision=1&qaCourse=1')
   await page.keyboard.press('ArrowUp')
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
@@ -56,7 +56,8 @@ test('removes camera pulses, shake, and boost rings for reduced motion', async (
       speedStreaksVisible: false,
       gatePassWaveActive: false,
       gatePulseScale: 1,
-      gateHaloOpacity: 0.08,
+      // M42 retains a static halo; reduced motion suppresses its animation.
+      gateHaloOpacity: 0.1,
       collisionCameraShakeDistance: 0,
     })
 })

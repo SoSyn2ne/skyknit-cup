@@ -1,5 +1,12 @@
 import type { Vec3Value } from '../flight/flightModel'
 import {
+  EMPTY_ADVENTURE_PROGRESS,
+  cloneAdventureProgress,
+  isCanonicalAdventureProgress,
+  normalizeAdventureProgress,
+  type AdventureProgress,
+} from '../adventure/adventureState'
+import {
   isAwardedMissionGrade,
   isMissionId,
   type AwardedMissionGrade,
@@ -86,6 +93,7 @@ export interface GameSettings {
   readonly skyLeague: SkyLeagueRecords
   readonly ghosts: SkyLeagueGhosts
   readonly exploration: ExplorationProgress
+  readonly adventure?: AdventureProgress
 }
 
 export interface CoinCompetitionResult {
@@ -93,10 +101,11 @@ export interface CoinCompetitionResult {
   readonly placement: SkyLeagueRecordResult
 }
 
-const SETTINGS_VERSION = 11
+const SETTINGS_VERSION = 12
 
 interface StoredSettings extends GameSettings {
   readonly version: typeof SETTINGS_VERSION
+  readonly adventure: AdventureProgress
 }
 
 interface LegacyStoredRecord {
@@ -123,6 +132,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   coinBestTimesMs: {},
   skyLeague: createEmptySkyLeagueRecords(),
   ghosts: EMPTY_SKY_LEAGUE_GHOSTS,
+  adventure: EMPTY_ADVENTURE_PROGRESS,
   exploration: {
     position: { x: 0, y: 18, z: 20 },
     headingRadians: 0,
@@ -271,6 +281,7 @@ function freshDefaults(): GameSettings {
     coinBestTimesMs: {},
     skyLeague: cloneSkyLeagueRecords(DEFAULT_SETTINGS.skyLeague),
     ghosts: cloneSkyLeagueGhosts(DEFAULT_SETTINGS.ghosts),
+    adventure: cloneAdventureProgress(EMPTY_ADVENTURE_PROGRESS),
     exploration: {
       ...DEFAULT_SETTINGS.exploration,
       position: { ...DEFAULT_SETTINGS.exploration.position },
@@ -620,7 +631,8 @@ function isSupportedSettingsVersion(value: unknown): value is
   | 8
   | 9
   | 10
-  | 11 {
+  | 11
+  | 12 {
   return (
     typeof value === 'number' &&
     Number.isInteger(value) &&
@@ -716,6 +728,11 @@ function parseSettings(
     rawGhosts,
     includeVolcanicProgress,
   )
+  const rawAdventure =
+    parsed.version >= 12 && 'adventure' in parsed
+      ? parsed.adventure
+      : undefined
+  const adventure = normalizeAdventureProgress(rawAdventure)
 
   return {
     settings: {
@@ -729,6 +746,7 @@ function parseSettings(
       skyLeague,
       ghosts,
       exploration,
+      adventure,
     },
     shouldMigrate:
       parsed.version !== SETTINGS_VERSION ||
@@ -737,6 +755,8 @@ function parseSettings(
       !isCanonicalSkyLeagueRecords(rawSkyLeague) ||
       JSON.stringify(rawSkyLeague) !== JSON.stringify(skyLeague) ||
       !isCanonicalSkyLeagueGhosts(rawGhosts) ||
+      !isCanonicalAdventureProgress(rawAdventure) ||
+      JSON.stringify(rawAdventure) !== JSON.stringify(adventure) ||
       bestTimeMs !== synchronizedBestTimeMs ||
       !stringRecordMatches(
         coinBestTimesMs,
@@ -786,6 +806,8 @@ function isValidSettings(settings: GameSettings): boolean {
     ) &&
     isCanonicalSkyLeagueRecords(settings.skyLeague) &&
     isCanonicalSkyLeagueGhosts(settings.ghosts) &&
+    (settings.adventure === undefined ||
+      isCanonicalAdventureProgress(settings.adventure)) &&
     hasCanonicalCompatibilitySummaries(settings) &&
     isValidExplorationPosition(exploration.position) &&
     Number.isFinite(exploration.headingRadians) &&
@@ -849,6 +871,7 @@ export function saveSettings(
     coinBestTimesMs: { ...settings.coinBestTimesMs },
     skyLeague: cloneSkyLeagueRecords(settings.skyLeague),
     ghosts: cloneSkyLeagueGhosts(settings.ghosts),
+    adventure: normalizeAdventureProgress(settings.adventure),
     exploration: {
       ...settings.exploration,
       position: { ...settings.exploration.position },

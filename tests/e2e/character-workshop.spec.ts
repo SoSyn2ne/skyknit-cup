@@ -2,6 +2,9 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { CharacterLoadout } from '../../src/game/customization/characterCatalog'
 import type { FlightDebugSnapshot } from '../../src/game/createRenderer'
+import { EMPTY_ADVENTURE_PROGRESS } from '../../src/game/adventure/adventureState'
+
+const QA_SCOPE = process.env.DRAGON_QA_SCOPE ?? 'm41-guardian-motion'
 
 const DEFAULT_LOADOUT: CharacterLoadout = {
   characterId: 'sunrise-dragon',
@@ -153,7 +156,7 @@ for (const [legacyCharacterId, expectedCharacterId] of [
       localStorage.setItem('skyknit-cup:settings', JSON.stringify(settings))
     }, legacySettings)
 
-    await page.goto('/')
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',
@@ -191,7 +194,8 @@ for (const [legacyCharacterId, expectedCharacterId] of [
     )
     expect(stored).toEqual({
       ...legacySettings,
-      version: 11,
+      version: 12,
+      adventure: EMPTY_ADVENTURE_PROGRESS,
       characterLoadout: expectedLoadout,
     })
 
@@ -207,7 +211,7 @@ for (const [legacyCharacterId, expectedCharacterId] of [
 test('previews a guardian safely inside every supported viewport', async ({
   page,
 }, testInfo) => {
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -306,8 +310,12 @@ for (const { label, loadout } of GUARDIAN_FLIGHT_EVIDENCE) {
   test(`keeps the ${label} readable with its gate and wind threads in flight`, async ({
     page,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop')
-    await page.goto('/')
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text())
+    })
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',
@@ -349,8 +357,9 @@ for (const { label, loadout } of GUARDIAN_FLIGHT_EVIDENCE) {
       })
 
     await page.screenshot({
-      path: `artifacts/browser-qa/m41-guardian-motion/${loadout.characterId}-flight.png`,
+      path: `artifacts/browser-qa/${QA_SCOPE}/${testInfo.project.name}-${loadout.characterId}-flight.png`,
     })
+    expect(errors).toEqual([])
   })
 }
 
@@ -372,7 +381,7 @@ test('ignores a stale initial model failure after a newer preview succeeds', asy
     markInitialLoadFinished()
   })
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '캐릭터 꾸미기' }).click()
   await selectLoadout(page, {
     characterId: 'ember-phoenix',
@@ -404,7 +413,7 @@ test('persists an applied guardian through reload, pause, and context recovery',
       }),
     )
   })
-  await page.goto('/')
+  await page.goto('/?mode=race')
 
   await page.getByRole('button', { name: '캐릭터 꾸미기' }).click()
   const applied: CharacterLoadout = {
@@ -422,7 +431,7 @@ test('persists an applied guardian through reload, pause, and context recovery',
     JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? '{}'),
   )
   expect(stored).toMatchObject({
-    version: 11,
+    version: 12,
     bestTimeMs: 48_210,
     coinBestTimesMs: { 'festival-hub': 17_200 },
     missionGrades: { 'first-skyknot': 'gold' },

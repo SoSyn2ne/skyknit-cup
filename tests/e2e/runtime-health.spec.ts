@@ -45,7 +45,7 @@ test('has no console, rejection, or network failures during flight', async ({
     })
   })
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',

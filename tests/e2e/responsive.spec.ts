@@ -11,7 +11,7 @@ const REQUIRED_VIEWPORTS: Readonly<Record<string, readonly [number, number]>> = 
 test('fits the race UI inside the required viewport', async ({
   page,
 }, testInfo) => {
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -90,7 +90,7 @@ test('fits the race UI inside the required viewport', async ({
 })
 
 test('keeps the timer width stable as digits change', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.keyboard.press('ArrowUp')
   const timer = page.locator('[data-race-timer]')
   await expect(timer).toBeVisible()

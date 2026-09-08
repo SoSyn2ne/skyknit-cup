@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_CHARACTER_LOADOUT } from '../customization/characterCatalog'
+import { normalizeAdventureProgress } from '../adventure/adventureState'
 import {
   advanceRaceClock,
   canMove,
@@ -104,6 +105,48 @@ function withRun(
 }
 
 describe('race state', () => {
+  it('detaches adventure progress at initialization and preserves it across race transitions', () => {
+    const adventure = normalizeAdventureProgress({
+      started: true,
+      visitedPointIds: ['keeper', 'rescue', 'bird-return'],
+      placedDecorations: ['lanterns'],
+      elapsedPlaySeconds: 123,
+    })
+    const initial = createInitialRaceState({
+      ...options,
+      persistent: { ...options.persistent, adventure },
+    })
+
+    expect(initial.persistent.adventure).toEqual(adventure)
+    expect(initial.persistent.adventure).not.toBe(adventure)
+    expect(initial.persistent.adventure?.visitedPointIds).not.toBe(adventure.visitedPointIds)
+    expect(initial.persistent.adventure?.claimedRewardIds).not.toBe(adventure.claimedRewardIds)
+    expect(initial.persistent.adventure?.materials).not.toBe(adventure.materials)
+    expect(initial.persistent.adventure?.placedDecorations).not.toBe(adventure.placedDecorations)
+
+    let state = transitionRace(initial, { type: 'ASSETS_READY', assetsValid: true })
+    state = transitionRace(state, { type: 'SET_MUTED', muted: false })
+    state = transitionRace(state, { type: 'SET_MUSIC_VOLUME', musicVolume: 0.5 })
+    state = transitionRace(state, { type: 'SET_QUALITY', quality: 'low' })
+    state = transitionRace(state, {
+      type: 'SET_CHARACTER_LOADOUT',
+      loadout: { characterId: 'ember-phoenix', paletteId: 'moonlight', accessoryId: 'festival-ribbon' },
+    })
+    state = transitionRace(state, { type: 'START', input: 'keyboard' })
+    state = advanceRaceClock(state, 3_000)
+    state = advanceRaceClock(state, 42_000)
+    for (let index = 0; index < options.checkpointCount; index += 1) {
+      state = recordCheckpointPass(state, index)
+    }
+    expect(state.phase).toBe('finished')
+    expect(state.persistent.adventure).toEqual(adventure)
+    state = transitionRace(state, { type: 'RETRY' })
+    state = transitionRace(state, { type: 'PAUSE' })
+    state = transitionRace(state, { type: 'RETURN_TO_READY' })
+    expect(state.phase).toBe('ready')
+    expect(state.persistent.adventure).toEqual(adventure)
+  })
+
   it('creates the loading state with a clean run', () => {
     const state = createInitialRaceState(options)
 
@@ -703,6 +746,7 @@ describe('race state', () => {
     const racing = makeState('racing')
 
     expect(selected.mission.selectedMissionId).toBe('clean-flight')
+    expect(selectRaceMission(ready, 'boost-mastery')).toBe(ready)
     expect(selectRaceMission(racing, 'time-trial')).toBe(racing)
   })
 
@@ -788,20 +832,20 @@ describe('race state', () => {
     })
     expect(skyknot.config).toMatchObject({
       courseId: 'skyknot',
-      checkpointCount: 8,
+      checkpointCount: 6,
       spawnPosition: { x: 0, y: 8, z: 0 },
     })
   })
 
   it('changes to an unlocked mission from pause by abandoning only the attempt', () => {
     const paused = makeState('paused')
-    const changed = selectRaceMission(paused, 'boost-mastery')
+    const changed = selectRaceMission(paused, 'no-respawn')
 
     expect(changed).toMatchObject({
       phase: 'ready',
       pausedFrom: null,
       mission: {
-        selectedMissionId: 'boost-mastery',
+        selectedMissionId: 'no-respawn',
         status: 'idle',
         attempt: {
           elapsedMs: 0,
@@ -821,7 +865,7 @@ describe('race state', () => {
     expect(next).toMatchObject({
       phase: 'ready',
       mission: {
-        selectedMissionId: 'boost-mastery',
+        selectedMissionId: 'no-respawn',
         status: 'idle',
       },
     })
@@ -869,7 +913,7 @@ describe('race state', () => {
       ...makeState('ready'),
       mission: {
         ...makeState('ready').mission,
-        selectedMissionId: 'boost-mastery' as const,
+        selectedMissionId: 'no-respawn' as const,
         status: 'idle' as const,
       },
     }
@@ -881,14 +925,14 @@ describe('race state', () => {
       ...makeState('finished'),
       mission: {
         ...makeState('finished').mission,
-        selectedMissionId: 'boost-mastery' as const,
+        selectedMissionId: 'no-respawn' as const,
       },
     }
     const retried = transitionRace(finished, { type: 'RETRY' })
 
     expect(countdown.mission.status).toBe('active')
     expect(countdown.mission.attempt.elapsedMs).toBe(0)
-    expect(retried.mission.selectedMissionId).toBe('boost-mastery')
+    expect(retried.mission.selectedMissionId).toBe('no-respawn')
     expect(retried.mission.attempt.collisionCount).toBe(0)
   })
 
@@ -925,7 +969,7 @@ describe('race state', () => {
   it('evaluates the mission at the final checkpoint and saves only a higher grade', () => {
     const racing = {
       ...withRun(makeState('racing'), {
-        elapsedMs: 95_000,
+        elapsedMs: 75_000,
         nextCheckpointIndex: 2,
       }),
       mission: {
@@ -933,9 +977,9 @@ describe('race state', () => {
         selectedMissionId: 'clean-flight' as const,
         attempt: {
           ...makeState('racing').mission.attempt,
-          elapsedMs: 95_000,
+          elapsedMs: 75_000,
           nextCheckpointIndex: 2,
-          boostActivationCount: 7,
+          boostActivationCount: 5,
         },
       },
     }

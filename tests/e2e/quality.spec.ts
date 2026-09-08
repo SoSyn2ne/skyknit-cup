@@ -18,7 +18,7 @@ async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
 test('applies the automatic render budget for the device class', async ({
   page,
 }, testInfo) => {
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -71,7 +71,7 @@ test('changes and saves quality without resetting race progress', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page.keyboard.press('ArrowUp')
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {
@@ -131,7 +131,7 @@ test('changes and saves quality without resetting race progress', async ({
   const storedAfterQuality = await page.evaluate(() =>
     JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? 'null'),
   )
-  expect(storedAfterQuality).toMatchObject({ version: 11, quality: 'low' })
+  expect(storedAfterQuality).toMatchObject({ version: 12, quality: 'low' })
 
   const mute = page.getByRole('button', { name: '소리 끄기' })
   await expect(mute).toHaveAttribute('title', '소리 끄기')
@@ -179,7 +179,7 @@ test('fits settings and pause actions at the minimum viewport', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'touch-minimum')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.keyboard.press('ArrowUp')
   await expect
     .poll(async () => (await readSnapshot(page))?.race.phase, {

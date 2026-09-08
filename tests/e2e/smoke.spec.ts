@@ -9,7 +9,7 @@ test('loads the ready race with a live WebGL canvas', async ({ page }) => {
   })
   page.on('pageerror', (error) => errors.push(error.message))
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
 
   await expect(page).toHaveTitle('하늘매듭배')
   await expect(page.locator('#app')).toHaveAttribute(

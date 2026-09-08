@@ -70,7 +70,7 @@ async function dispatchTouch(
 test.describe('touch flight flow', () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(!testInfo.project.name.startsWith('touch'))
-    await page.goto('/')
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',
@@ -236,11 +236,11 @@ test.describe('touch flight flow', () => {
   test('finishes and retries after a touch start', async ({
     page,
   }, testInfo) => {
-    await page.goto('/?qaCourse=1')
+    await page.goto('/?mode=race&qaCourse=1')
     const joystick = page.locator('[data-touch-role="joystick"]')
     await startTouchRace(page)
 
-    for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
+    for (let checkpoint = 0; checkpoint < 6; checkpoint += 1) {
       await page.evaluate(() => {
         const testWindow = window as unknown as {
           __DRAGON_RACE_TEST__?: {

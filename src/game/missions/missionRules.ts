@@ -54,21 +54,21 @@ export const MISSION_CATALOG: readonly MissionDefinition[] = [
     id: 'boost-mastery',
     courseId: 'skyknot',
     name: '돌풍 조율사',
-    objective: '돌풍을 세 번 이상 일으켜 바람실에 힘을 더하고 완주하세요.',
+    objective: '돌풍을 두 번 이상 일으켜 바람실에 힘을 더하고 완주하세요.',
   },
   {
     id: 'no-respawn',
     courseId: 'skyknot',
     name: '끊기지 않는 매듭',
     objective:
-      '돌풍을 세 번 이상 일으키고 리스폰 없이 완주해 햇실 한 가닥을 끊김 없이 이으세요.',
+      '돌풍을 두 번 이상 일으키고 리스폰 없이 완주해 햇실 한 가닥을 끊김 없이 이으세요.',
   },
   {
     id: 'time-trial',
     courseId: 'skyknot',
     name: '질풍 시간전',
     objective:
-      '햇실이 흐려지기 전, 돌풍 3회 이상과 무리스폰으로 2분 15초 안에 완주하세요.',
+      '햇실이 흐려지기 전, 돌풍 2회 이상과 무리스폰으로 1분 40초 안에 완주하세요.',
   },
   {
     id: 'clean-flight',
@@ -82,7 +82,7 @@ export const MISSION_CATALOG: readonly MissionDefinition[] = [
     courseId: 'skyknot',
     name: '황금 하늘매듭',
     objective:
-      '2분 안에 충돌·리스폰 없이 돌풍을 5회 이상 사용해 황금 매듭을 완성하세요.',
+      '1분 30초 안에 충돌·리스폰 없이 돌풍을 4회 이상 사용해 황금 매듭을 완성하세요.',
   },
   {
     id: 'heart-of-sun',
@@ -92,6 +92,28 @@ export const MISSION_CATALOG: readonly MissionDefinition[] = [
       '세 개의 냉각 봉인을 깨우고 분화가 덮치기 전에 태양의 심장에서 탈출하세요.',
   },
 ]
+
+export const PLAYABLE_MISSION_IDS: readonly MissionId[] = [
+  'first-skyknot',
+  'no-respawn',
+  'time-trial',
+  'clean-flight',
+  'golden-knot',
+  'heart-of-sun',
+] as const
+
+const PLAYABLE_MISSION_SET = new Set<MissionId>(PLAYABLE_MISSION_IDS)
+
+export const PLAYABLE_MISSION_CATALOG: readonly MissionDefinition[] =
+  MISSION_CATALOG.filter((mission) => PLAYABLE_MISSION_SET.has(mission.id))
+
+function getPlayableMissionProgressIndex(missionId: MissionId): number {
+  if (missionId === 'boost-mastery') {
+    return 0
+  }
+
+  return PLAYABLE_MISSION_IDS.indexOf(missionId)
+}
 
 interface MissionThreshold {
   readonly maxElapsedMs?: number
@@ -111,82 +133,82 @@ const MISSION_GRADE_THRESHOLDS: Readonly<
 > = {
   'first-skyknot': {
     bronze: {},
-    silver: { maxElapsedMs: 135_000 },
-    gold: { maxElapsedMs: 120_000 },
+    silver: { maxElapsedMs: 100_000 },
+    gold: { maxElapsedMs: 90_000 },
   },
   'boost-mastery': {
-    bronze: { minBoostActivationCount: 3 },
-    silver: { minBoostActivationCount: 5 },
-    gold: { minBoostActivationCount: 7 },
+    bronze: { minBoostActivationCount: 2 },
+    silver: { minBoostActivationCount: 4 },
+    gold: { minBoostActivationCount: 5 },
   },
   'no-respawn': {
-    bronze: { maxRespawnCount: 0, minBoostActivationCount: 3 },
+    bronze: { maxRespawnCount: 0, minBoostActivationCount: 2 },
     silver: {
-      maxElapsedMs: 135_000,
+      maxElapsedMs: 100_000,
       maxRespawnCount: 0,
-      minBoostActivationCount: 5,
+      minBoostActivationCount: 4,
     },
     gold: {
-      maxElapsedMs: 120_000,
+      maxElapsedMs: 90_000,
       maxRespawnCount: 0,
-      minBoostActivationCount: 7,
+      minBoostActivationCount: 5,
     },
   },
   'time-trial': {
     bronze: {
-      maxElapsedMs: 135_000,
+      maxElapsedMs: 100_000,
       maxRespawnCount: 0,
-      minBoostActivationCount: 3,
+      minBoostActivationCount: 2,
     },
     silver: {
-      maxElapsedMs: 110_000,
+      maxElapsedMs: 85_000,
       maxRespawnCount: 0,
-      minBoostActivationCount: 5,
+      minBoostActivationCount: 4,
     },
     gold: {
-      maxElapsedMs: 95_000,
+      maxElapsedMs: 75_000,
       maxRespawnCount: 0,
-      minBoostActivationCount: 7,
+      minBoostActivationCount: 5,
     },
   },
   'clean-flight': {
     bronze: {
-      maxElapsedMs: 135_000,
+      maxElapsedMs: 100_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
-      minBoostActivationCount: 3,
+      minBoostActivationCount: 2,
     },
     silver: {
-      maxElapsedMs: 110_000,
+      maxElapsedMs: 85_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 4,
+    },
+    gold: {
+      maxElapsedMs: 75_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 5,
-    },
-    gold: {
-      maxElapsedMs: 95_000,
-      maxCollisionCount: 0,
-      maxRespawnCount: 0,
-      minBoostActivationCount: 7,
     },
   },
   'golden-knot': {
     bronze: {
-      maxElapsedMs: 120_000,
+      maxElapsedMs: 90_000,
+      maxCollisionCount: 0,
+      maxRespawnCount: 0,
+      minBoostActivationCount: 4,
+    },
+    silver: {
+      maxElapsedMs: 85_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 5,
     },
-    silver: {
-      maxElapsedMs: 110_000,
+    gold: {
+      maxElapsedMs: 75_000,
       maxCollisionCount: 0,
       maxRespawnCount: 0,
       minBoostActivationCount: 6,
-    },
-    gold: {
-      maxElapsedMs: 95_000,
-      maxCollisionCount: 0,
-      maxRespawnCount: 0,
-      minBoostActivationCount: 7,
     },
   },
   'heart-of-sun': {
@@ -315,33 +337,40 @@ export function deriveUnlockedMissionIds(
 ): readonly MissionId[] {
   let highestAwardedMissionIndex = -1
 
-  MISSION_IDS.forEach((missionId, missionIndex) => {
+  MISSION_IDS.forEach((missionId) => {
     if (isAwardedMissionGrade(grades[missionId])) {
-      highestAwardedMissionIndex = missionIndex
+      highestAwardedMissionIndex = Math.max(
+        highestAwardedMissionIndex,
+        getPlayableMissionProgressIndex(missionId),
+      )
     }
   })
 
   const unlockedCount = Math.min(
-    MISSION_IDS.length,
+    PLAYABLE_MISSION_IDS.length,
     Math.max(1, highestAwardedMissionIndex + 2),
   )
-  return MISSION_IDS.slice(0, unlockedCount)
+  return PLAYABLE_MISSION_IDS.slice(0, unlockedCount)
 }
 
 export function getNextMissionId(missionId: MissionId): MissionId | null {
-  const nextMissionIndex = MISSION_IDS.indexOf(missionId) + 1
-  return MISSION_IDS[nextMissionIndex] ?? null
+  if (missionId === 'boost-mastery') {
+    return 'no-respawn'
+  }
+
+  const nextMissionIndex = getPlayableMissionProgressIndex(missionId) + 1
+  return PLAYABLE_MISSION_IDS[nextMissionIndex] ?? null
 }
 
 export function getMissionLockRequirement(
   missionId: MissionId,
 ): string | null {
-  const missionIndex = MISSION_IDS.indexOf(missionId)
+  const missionIndex = getPlayableMissionProgressIndex(missionId)
   if (missionIndex <= 0) {
     return null
   }
 
-  return `${MISSION_CATALOG[missionIndex - 1].name} 브론즈 달성 필요`
+  return `${PLAYABLE_MISSION_CATALOG[missionIndex - 1].name} 브론즈 달성 필요`
 }
 
 export function mergeBestGrade(

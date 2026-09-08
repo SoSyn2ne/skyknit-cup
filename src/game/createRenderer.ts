@@ -3,6 +3,16 @@ import * as THREE from 'three'
 import { QA_MODE } from '../qaMode'
 
 import {
+  EMPTY_ADVENTURE_PROGRESS, advanceAdventureTime, canUseAdventureSense,
+  cloneAdventureProgress, getAdventureObjective, getAdventureDevice, rotateAdventureDevice, interactAdventure,
+  setAdventureCharm, setAdventureDecoration, startAdventure, useAdventureSense,
+  type AdventureProgress, type AdventureContext, type AdventureRouteId,
+} from './adventure/adventureState'
+import { ADVENTURE_HOME, ADVENTURE_LANDING_PAD, ADVENTURE_GARDEN_PAD } from './adventure/adventureWorld'
+import { createAdventureHud, type AdventureHud } from './ui/AdventureHud'
+import { createAdventureWorld, type AdventureWorldVisual } from './world/createAdventureWorld'
+
+import {
   GeometryResourceLedger,
   type GeometryResourceLedgerSnapshot,
 } from './qa/geometryResourceLedger'
@@ -111,6 +121,7 @@ import {
   createRaceHud,
   type RaceHazardWarning,
   type RaceHud,
+  type RaceHudTransientNotice,
 } from './ui/RaceHud'
 import {
   createCharacterWorkshop,
@@ -137,6 +148,8 @@ import {
 } from './ui/TouchControls'
 import {
   createGateIndicator,
+  type GateIndicatorState,
+  type IndicatorAvoidanceRect,
   type ProjectedGatePoint,
 } from './ui/gateIndicator'
 import {
@@ -282,6 +295,17 @@ export interface FlightDebugSnapshot {
     readonly shadowRadius: number
   }
   readonly exploration: {
+    readonly adventure: {
+      readonly progress: AdventureProgress
+      readonly objective: ReturnType<typeof getAdventureObjective>
+      readonly canInteract: boolean
+      readonly canSense: boolean
+      readonly senseActive: boolean
+      readonly intro: boolean
+      readonly deviceOpen: boolean
+      readonly device: ReturnType<typeof getAdventureDevice>
+      readonly world: ReturnType<AdventureWorldVisual['debugSnapshot']>
+    }
     readonly movement: ExplorationFlightState['movement']
     readonly landingPadId: ExplorationFlightState['landingPadId']
     readonly discoveredRegionIds: readonly OpenWorldRegionId[]
@@ -366,6 +390,36 @@ export interface RendererRecoveryState {
 
 interface ScenePalette extends FlightSandboxPalette {
   readonly skyZenith: string
+}
+
+export function selectRaceHudTransientNotice(
+  outsideDurationSeconds: number,
+  respawnImmunitySeconds: number,
+  collisionRecoveryRemainingSeconds: number,
+): RaceHudTransientNotice | null {
+  if (respawnImmunitySeconds > 0) {
+    return { kind: 'respawn' }
+  }
+  if (collisionRecoveryRemainingSeconds > 0) {
+    return { kind: 'collision' }
+  }
+  if (outsideDurationSeconds > 0) {
+    return { kind: 'off-course' }
+  }
+  return null
+}
+
+function hasSameGateIndicatorState(
+  left: GateIndicatorState,
+  right: GateIndicatorState,
+): boolean {
+  return (
+    left.show === right.show &&
+    left.left === right.left &&
+    left.top === right.top &&
+    left.angleRadians === right.angleRadians &&
+    left.projectedDiameterCss === right.projectedDiameterCss
+  )
 }
 
 function readScenePalette(): ScenePalette {
@@ -579,6 +633,8 @@ export function createRenderer(
   let pendingCharacterWorkshop: CharacterWorkshop | null = null
   let pendingStoryPrologue: StoryPrologue | null = null
   let pendingExplorationHud: ExplorationHud | null = null
+  let pendingAdventureHud: AdventureHud | null = null
+  let pendingAdventureWorld: AdventureWorldVisual | null = null
   let pendingBoostGauge: BoostGauge | null = null
   let pendingOpenWorld: OpenWorldVisual | null = null
   let pendingOpenWorldActivities: OpenWorldActivitiesVisual | null = null
@@ -688,6 +744,8 @@ export function createRenderer(
       qualityTier: renderQuality.tier,
     })
     pendingOpenWorld = openWorld
+    const adventureWorld = createAdventureWorld(scene)
+    pendingAdventureWorld = adventureWorld
     const openWorldActivities = createOpenWorldActivities(
       scene,
       renderQuality.tier,
@@ -734,14 +792,25 @@ export function createRenderer(
         headingRadians: initialRaceCourse.startAnchor.headingRadians,
       },
     )
-    let gameMode: 'race' | 'explore' = recovery?.gameMode ?? 'race'
-    const landingPads = [
+    const requestedRaceEntry = new URLSearchParams(window.location.search).get('mode') === 'race'
+    let gameMode: 'race' | 'explore' = recovery?.gameMode ?? (requestedRaceEntry ? 'race' : 'explore')
+    let adventureProgress = cloneAdventureProgress(raceState.persistent.adventure ?? EMPTY_ADVENTURE_PROGRESS)
+    let adventureIntro = gameMode === 'explore' && (recovery === undefined || !adventureProgress.started)
+    let adventureNotice: string | null = null
+    let adventureNoticeUntil = 0
+    let adventureSenseUntil = 0
+    let adventureClockAccumulator = 0
+    let adventureDeviceOpen = false
+    const baseLandingPads = [
+      ADVENTURE_LANDING_PAD,
       ...OPEN_WORLD_REGIONS.filter(
         ({ id }) => id !== 'festival-hub',
       ).map((region) => region.landingPad),
       ...FESTIVAL_HUB_LANDING_PADS,
       ...VOLCANIC_ARCHIPELAGO_LANDING_PADS.slice(1),
     ]
+    let landingPads = adventureProgress.windmillRepaired
+      ? [...baseLandingPads, ADVENTURE_GARDEN_PAD] : baseLandingPads
     const explorationColliders = [
       ...FESTIVAL_HUB_COLLIDERS,
       ...VOLCANIC_ARCHIPELAGO_COLLIDERS,
@@ -786,6 +855,13 @@ export function createRenderer(
           ? { ...restoredExplorationPosition }
           : null,
       }
+    if (gameMode === 'explore' && !adventureProgress.started && recovery === undefined) {
+      const position = { ...ADVENTURE_LANDING_PAD.position, y: ADVENTURE_LANDING_PAD.position.y + EXPLORATION_TUNING.landedHeight }
+      explorationState = {
+        ...createExplorationFlightState({ position, headingRadians: ADVENTURE_HOME.headingRadians, speed: 0 }),
+        movement: 'landed', landingPadId: ADVENTURE_LANDING_PAD.id, movementStart: position,
+      }
+    }
     let discoveredRegionIds = [
       ...raceState.persistent.exploration.discoveredRegionIds,
     ]
@@ -1417,10 +1493,13 @@ export function createRenderer(
     }
 
     const syncExplorationPersistence = (save = true): void => {
+      // Previewing the new chapter must not overwrite an older exploration save.
+      if (adventureIntro && !adventureProgress.started) return
       raceState = {
         ...raceState,
         persistent: {
           ...raceState.persistent,
+          adventure: adventureProgress,
           exploration: {
             position: { ...explorationState.flight.position },
             headingRadians: explorationState.flight.headingRadians,
@@ -1519,6 +1598,14 @@ export function createRenderer(
 
     const performExplorationInteraction = (): void => {
       if (explorationPaused || mapOpen) return
+      if (adventureIntro) {
+        beginAdventure()
+        return
+      }
+      if (canInteractWithAdventure()) {
+        performAdventureInteraction()
+        return
+      }
       const challengeRegionId = getChallengeRegionId()
       if (challengeRegionId !== null) {
         startRaceFromExplore(
@@ -1563,6 +1650,7 @@ export function createRenderer(
       touchInput.clear()
     }
     const toggleExplorationMap = (): void => {
+      if (adventureDeviceOpen) return
       mapOpen = !mapOpen
       if (mapOpen) clearInputs()
     }
@@ -1669,6 +1757,7 @@ export function createRenderer(
         resetExplorationEnvironment()
         clearRaceGhostAttempt()
         gameMode = 'explore'
+        adventureIntro = !requestedRaceEntry && !adventureProgress.started
         explorationPaused = false
         mapOpen = false
         flightState = explorationState.flight
@@ -1785,9 +1874,110 @@ export function createRenderer(
     explorationHud.element.hidden = gameMode !== 'explore'
     raceHud.element.hidden = gameMode === 'explore'
     pendingExplorationHud = explorationHud
+    const adventureContext = (): AdventureContext => ({
+      position: explorationState.flight.position,
+      gameMode,
+      coinRunActive: coinRunState.phase === 'running',
+      paused: explorationPaused || adventureIntro,
+      mapOpen,
+    })
+    const adventureDistance = (): number => {
+      const objective = getAdventureObjective(adventureProgress)
+      const position = explorationState.flight.position
+      return Math.hypot(position.x - objective.position.x, position.y - objective.position.y, position.z - objective.position.z)
+    }
+    const canInteractWithAdventure = (): boolean => {
+      if (!adventureProgress.started || getAdventureObjective(adventureProgress).id === 'complete' || gameMode !== 'explore' || adventureIntro || explorationPaused || mapOpen || coinRunState.phase === 'running') return false
+      return adventureDistance() <= getAdventureObjective(adventureProgress).interactionRadius
+    }
+    const commitAdventure = (next: AdventureProgress): void => {
+      if (next === adventureProgress) return
+      const previous = adventureProgress
+      adventureProgress = next
+      if (next.windmillRepaired !== previous.windmillRepaired) {
+        landingPads = next.windmillRepaired ? [...baseLandingPads, ADVENTURE_GARDEN_PAD] : baseLandingPads
+      }
+      if (next.claimedRewardIds.length > previous.claimedRewardIds.length) {
+        adventureNotice = next.windmillRepaired ? '둥지 복구 완료 · 수호수 매듭을 받았어요' : '의뢰 완료 · 유대와 새 보상을 받았어요'
+        gameAudio.playDiscovery()
+      } else if (next.stage !== previous.stage) {
+        adventureNotice = getAdventureObjective(next).label
+      }
+      adventureNoticeUntil = visualSimulationSeconds + 4
+      syncExplorationPersistence()
+    }
+    const beginAdventure = (): void => {
+      adventureIntro = false
+      explorationPaused = false
+      commitAdventure(startAdventure(adventureProgress))
+      sandbox.resetCamera()
+      gameAudio.setMusicActive(true)
+      void gameAudio.unlock()
+      clearInputs()
+      canvas.focus({ preventScroll: true })
+    }
+    const performAdventureSense = (): void => {
+      const context = adventureContext()
+      if (!canUseAdventureSense(adventureProgress, context)) return
+      adventureSenseUntil = visualSimulationSeconds + 8
+      const next = useAdventureSense(adventureProgress, context)
+      commitAdventure(next)
+      adventureNotice = next.ruinsRevealed ? '유적의 메아리를 찾았어요' : '바람의 흔적이 다음 위치를 가리켜요'
+      adventureNoticeUntil = visualSimulationSeconds + 4
+      canvas.focus({ preventScroll: true })
+    }
+    const performAdventureInteraction = (choice?: AdventureRouteId): void => {
+      if (!canInteractWithAdventure()) return
+      if (adventureProgress.stage === 'route-flight' && !adventureDeviceOpen) {
+        adventureDeviceOpen = true
+        clearInputs()
+        return
+      }
+      if (choice === undefined && canUseAdventureSense(adventureProgress, adventureContext())) {
+        performAdventureSense()
+        return
+      }
+      const next = interactAdventure(adventureProgress, adventureContext(), choice)
+      if (next !== adventureProgress) adventureDeviceOpen = false
+      commitAdventure(next)
+      canvas.focus({ preventScroll: true })
+    }
+    const adventureHud = createAdventureHud(host, {
+      start: beginAdventure,
+      interact: () => performAdventureInteraction(),
+      chooseRoute: performAdventureInteraction,
+      rotateDevice: index => {
+        if (adventureDeviceOpen) commitAdventure(rotateAdventureDevice(adventureProgress, adventureContext(), index))
+      },
+      closeDevice: () => {
+        adventureDeviceOpen = false
+        clearInputs()
+        canvas.focus({ preventScroll: true })
+      },
+      sense: performAdventureSense,
+      toggleCharm: () => commitAdventure(setAdventureCharm(adventureProgress, !adventureProgress.equippedCharm)),
+      toggleDecoration: (id) => commitAdventure(setAdventureDecoration(adventureProgress, id, !adventureProgress.placedDecorations.includes(id))),
+      openRace: () => {
+        if (adventureProgress.started) syncExplorationPersistence()
+        adventureIntro = false
+        gameMode = 'race'
+        explorationPaused = false
+        mapOpen = false
+        resetCoinRunAttempt()
+        openWorld.clear()
+        explorationHud?.element.setAttribute('hidden', '')
+        raceHud.element.hidden = false
+        raceState = transitionRace(raceState, { type: 'RETURN_TO_READY' })
+        clearRaceGhostAttempt()
+        resetFlight()
+        canvas.focus({ preventScroll: true })
+      },
+    })
+    pendingAdventureHud = adventureHud
     const boostGauge = createBoostGauge(host)
     pendingBoostGauge = boostGauge
     const qaControls: HTMLButtonElement[] = []
+    let gateIndicatorAvoidanceRects: readonly IndicatorAvoidanceRect[] = []
     const developmentParams = new URLSearchParams(window.location.search)
     const advanceQaCourse = (): void => {
       if (raceState.phase !== 'racing') {
@@ -2012,7 +2202,8 @@ export function createRenderer(
           touchInput.readExplorationActions(),
         )
         if (actions.pause) {
-          explorationPaused = !explorationPaused
+          if (adventureDeviceOpen) adventureDeviceOpen = false
+          else explorationPaused = !explorationPaused
           if (explorationPaused) clearInputs()
         }
         if (actions.toggleMap && !explorationPaused) toggleExplorationMap()
@@ -2022,10 +2213,24 @@ export function createRenderer(
       }
 
       const explorationSimulationActive =
-        gameMode === 'explore' && !explorationPaused && !mapOpen
+        gameMode === 'explore' && !explorationPaused && !mapOpen && !adventureIntro && !adventureDeviceOpen
 
       for (let offset = 0; offset < consumed.steps; offset += 1) {
         const phaseAtStepStart = raceState.phase
+        if (gameMode === 'explore' && !explorationPaused && !mapOpen && !adventureIntro) {
+          adventureClockAccumulator += FIXED_STEP_SECONDS
+          if (adventureClockAccumulator >= 1) {
+            adventureProgress = advanceAdventureTime(adventureProgress, adventureClockAccumulator, coinRunState.phase !== 'running')
+            adventureClockAccumulator = 0
+          }
+          if (adventureDeviceOpen) {
+            explorationSaveRemainingSeconds -= FIXED_STEP_SECONDS
+            if (explorationSaveRemainingSeconds <= 0) {
+              syncExplorationPersistence()
+              explorationSaveRemainingSeconds = 2
+            }
+          }
+        }
 
         if (explorationSimulationActive) {
           if (discoveryNoticeRemainingSeconds > 0) {
@@ -2219,6 +2424,7 @@ export function createRenderer(
           }
           visualSimulationSeconds += FIXED_STEP_SECONDS
           explorationSaveRemainingSeconds -= FIXED_STEP_SECONDS
+          if (coinRunState.phase === 'running') adventureSenseUntil = 0
           if (explorationSaveRemainingSeconds <= 0) {
             syncExplorationPersistence()
             explorationSaveRemainingSeconds = 2
@@ -2513,6 +2719,45 @@ export function createRenderer(
       fixedStepClock = consumed.clock
       hostFrames += 1
       maxStepsPerFrame = Math.max(maxStepsPerFrame, consumed.steps)
+      const transientNotice = selectRaceHudTransientNotice(
+        outOfBoundsTracker.outsideDurationSeconds,
+        respawnImmunitySeconds,
+        collisionState.recoveryRemainingSeconds,
+      )
+      const hazardWarning =
+        volcanicRaceActive && raceState.phase === 'racing'
+          ? selectVolcanicHazardWarning(volcanicFrame)
+          : null
+      host.dataset.inputDevice = inputController.activeDevice
+      host.dataset.gameMode = gameMode
+      boostGauge.element.dataset.mode = gameMode
+      boostGauge.update({
+        visible: isBoostGaugeVisible(
+          gameMode === 'race'
+            ? { mode: 'race', phase: raceState.phase }
+            : {
+                mode: 'explore',
+                movement: explorationState.movement,
+                paused: explorationPaused,
+                mapOpen,
+              },
+        ),
+        boostRemaining: flightState.boostRemaining,
+        inputDevice: inputController.activeDevice,
+        isBoosting: flightState.isBoosting,
+      })
+      touchControls.update(
+        gameMode === 'explore'
+          ? explorationSimulationActive
+            ? 'racing'
+            : 'paused'
+          : raceState.phase,
+        gameMode,
+      )
+      const gateIndicatorViewport = {
+        width: host.clientWidth,
+        height: host.clientHeight,
+      }
       const projectedGate = sandbox.gateProjection(host.clientHeight)
       const projectedDiameterCss =
         QA_MODE &&
@@ -2522,7 +2767,8 @@ export function createRenderer(
       const gateIndicator = createGateIndicator(
         projectedGate.point,
         projectedDiameterCss,
-        { width: host.clientWidth, height: host.clientHeight },
+        gateIndicatorViewport,
+        gateIndicatorAvoidanceRects,
       )
       let projectedCoinPoint: ProjectedGatePoint | null = null
       let projectedCoinDiameterCss = 0
@@ -2551,9 +2797,9 @@ export function createRenderer(
       const coinIndicator = createGateIndicator(
         projectedCoinPoint,
         projectedCoinDiameterCss,
-        { width: host.clientWidth, height: host.clientHeight },
+        gateIndicatorViewport,
       )
-      raceHud.update({
+      const raceHudView = {
         phase: raceState.phase,
         countdownRemainingMs: raceState.run.countdownRemainingMs,
         elapsedMs: raceState.run.elapsedMs,
@@ -2573,11 +2819,29 @@ export function createRenderer(
         liveDeltaMs: raceLiveDeltaMs,
         leagueResult: raceState.leagueResult,
         skyLeague: raceState.persistent.skyLeague,
-        hazardWarning:
-          volcanicRaceActive && raceState.phase === 'racing'
-            ? selectVolcanicHazardWarning(volcanicFrame)
-            : null,
-      })
+        hazardWarning,
+        transientNotice,
+      }
+      raceHud.update(raceHudView)
+      const measuredAvoidanceRects = raceHud.measureGateIndicatorAvoidanceRects(
+        gateIndicatorViewport,
+        [boostGauge.element, touchControls.element],
+      )
+      if (measuredAvoidanceRects !== gateIndicatorAvoidanceRects) {
+        gateIndicatorAvoidanceRects = measuredAvoidanceRects
+        const adjustedGateIndicator = createGateIndicator(
+          projectedGate.point,
+          projectedDiameterCss,
+          gateIndicatorViewport,
+          gateIndicatorAvoidanceRects,
+        )
+        if (!hasSameGateIndicatorState(gateIndicator, adjustedGateIndicator)) {
+          raceHud.update({
+            ...raceHudView,
+            gateIndicator: adjustedGateIndicator,
+          })
+        }
+      }
       if (explorationHud !== null) {
         const journey = currentFestivalJourney()
         explorationHud.update({
@@ -2618,34 +2882,42 @@ export function createRenderer(
           ),
           },
           discoveryNotice,
+          adventureActive: adventureProgress.started && coinRunState.phase !== 'running',
+          adventureContext: adventureIntro || canInteractWithAdventure(),
         })
       }
-      host.dataset.inputDevice = inputController.activeDevice
-      host.dataset.gameMode = gameMode
-      boostGauge.element.dataset.mode = gameMode
-      boostGauge.update({
-        visible: isBoostGaugeVisible(
-          gameMode === 'race'
-            ? { mode: 'race', phase: raceState.phase }
-            : {
-                mode: 'explore',
-                movement: explorationState.movement,
-                paused: explorationPaused,
-                mapOpen,
-              },
-        ),
-        boostRemaining: flightState.boostRemaining,
+      const objective = getAdventureObjective(adventureProgress)
+      const currentAdventureContext = adventureContext()
+      const adventureCompetition = gameMode === 'race' || coinRunState.phase === 'running'
+      const senseActive = !adventureCompetition && !adventureIntro && !explorationPaused && !mapOpen && adventureSenseUntil > visualSimulationSeconds
+      const position = explorationState.flight.position
+      const bearing = Math.atan2(objective.position.x - position.x, -(objective.position.z - position.z)) - explorationState.flight.headingRadians
+      adventureHud.update({
+        visible: gameMode === 'explore', intro: adventureIntro,
+        paused: explorationPaused || mapOpen, competitionActive: adventureCompetition,
+        progress: adventureProgress, objective, distance: adventureDistance(),
+        bearingRadians: Math.atan2(Math.sin(bearing), Math.cos(bearing)),
+        canInteract: canInteractWithAdventure(),
+        canSense: canUseAdventureSense(adventureProgress, currentAdventureContext),
+        senseActive, notice: visualSimulationSeconds < adventureNoticeUntil ? adventureNotice : null,
         inputDevice: inputController.activeDevice,
-        isBoosting: flightState.isBoosting,
+        device: getAdventureDevice(adventureProgress), deviceOpen: adventureDeviceOpen,
       })
-      touchControls.update(
-        gameMode === 'explore'
-          ? explorationSimulationActive
-            ? 'racing'
-            : 'paused'
-          : raceState.phase,
-        gameMode,
-      )
+      adventureWorld.update(adventureProgress, {
+        visible: gameMode === 'explore', characterVisible: true,
+        simulationSeconds: visualSimulationSeconds, position: flightState.position,
+        headingRadians: flightState.headingRadians, pitchRadians: flightState.pitchRadians,
+        bankRadians: flightState.bankRadians, objective, senseActive, competitionActive: adventureCompetition,
+      })
+      host.dataset.adventureIntro = String(gameMode === 'explore' && adventureIntro)
+      host.dataset.adventureDeviceOpen = String(gameMode === 'explore' && adventureDeviceOpen)
+      if (gameMode === 'explore' && adventureIntro) {
+        const portrait = host.clientHeight > host.clientWidth
+        const home = ADVENTURE_HOME.position
+        camera.position.set(home.x + (portrait ? 58 : 42), home.y + (portrait ? 52 : 26), home.z + (portrait ? 98 : 54))
+        camera.lookAt(home.x - 8, home.y + (portrait ? -8 : 7), home.z - 3)
+        camera.updateMatrixWorld()
+      }
       geometryLedger?.track(scene, hostFrames)
       renderer.render(scene, camera)
     })
@@ -2806,6 +3078,15 @@ export function createRenderer(
                 shadowRadius: cameraSnapshot.world.shadowRadius,
               },
               exploration: {
+                adventure: {
+                  progress: cloneAdventureProgress(adventureProgress),
+                  objective: getAdventureObjective(adventureProgress),
+                  canInteract: canInteractWithAdventure(),
+                  canSense: canUseAdventureSense(adventureProgress, adventureContext()),
+                  senseActive: gameMode === 'explore' && coinRunState.phase !== 'running' && !explorationPaused && !mapOpen && adventureSenseUntil > visualSimulationSeconds,
+                  intro: adventureIntro, world: adventureWorld.debugSnapshot(),
+                  deviceOpen: adventureDeviceOpen, device: getAdventureDevice(adventureProgress),
+                },
                 movement: explorationState.movement,
                 landingPadId: explorationState.landingPadId,
                 discoveredRegionIds: [...discoveredRegionIds],
@@ -3093,6 +3374,8 @@ export function createRenderer(
         storyPrologue.dispose()
         raceHud.dispose()
         explorationHud?.dispose()
+        adventureHud.dispose()
+        adventureWorld.dispose()
         boostGauge.dispose()
         document.removeEventListener(
           'visibilitychange',
@@ -3116,6 +3399,8 @@ export function createRenderer(
         canvas.remove()
         delete host.dataset.inputDevice
         delete host.dataset.gameMode
+        delete host.dataset.adventureIntro
+        delete host.dataset.adventureDeviceOpen
       },
     }
   } catch (error) {
@@ -3130,6 +3415,8 @@ export function createRenderer(
     pendingCharacterWorkshop?.dispose()
     pendingStoryPrologue?.dispose()
     pendingExplorationHud?.dispose()
+    pendingAdventureHud?.dispose()
+    pendingAdventureWorld?.dispose()
     pendingBoostGauge?.dispose()
     pendingOpenWorld?.dispose()
     pendingOpenWorldActivities?.dispose()

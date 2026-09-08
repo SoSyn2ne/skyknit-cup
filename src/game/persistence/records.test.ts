@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest'
 
 import { deriveUnlockedMissionIds } from '../missions/missionRules'
 import { DEFAULT_CHARACTER_LOADOUT } from '../customization/characterCatalog'
+import {
+  EMPTY_ADVENTURE_PROGRESS,
+  getAdventureObjective,
+  rotateAdventureDevice,
+  interactAdventure,
+  isCanonicalAdventureProgress,
+  normalizeAdventureProgress,
+  setAdventureCharm,
+  setAdventureDecoration,
+  startAdventure,
+  useAdventureSense,
+} from '../adventure/adventureState'
+import { getWindPuzzle } from '../adventure/windPuzzle'
 
 import {
   DEFAULT_SETTINGS,
@@ -20,6 +33,7 @@ class MemoryStorage {
   readonly values = new Map<string, string>()
   throwOnRead = false
   throwOnWrite = false
+  writeCount = 0
 
   getItem(key: string): string | null {
     if (this.throwOnRead) {
@@ -35,6 +49,7 @@ class MemoryStorage {
     }
 
     this.values.set(key, value)
+    this.writeCount += 1
   }
 }
 
@@ -95,7 +110,7 @@ describe('versioned game settings', () => {
     )
   })
 
-  it('round-trips a selected guardian with all existing settings in version 11', () => {
+  it('migrates every complete v11 field to v12 and keeps them on subsequent read and save', () => {
     const storage = new MemoryStorage()
     const settings = {
       bestTimeMs: 123_456,
@@ -109,52 +124,223 @@ describe('versioned game settings', () => {
       },
       missionGrades: {
         'first-skyknot': 'gold' as const,
+        'boost-mastery': 'silver' as const,
         'clean-flight': 'bronze' as const,
+        'heart-of-sun': 'gold' as const,
       },
       coinBestTimesMs: {
         'festival-hub': 18_250,
         'wind-canyon': 24_800,
+        'volcanic-archipelago': 19_400,
       },
       skyLeague: {
         raceTop10Ms: [123_456, 130_000],
         coinTop10Ms: {
           'festival-hub': [18_250, 20_000],
           'wind-canyon': [24_800],
+          'volcanic-archipelago': [19_400, 21_000],
         },
         missionTop10: {
           'first-skyknot': [
             { elapsedMs: 123_456, grade: 'gold' as const },
           ],
+          'boost-mastery': [
+            { elapsedMs: 126_000, grade: 'silver' as const },
+          ],
+          'heart-of-sun': [
+            { elapsedMs: 44_500, grade: 'gold' as const },
+          ],
         },
       },
       ghosts: {
         race: RACE_GHOST,
-        coin: { 'festival-hub': COIN_GHOST },
-        mission: { 'first-skyknot': MISSION_GHOST },
+        coin: {
+          'festival-hub': COIN_GHOST,
+          'volcanic-archipelago': COIN_GHOST,
+        },
+        mission: {
+          'first-skyknot': MISSION_GHOST,
+          'boost-mastery': MISSION_GHOST,
+          'heart-of-sun': MISSION_GHOST,
+        },
       },
       exploration: {
-        position: { x: 430, y: 31, z: 190 },
+        position: { x: -240, y: 40, z: -820 },
         headingRadians: 1.25,
         movement: 'airborne' as const,
-        discoveredRegionIds: ['festival-hub', 'cloud-ruins'] as const,
-        destinationRegionId: 'cloud-ruins' as const,
+        discoveredRegionIds: [
+          'festival-hub', 'cloud-ruins', 'volcanic-archipelago',
+        ] as const,
+        destinationRegionId: 'volcanic-archipelago' as const,
         discoveredLandmarkIds: [
           'dawnwing-airfield',
           'whispering-grotto',
+          'sunheart-caldera',
         ] as const,
-        traversedWindZoneIds: ['harbor-lift'] as const,
+        traversedWindZoneIds: ['harbor-lift', 'caldera-column'] as const,
       },
     }
 
-    expect(saveSettings(storage, settings)).toBe(true)
+    storage.values.set(SETTINGS_KEY, JSON.stringify({ version: 11, ...settings }))
+    const migrated = readSettings(storage)
+    expect(migrated).toHaveProperty('adventure')
+    expect(migrated).toEqual({ ...settings, adventure: DEFAULT_SETTINGS.adventure })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 11,
+      version: 12,
       ...settings,
+      adventure: DEFAULT_SETTINGS.adventure,
     })
+    expect(readSettings(storage)).toEqual(migrated)
+    expect(saveSettings(storage, migrated)).toBe(true)
+    expect(readSettings(storage)).toEqual(migrated)
+  })
+
+  it('saves callers without an adventure field as a canonical v12 document', () => {
+    const storage = new MemoryStorage()
+    const { adventure: _adventure, ...legacyCaller } = DEFAULT_SETTINGS
+
+    expect(saveSettings(storage, legacyCaller)).toBe(true)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
+      version: 12,
+      ...DEFAULT_SETTINGS,
+    })
+    expect(readSettings(storage)).toHaveProperty('adventure')
+  })
+
+  it('rejects unsupported future v13 without overwriting its data', () => {
+    const storage = new MemoryStorage()
+    const futureRaw = JSON.stringify({ version: 13, ...DEFAULT_SETTINGS, muted: true })
+    storage.values.set(SETTINGS_KEY, futureRaw)
+
+    expect(readSettings(storage)).toEqual(DEFAULT_SETTINGS)
+    expect(storage.values.get(SETTINGS_KEY)).toBe(futureRaw)
+  })
+
+  it('round-trips completed adventure rewards and consumed materials without duplicate claims', () => {
+    const storage = new MemoryStorage()
+    let adventure = startAdventure(EMPTY_ADVENTURE_PROGRESS)
+    for (let step = 0; step < 24 && adventure.stage !== 'complete'; step += 1) {
+      const context = {
+        position: getAdventureObjective(adventure).position,
+        gameMode: 'explore' as const,
+        coinRunActive: false,
+        paused: false,
+        mapOpen: false,
+      }
+      if (adventure.stage === 'route-flight') {
+        const puzzle = getWindPuzzle(getAdventureObjective(adventure).id)!
+        for (let i = 0; i < puzzle.pieces.length; i++) {
+          for (let n = 0; n < (4 - puzzle.initialRotations[i]) % 4; n++) adventure = rotateAdventureDevice(adventure, context, i)
+        }
+      }
+      adventure = adventure.stage === 'search-ruins' && !adventure.ruinsRevealed
+        ? useAdventureSense(adventure, context)
+        : interactAdventure(adventure, context, 'ridge')
+    }
+    adventure = interactAdventure(adventure, { position: getAdventureObjective(adventure).position, gameMode: 'explore', coinRunActive: false, paused: false, mapOpen: false })
+    adventure = setAdventureCharm(adventure, true)
+    adventure = setAdventureDecoration(adventure, 'lanterns', true)
+    adventure = setAdventureDecoration(adventure, 'pennants', true)
+    expect(adventure).toMatchObject({
+      stage: 'complete',
+      claimedRewardIds: ['rescue-bird', 'wind-route', 'restore-nest'],
+      bondXp: 4,
+      materials: { windCore: 0, sunThread: 0 },
+      windmillRepaired: true,
+      equippedCharm: true,
+      placedDecorations: ['lanterns', 'pennants'],
+    })
+
+    const settings = { ...DEFAULT_SETTINGS, adventure }
+    expect(saveSettings(storage, settings)).toBe(true)
+    const reloaded = readSettings(storage)
+    expect(reloaded).toEqual(settings)
+    expect(storage.writeCount).toBe(1)
+    expect(isCanonicalAdventureProgress(reloaded.adventure)).toBe(true)
+    const context = {
+      position: getAdventureObjective(adventure).position,
+      gameMode: 'explore' as const, coinRunActive: false, paused: false, mapOpen: false,
+    }
+    expect(interactAdventure(reloaded.adventure!, context)).toBe(reloaded.adventure)
+    expect(saveSettings(storage, reloaded)).toBe(true)
     expect(readSettings(storage)).toEqual(settings)
   })
 
-  it('migrates a complete version 10 document to version 11 without inventing volcanic progress', () => {
+  it('does not import forward-filled adventure progress from v11', () => {
+    const storage = new MemoryStorage()
+    storage.values.set(SETTINGS_KEY, JSON.stringify({
+      version: 11,
+      ...DEFAULT_SETTINGS,
+      adventure: normalizeAdventureProgress({
+        started: true,
+        visitedPointIds: ['keeper', 'rescue', 'bird-return'],
+      }),
+    }))
+
+    expect(readSettings(storage).adventure).toEqual(EMPTY_ADVENTURE_PROGRESS)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').adventure).toEqual(EMPTY_ADVENTURE_PROGRESS)
+  })
+
+  it('repairs malformed v12 adventure without allowing forged rewards or damaging old settings', () => {
+    const storage = new MemoryStorage()
+    storage.values.set(SETTINGS_KEY, JSON.stringify({
+      version: 12,
+      ...DEFAULT_SETTINGS,
+      muted: true,
+      adventure: {
+        ...EMPTY_ADVENTURE_PROGRESS,
+        stage: 'complete', bondXp: 999,
+        materials: { windCore: 999, sunThread: -1 },
+        claimedRewardIds: ['restore-nest', 'restore-nest'],
+        windmillRepaired: true, equippedCharm: true,
+      },
+    }))
+
+    expect(readSettings(storage)).toEqual({
+      ...DEFAULT_SETTINGS, muted: true, adventure: EMPTY_ADVENTURE_PROGRESS,
+    })
+    expect(storage.writeCount).toBe(1)
+    expect(readSettings(storage).adventure).toEqual(EMPTY_ADVENTURE_PROGRESS)
+    expect(storage.writeCount).toBe(1)
+  })
+
+  it('rejects a forged adventure write and leaves the previous save intact', () => {
+    const storage = new MemoryStorage()
+    expect(saveSettings(storage, DEFAULT_SETTINGS)).toBe(true)
+    const previous = storage.values.get(SETTINGS_KEY)
+
+    expect(saveSettings(storage, {
+      ...DEFAULT_SETTINGS,
+      adventure: { ...EMPTY_ADVENTURE_PROGRESS, bondXp: 99 },
+    })).toBe(false)
+    expect(storage.values.get(SETTINGS_KEY)).toBe(previous)
+  })
+
+  it('writes only normalized adventure fields even for extra in-memory properties', () => {
+    const storage = new MemoryStorage()
+    expect(saveSettings(storage, {
+      ...DEFAULT_SETTINGS,
+      adventure: { ...EMPTY_ADVENTURE_PROGRESS, extraAttackPower: 999 } as never,
+    })).toBe(true)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').adventure).toEqual(EMPTY_ADVENTURE_PROGRESS)
+  })
+
+  it('removes unknown adventure keys from a stored v12 document exactly once', () => {
+    const storage = new MemoryStorage()
+    storage.values.set(SETTINGS_KEY, JSON.stringify({
+      version: 12,
+      ...DEFAULT_SETTINGS,
+      adventure: { ...EMPTY_ADVENTURE_PROGRESS, extraAttackPower: 999 },
+    }))
+
+    expect(readSettings(storage)).toEqual(DEFAULT_SETTINGS)
+    expect(storage.writeCount).toBe(1)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').adventure).toEqual(EMPTY_ADVENTURE_PROGRESS)
+    expect(readSettings(storage)).toEqual(DEFAULT_SETTINGS)
+    expect(storage.writeCount).toBe(1)
+  })
+
+  it('migrates a complete version 10 document to version 12 without inventing volcanic progress', () => {
     const storage = new MemoryStorage()
     const legacySettings = {
       version: 10,
@@ -222,9 +408,10 @@ describe('versioned game settings', () => {
     const { version: _legacyVersion, ...expectedSettings } = legacySettings
     const migrated = readSettings(storage)
 
-    expect(migrated).toEqual(expectedSettings)
+    expect(migrated).toEqual({ ...expectedSettings, adventure: DEFAULT_SETTINGS.adventure })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 11,
+      version: 12,
+      adventure: DEFAULT_SETTINGS.adventure,
       ...expectedSettings,
     })
     expect(migrated).not.toHaveProperty(
@@ -361,14 +548,15 @@ describe('versioned game settings', () => {
       },
     }
 
-    expect(migrated).toEqual(expected)
+    expect(migrated).toEqual({ ...expected, adventure: DEFAULT_SETTINGS.adventure })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 11,
+      version: 12,
+      adventure: DEFAULT_SETTINGS.adventure,
       ...expected,
     })
   })
 
-  it('round-trips volcanic region and Heart of the Sun mission records in version 11', () => {
+  it('round-trips volcanic region and Heart of the Sun mission records in version 12', () => {
     const storage = new MemoryStorage()
     const settings = {
       ...DEFAULT_SETTINGS,
@@ -407,7 +595,8 @@ describe('versioned game settings', () => {
 
     expect(saveSettings(storage, settings as never)).toBe(true)
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 11,
+      version: 12,
+      adventure: DEFAULT_SETTINGS.adventure,
       ...settings,
     })
     expect(readSettings(storage)).toEqual(settings)
@@ -515,7 +704,7 @@ describe('versioned game settings', () => {
       expect(migrated.ghosts).toEqual(legacySettings.ghosts)
       expect(migrated.exploration).toEqual(legacySettings.exploration)
       expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-        version: 11,
+        version: 12,
         characterLoadout: {
           characterId: expectedCharacterId,
           paletteId: 'moonlight',
@@ -577,10 +766,12 @@ describe('versioned game settings', () => {
 
     expect(readSettings(storage)).toEqual({
       ...legacySettings,
+      adventure: DEFAULT_SETTINGS.adventure,
       characterLoadout: DEFAULT_CHARACTER_LOADOUT,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 11,
+      version: 12,
+      adventure: DEFAULT_SETTINGS.adventure,
       ...legacySettings,
       characterLoadout: DEFAULT_CHARACTER_LOADOUT,
     })
@@ -612,6 +803,7 @@ describe('versioned game settings', () => {
 
     expect(readSettings(storage)).toEqual({
       bestTimeMs: 123_000,
+      adventure: DEFAULT_SETTINGS.adventure,
       muted: true,
       musicVolume: 0.55,
       quality: 'high',
@@ -635,7 +827,7 @@ describe('versioned game settings', () => {
       },
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 11,
+      version: 12,
       characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       bestTimeMs: 123_000,
       musicVolume: 0.55,
@@ -707,7 +899,7 @@ describe('versioned game settings', () => {
       ],
       traversedWindZoneIds: ['harbor-lift'],
     })
-    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(11)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(12)
   })
 
   it('migrates version 5 without losing progress and defaults BGM volume', () => {
@@ -739,6 +931,7 @@ describe('versioned game settings', () => {
 
     expect(readSettings(storage)).toEqual({
       bestTimeMs: 42_500,
+      adventure: DEFAULT_SETTINGS.adventure,
       muted: true,
       musicVolume: 0.35,
       quality: 'high',
@@ -754,7 +947,7 @@ describe('versioned game settings', () => {
       exploration: migratedExploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 11,
+      version: 12,
       characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       bestTimeMs: 42_500,
       muted: true,
@@ -801,6 +994,7 @@ describe('versioned game settings', () => {
 
     expect(readSettings(storage)).toEqual({
       bestTimeMs: 51_234,
+      adventure: DEFAULT_SETTINGS.adventure,
       muted: false,
       musicVolume: 0.35,
       quality: 'auto',
@@ -816,7 +1010,8 @@ describe('versioned game settings', () => {
       exploration: DEFAULT_SETTINGS.exploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 11,
+      version: 12,
+      adventure: DEFAULT_SETTINGS.adventure,
       bestTimeMs: 51_234,
       muted: false,
       musicVolume: 0.35,
@@ -852,6 +1047,7 @@ describe('versioned game settings', () => {
 
     expect(readSettings(storage)).toEqual({
       bestTimeMs: 42_000,
+      adventure: DEFAULT_SETTINGS.adventure,
       muted: true,
       musicVolume: 0.35,
       quality: 'high',
@@ -867,7 +1063,8 @@ describe('versioned game settings', () => {
       exploration: DEFAULT_SETTINGS.exploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toEqual({
-      version: 11,
+      version: 12,
+      adventure: DEFAULT_SETTINGS.adventure,
       bestTimeMs: 42_000,
       muted: true,
       musicVolume: 0.35,
@@ -890,7 +1087,7 @@ describe('versioned game settings', () => {
     storage.values.set(SETTINGS_KEY, JSON.stringify({ version: 3 }))
 
     expect(readSettings(storage)).toEqual(DEFAULT_SETTINGS)
-    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(11)
+    expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '').version).toBe(12)
   })
 
   it('migrates version 4 exploration and fills empty coin records', () => {
@@ -917,7 +1114,7 @@ describe('versioned game settings', () => {
       exploration: migratedExploration,
     })
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 11,
+      version: 12,
       characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       coinBestTimesMs: {},
       exploration: migratedExploration,
@@ -1021,7 +1218,6 @@ describe('versioned game settings', () => {
     })
     expect(deriveUnlockedMissionIds(settings.missionGrades)).toEqual([
       'first-skyknot',
-      'boost-mastery',
       'no-respawn',
       'time-trial',
       'clean-flight',
@@ -1035,7 +1231,7 @@ describe('versioned game settings', () => {
       600_000,
     )
     expect(JSON.parse(storage.values.get(SETTINGS_KEY) ?? '')).toMatchObject({
-      version: 11,
+      version: 12,
       characterLoadout: DEFAULT_CHARACTER_LOADOUT,
       bestTimeMs: 1,
       coinBestTimesMs: { 'festival-hub': 10 },
@@ -1092,13 +1288,18 @@ describe('versioned game settings', () => {
     expect(first.ghosts).not.toBe(second.ghosts)
     expect(first.ghosts.coin).not.toBe(second.ghosts.coin)
     expect(first.ghosts.mission).not.toBe(second.ghosts.mission)
+    expect(first.adventure).not.toBe(second.adventure)
+    expect(first.adventure?.materials).not.toBe(second.adventure?.materials)
+    expect(first.adventure?.visitedPointIds).not.toBe(second.adventure?.visitedPointIds)
+    expect(first.adventure?.claimedRewardIds).not.toBe(second.adventure?.claimedRewardIds)
+    expect(first.adventure?.placedDecorations).not.toBe(second.adventure?.placedDecorations)
   })
 
   it.each([
     'not json',
     '{}',
     '{"version":1,"bestTimeMs":50000}',
-    '{"version":12,"bestTimeMs":50000,"characterLoadout":{"characterId":"storm-white-tiger","paletteId":"moonlight","accessoryId":"festival-ribbon"}}',
+    '{"version":13,"bestTimeMs":50000,"characterLoadout":{"characterId":"storm-white-tiger","paletteId":"moonlight","accessoryId":"festival-ribbon"}}',
     '{"version":3,"bestTimeMs":0,"muted":"yes","quality":"ultra"}',
   ])('uses safe values for a damaged or unsupported document: %s', (value) => {
     const storage = new MemoryStorage()

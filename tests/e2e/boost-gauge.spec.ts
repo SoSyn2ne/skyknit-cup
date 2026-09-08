@@ -31,7 +31,7 @@ test('shows live Space or touch boost energy without covering controls', async (
   page,
 }, testInfo) => {
   const touch = testInfo.project.name.startsWith('touch')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -138,7 +138,7 @@ test('keeps the gauge connected in exploration and hides it behind the map', asy
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',

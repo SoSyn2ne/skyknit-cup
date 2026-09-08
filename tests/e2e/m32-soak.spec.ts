@@ -32,7 +32,6 @@ const WIND_ZONE_IDS = [
 
 const MISSION_IDS = [
   'first-skyknot',
-  'boost-mastery',
   'no-respawn',
   'time-trial',
   'clean-flight',
@@ -205,7 +204,7 @@ async function finishSelectedMission(page: Page): Promise<void> {
     })
     .toBe('racing')
 
-  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 6; checkpoint += 1) {
     await page.evaluate(() =>
       window.__DRAGON_RACE_TEST__?.qaPassCheckpoint(),
     )
@@ -226,7 +225,7 @@ async function warmRaceRenderer(page: Page): Promise<void> {
       timeout: 5_000,
     })
     .toBe('racing')
-  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 6; checkpoint += 1) {
     await page.evaluate(() =>
       window.__DRAGON_RACE_TEST__?.qaPassCheckpoint(),
     )
@@ -314,7 +313,7 @@ test('keeps the Festival Hub replay loop stable during an opt-in soak', async ({
 
   try {
     await unlockAllMissions(page)
-    await page.goto('/?qaCourse=1')
+    await page.goto('/?mode=race&qaCourse=1')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',

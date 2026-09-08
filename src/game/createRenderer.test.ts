@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   isExplorationVolcanicHazardRegionActive,
+  selectRaceHudTransientNotice,
   sampleExplorationVolcanicHazardStep,
   stepExplorationVolcanicHazardClock,
 } from './createRenderer'
@@ -156,5 +157,20 @@ describe('exploration volcanic hazard runtime seam', () => {
     expect(first.frame.elapsedMs).toBeCloseTo(ROCKFALL_TELEGRAPH_MS)
     expect(first.collision.hit?.eventKey).toBe(obstacle.eventKey)
     expect(repeated.collision.hit).toBeNull()
+  })
+})
+
+describe('race HUD transient notice selection', () => {
+  it('prioritizes respawn over collision and off-course recovery', () => {
+    expect(selectRaceHudTransientNotice(0.9, 0.85, 1.2)).toEqual({
+      kind: 'respawn',
+    })
+    expect(selectRaceHudTransientNotice(0.9, 0, 1.2)).toEqual({
+      kind: 'collision',
+    })
+    expect(selectRaceHudTransientNotice(0.9, 0, 0)).toEqual({
+      kind: 'off-course',
+    })
+    expect(selectRaceHudTransientNotice(0, 0, 0)).toBeNull()
   })
 })

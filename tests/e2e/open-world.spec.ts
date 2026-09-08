@@ -62,7 +62,7 @@ test('opens exploration and streams all four regions inside every required viewp
   })
   page.on('pageerror', (error) => errors.push(error.message))
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await expect(page.locator('#app')).toHaveAttribute('data-game-mode', 'explore')
   await expect(page.locator('[data-explore-region]')).toBeVisible()
@@ -114,7 +114,7 @@ test('opens exploration and streams all four regions inside every required viewp
 
 test('lands, takes off, and enters the existing race challenge', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'desktop interaction contract')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.evaluate(() => window.__DRAGON_RACE_TEST__?.qaExploreRegion('festival-hub'))
 
   const context = page.locator('[data-explore-context]')
@@ -154,7 +154,7 @@ test('starts the four-stage volcanic challenge without overwriting the legacy ra
       }),
     )
   })
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page.evaluate(() =>
     window.__DRAGON_RACE_TEST__?.qaExploreVolcanicChallenge(),
   )
@@ -212,7 +212,7 @@ test('starts the four-stage volcanic challenge without overwriting the legacy ra
     JSON.parse(localStorage.getItem('skyknit-cup:settings') ?? '{}'),
   )
   expect(stored).toMatchObject({
-    version: 11,
+    version: 12,
     bestTimeMs: null,
     skyLeague: {
       raceTop10Ms: [],
@@ -238,7 +238,7 @@ test('streams region art again after returning to missions and re-entering explo
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single lifecycle contract')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await expect
     .poll(() =>
@@ -280,7 +280,7 @@ test('streams region art again after an exploration race round trip', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single lifecycle contract')
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await page.evaluate(() => window.__DRAGON_RACE_TEST__?.qaExploreChallenge())
   await expect(page.locator('#app')).toHaveAttribute('data-game-mode', 'explore')
   await expect(page.locator('[data-explore-context]')).toHaveText(
@@ -294,7 +294,7 @@ test('streams region art again after an exploration race round trip', async ({
       { timeout: 5_000 },
     )
     .toBe('racing')
-  for (let checkpoint = 0; checkpoint < 8; checkpoint += 1) {
+  for (let checkpoint = 0; checkpoint < 6; checkpoint += 1) {
     await page.evaluate(() => window.__DRAGON_RACE_TEST__?.qaPassCheckpoint())
   }
   await expect
@@ -331,7 +331,7 @@ test('keeps renderer memory stable across quality changes and exploration re-ent
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single resource lifecycle contract')
-  await page.goto('/')
+  await page.goto('/?mode=race')
 
   const loadFestivalAt = async (quality: 'low' | 'high') => {
     if (
@@ -380,7 +380,7 @@ test('keeps renderer memory stable across quality changes and exploration re-ent
 
 test('persists a selected destination across reload', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single persistence contract')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await page.getByRole('button', { name: '군도 지도 열기' }).click()
   await page.getByRole('button', { name: '바람 협곡' }).click()
@@ -401,7 +401,7 @@ test('persists a selected destination across reload', async ({ page }, testInfo)
 
 test('shows touch brake and context controls at usable sizes', async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.startsWith('touch'), 'touch viewport contract')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.evaluate(() => window.__DRAGON_RACE_TEST__?.qaExploreRegion('cloud-ruins'))
 
   for (const control of [
@@ -445,7 +445,7 @@ test('recovers exploration location and discoveries after context loss', async (
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single recovery contract')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.evaluate(() => window.__DRAGON_RACE_TEST__?.qaExploreRegion('wind-canyon'))
   const before = await page.evaluate(() => window.__DRAGON_RACE_TEST__?.snapshot())
   expect(before?.exploration.discoveredRegionIds).toContain('wind-canyon')

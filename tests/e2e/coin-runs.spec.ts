@@ -17,7 +17,7 @@ test('collects the current coin through real flight in every required viewport',
   })
   page.on('pageerror', (error) => errors.push(error.message))
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await expect
     .poll(
@@ -78,7 +78,7 @@ test('freezes the run under the map and persists all four regional bests', async
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single persistence contract')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.evaluate(() =>
     window.__DRAGON_RACE_TEST__?.qaExploreRegion('festival-hub'),
   )
@@ -122,7 +122,7 @@ test('freezes the run under the map and persists all four regional bests', async
     return raw === null ? null : JSON.parse(raw)
   })
   expect(saved).toMatchObject({
-    version: 11,
+    version: 12,
     coinBestTimesMs: {
       'festival-hub': expect.any(Number),
       'wind-canyon': expect.any(Number),
@@ -178,7 +178,7 @@ test('hides course coins whenever exploration collection is disabled', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'single interaction contract')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.evaluate(() =>
     window.__DRAGON_RACE_TEST__?.qaExploreRegion('festival-hub'),
   )

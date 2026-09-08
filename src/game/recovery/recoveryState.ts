@@ -6,6 +6,7 @@ import {
 import { cloneMissionSession } from '../missions/missionState'
 import { cloneSkyLeagueRecords } from '../competition/skyLeagueRecords'
 import { cloneSkyLeagueGhosts } from '../persistence/records'
+import { cloneAdventureProgress } from '../adventure/adventureState'
 
 function cloneVector(vector: RaceVector): RaceVector {
   return { x: vector.x, y: vector.y, z: vector.z }
@@ -33,6 +34,9 @@ export function prepareRaceForRecovery(state: RaceState): RaceState {
       coinBestTimesMs: { ...paused.persistent.coinBestTimesMs },
       skyLeague: cloneSkyLeagueRecords(paused.persistent.skyLeague),
       ghosts: cloneSkyLeagueGhosts(paused.persistent.ghosts),
+      ...(paused.persistent.adventure === undefined
+        ? {}
+        : { adventure: cloneAdventureProgress(paused.persistent.adventure) }),
     },
     config: {
       ...paused.config,
