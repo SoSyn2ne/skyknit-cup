@@ -148,6 +148,14 @@ export function formatLeaguePlacement(
     .join(' · ')
 }
 
+export function getRaceOnboardingSteps(
+  inputDevice: InputDevice,
+): readonly string[] {
+  return inputDevice === 'touch'
+    ? ['왼쪽 스틱 방향', '오른쪽 돌풍', 'Ⅱ 일시정지']
+    : ['W/S 고도', 'A/D 회전', 'Space 돌풍', 'Esc 일시정지']
+}
+
 export function updateCachedDom(
   previousSignature: string | null,
   nextSignature: string | null,
@@ -292,6 +300,10 @@ export function createRaceHud(
   heading.append(title, storyPrologue)
   const detail = document.createElement('p')
   detail.className = 'race-hud__detail'
+  const onboarding = document.createElement('div')
+  onboarding.className = 'race-hud__onboarding'
+  onboarding.dataset.raceOnboarding = 'true'
+  onboarding.setAttribute('aria-label', '기본 조작')
   const storyHook = document.createElement('p')
   storyHook.className = 'race-hud__story-hook'
   storyHook.textContent =
@@ -464,6 +476,7 @@ export function createRaceHud(
     eyebrow,
     heading,
     detail,
+    onboarding,
     storyHook,
     missionPicker,
     settings,
@@ -851,8 +864,15 @@ export function createRaceHud(
         title.textContent = '하늘매듭배'
         detail.textContent =
           view.inputDevice === 'touch'
-            ? '미션을 고르고 비행 시작을 누르세요.'
-            : '미션을 고른 뒤 Enter 또는 비행 키로 출발하세요.'
+            ? '미션을 고르고 비행 시작을 누르면 바로 날아갑니다.'
+            : '미션을 고른 뒤 Enter 또는 비행 키로 바로 날아갑니다.'
+        onboarding.replaceChildren(
+          ...getRaceOnboardingSteps(view.inputDevice).map((step) => {
+            const chip = document.createElement('span')
+            chip.textContent = step
+            return chip
+          }),
+        )
         clearResult()
         showOnly()
       } else if (view.phase === 'paused') {

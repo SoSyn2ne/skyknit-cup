@@ -10,6 +10,7 @@ import {
   formatMissionProgress,
   formatMusicVolumePercent,
   formatRaceTime,
+  getRaceOnboardingSteps,
   updateCachedDom,
   type RaceHudView,
 } from './RaceHud'
@@ -342,6 +343,87 @@ describe('audio setting formatting', () => {
     expect(formatMusicVolumePercent(0.35)).toBe('35%')
     expect(formatMusicVolumePercent(1.4)).toBe('100%')
     expect(formatMusicVolumePercent(Number.NaN)).toBe('35%')
+  })
+})
+
+describe('first flight onboarding', () => {
+  it('keeps keyboard and touch control hints compact and input-specific', () => {
+    expect(getRaceOnboardingSteps('keyboard')).toEqual([
+      'W/S 고도',
+      'A/D 회전',
+      'Space 돌풍',
+      'Esc 일시정지',
+    ])
+    expect(getRaceOnboardingSteps('touch')).toEqual([
+      '왼쪽 스틱 방향',
+      '오른쪽 돌풍',
+      'Ⅱ 일시정지',
+    ])
+  })
+
+  it('shows touch-ready basic controls before the first countdown', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    )
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: () => new TestElement(),
+      } as unknown as Document,
+    })
+
+    try {
+      const host = new TestElement()
+      const noop = (): void => {}
+      const hud = createRaceHud(host as unknown as HTMLElement, {
+        start: noop,
+        startExplore: noop,
+        selectMission: noop,
+        returnToMissionSelection: noop,
+        resume: noop,
+        restart: noop,
+        respawn: noop,
+        retry: noop,
+        nextMission: noop,
+        openCharacterWorkshop: noop,
+        openStoryPrologue: noop,
+        toggleMute: noop,
+        setMusicVolume: noop,
+        setQuality: noop,
+      })
+      const finished = createFinishedRaceHudView()
+      hud.update({
+        ...finished,
+        phase: 'ready',
+        inputDevice: 'touch',
+        finalElapsedMs: null,
+        mission: {
+          ...finished.mission,
+          status: 'idle',
+          result: null,
+        },
+      })
+
+      const onboarding = findByDataset(
+        hud.element as unknown as TestElement,
+        'raceOnboarding',
+        'true',
+      )
+
+      expect(onboarding.attributes.get('aria-label')).toBe('기본 조작')
+      expect(onboarding.children.map((child) => child.textContent)).toEqual([
+        '왼쪽 스틱 방향',
+        '오른쪽 돌풍',
+        'Ⅱ 일시정지',
+      ])
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, 'document')
+      } else {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      }
+    }
   })
 })
 
