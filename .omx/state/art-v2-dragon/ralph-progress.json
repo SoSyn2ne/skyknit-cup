@@ -1,0 +1,15 @@
+{
+  "iteration": 4,
+  "score": 90,
+  "threshold": 90,
+  "threshold_pass": true,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": ["Reference uses finer scale/wing textures and a more elaborate terminal tail plume; this preview uses texture-free geometry and a simple split fin.", "The muzzle and horns remain deliberately stylized rather than photoreal."],
+  "suggestions": ["Present this as an authored Blender first-set comparison, not exact reference equivalence.", "Verify the same GLB under preview lighting, motion and game-camera framing before any production replacement."],
+  "reasoning": "Actual full, face and wing renders now expose the long tail, four-leg anatomy, scalloped wing panels, expression and layered scales. Continuous cream belly and a closed head loft remove the distracting earlier end-cap/striped treatment; the approved stylized first-set target passes, with texture and production gaps explicit.",
+  "next_actions": ["Parent integrates independent preview QA and architect review.", "Keep production replacement and real-device performance as separate unverified work."],
+  "reference": "assets/source/art-v2/reference/skyknit-rebuild-target.png",
+  "evidence": ["artifacts/art-v2/dragon-full.png", "artifacts/art-v2/dragon-face.png", "artifacts/art-v2/dragon-wing.png", "artifacts/art-v2/dragon-report.json"],
+  "verification": {"triangles": 59520, "mesh_primitives": 16, "materials": 2, "degenerate_triangles": 0, "semantic_rigs_checked": 16, "finite_positions_and_normals": true, "production_integrated": false}
+}

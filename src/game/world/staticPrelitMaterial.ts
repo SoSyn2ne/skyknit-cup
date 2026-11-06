@@ -19,6 +19,9 @@ export function getStaticWorldLighting(scene: THREE.Scene): StaticWorldLighting 
 // multiplies both hemisphere and directional irradiance by RECIPROCAL_PI.
 // Only the evaluation frequency changes here: vertex lighting, then interpolation.
 const VERTEX_LIGHTING = /* glsl */`
+#include <tonemapping_pars_fragment>
+#include <colorspace_pars_fragment>
+uniform bool uStaticVertexOutput;
 uniform vec3 uStaticBaseColor;
 uniform vec3 uStaticEmission;
 uniform vec3 uStaticHemisphereDirection;
@@ -51,6 +54,13 @@ vec3 staticSurfaceColor = vColor.rgb * uStaticBaseColor;
   vStaticBackColor = staticSurfaceColor * staticDiffuse( -staticNormal ) + uStaticEmission;
 #endif
 vColor.rgb = staticSurfaceColor * staticDiffuse( staticNormal ) + uStaticEmission;
+// Approximation: interpolate display colors, not tone-mapped linear gradients.
+if ( uStaticVertexOutput ) {
+  #ifdef DOUBLE_SIDED
+    vStaticBackColor = sRGBTransferOETF( vec4( ACESFilmicToneMapping( vStaticBackColor ), 1.0 ) ).rgb;
+  #endif
+  vColor.rgb = sRGBTransferOETF( vec4( ACESFilmicToneMapping( vColor.rgb ), 1.0 ) ).rgb;
+}
 `
 
 const FRAGMENT_COLOR = /* glsl */`
@@ -86,6 +96,7 @@ export function createStaticPrelitMaterial(source: THREE.Material, lighting: Sta
   material.wireframeLinewidth = source.wireframeLinewidth
 
   const uniforms = {
+    uStaticVertexOutput: { value: false },
     uStaticBaseColor: { value: material.color },
     uStaticEmission: { value: source.emissive.clone().multiplyScalar(source.emissiveIntensity) },
     uStaticHemisphereDirection: { value: new THREE.Vector3() },
@@ -122,8 +133,24 @@ export function createStaticPrelitMaterial(source: THREE.Material, lighting: Sta
   updateLighting()
   // Renderer updates scene/light world matrices before this callback. Reuse the
   // same colors/vectors/uniform objects; no traversal or allocations per draw.
-  material.onBeforeRender = updateLighting
-  material.customProgramCacheKey = () => 'm46-static-prelit-v1'
+  let workingColorSpace = THREE.ColorManagement.workingColorSpace
+  material.onBeforeRender = renderer => {
+    updateLighting()
+    if (workingColorSpace !== THREE.ColorManagement.workingColorSpace) {
+      workingColorSpace = THREE.ColorManagement.workingColorSpace
+      material.needsUpdate = true
+    }
+    uniforms.uStaticVertexOutput.value = material.toneMapped
+      && renderer.toneMapping === THREE.ACESFilmicToneMapping
+      && renderer.outputColorSpace === THREE.SRGBColorSpace
+      && renderer.getRenderTarget?.() === null
+      && THREE.ColorManagement.enabled
+      && workingColorSpace === THREE.LinearSRGBColorSpace
+  }
+  // Both routes live in each shader, so an output/target switch cannot reuse a
+  // shader compiled with the wrong route. Three keys its tone/output variants;
+  // also key the working space used by its generated output conversion matrix.
+  material.customProgramCacheKey = () => `m46-static-prelit-v2-output-switch-${THREE.ColorManagement.workingColorSpace}`
   material.onBeforeCompile = shader => {
     const normalGuard = '#if defined ( USE_ENVMAP ) || defined ( USE_SKINNING )'
     if (!shader.vertexShader.includes(normalGuard)
@@ -132,14 +159,18 @@ export function createStaticPrelitMaterial(source: THREE.Material, lighting: Sta
       throw new Error('Static prelit material requires the Three meshbasic shader contract')
     }
     Object.assign(shader.uniforms, uniforms)
+    // WebGLRenderer uploads toneMappingExposure directly to the linked program
+    // (including vertex uniforms). Do not shadow that value in shader.uniforms.
     shader.vertexShader = shader.vertexShader
       .replace('#include <color_pars_vertex>', `#include <color_pars_vertex>\n${VERTEX_LIGHTING}`)
       .replace(normalGuard, '#if 1 // Static diffuse normals, including instance/skin transforms')
       .replace('#include <fog_vertex>', `#include <fog_vertex>\n${VERTEX_COLOR}`)
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\n#ifdef DOUBLE_SIDED\n varying vec3 vStaticBackColor;\n#endif')
+      .replace('#include <color_pars_fragment>', '#include <color_pars_fragment>\nuniform bool uStaticVertexOutput;\n#ifdef DOUBLE_SIDED\n varying vec3 vStaticBackColor;\n#endif')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vec3( 1.0 ), opacity );')
       .replace('#include <color_fragment>', FRAGMENT_COLOR)
+      .replace(/[ \t]*#include <tonemapping_fragment>\s*#include <colorspace_fragment>/,
+        'if ( !uStaticVertexOutput ) {\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}')
   }
   return material
 }

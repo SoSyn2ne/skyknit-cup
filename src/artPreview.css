@@ -1,0 +1,58 @@
+:root {
+  --sky-zenith: #3c8991;
+  --sky-haze: #b8e3de;
+  --cloud: #f4efe2;
+  --ink: #102a2e;
+  --active: #f2c14e;
+  --surface: #19393e;
+  --muted: #c3d2d0;
+  color: var(--cloud);
+  background: var(--sky-haze);
+  font-family: Inter, Pretendard, "Noto Sans KR", "Segoe UI", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+html, body, #preview { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { min-width: 320px; }
+button, select { font: inherit; }
+[hidden] { display: none !important; }
+#preview { position: relative; background: radial-gradient(ellipse at 20% 12%, var(--cloud), transparent 60%), linear-gradient(var(--sky-zenith), var(--sky-haze) 70%, var(--cloud)); }
+canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+:focus-visible { outline: 3px solid var(--active); outline-offset: 3px; }
+canvas:focus-visible { outline-offset: -5px; }
+.preview-header { position: absolute; top: max(16px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); left: max(16px, env(safe-area-inset-left)); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; pointer-events: none; }
+.preview-header h1 { font-size: 16px; line-height: 1.5; margin: 0; color: var(--ink); }
+.preview-header p { color: var(--ink); margin: 4px 0 0; font-size: 12px; }
+.preview-home { display: grid; place-items: center; min-width: 44px; height: 44px; border-radius: 6px; background: var(--surface); color: var(--cloud); text-decoration: none; font-size: 24px; pointer-events: auto; }
+.preview-state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: max-content; max-width: calc(100% - 32px); padding: 12px 16px; border-radius: 6px; text-align: center; background: var(--surface); }
+.preview-state p { margin: 0; max-width: 34ch; font-size: 14px; }
+.preview-state button { margin-top: 12px; padding: 0 16px; }
+.preview-footer { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); left: max(16px, env(safe-area-inset-left)); display: grid; justify-items: center; gap: 8px; pointer-events: none; }
+#preview-help { color: var(--ink); font-size: 12px; margin: 0; text-align: center; }
+.preview-toolbar { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; background: var(--surface); box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 10%, transparent); pointer-events: auto; }
+.preview-modes, .preview-actions { display: flex; align-items: center; gap: 4px; }
+button, select { min-width: 44px; min-height: 44px; border: 0; border-radius: 4px; color: var(--cloud); background: transparent; cursor: pointer; }
+button { padding: 0 12px; white-space: nowrap; }
+button:hover, select:hover { background: color-mix(in srgb, var(--cloud) 12%, transparent); }
+button[aria-pressed='true'] { color: var(--ink); background: var(--active); }
+select { color-scheme: dark; padding: 0 8px; max-width: 100%; border: 1px solid color-mix(in srgb, var(--muted) 32%, transparent); }
+.preview-actions button { padding: 0; font-size: 24px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+@media (max-width: 600px) {
+  .preview-header { top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); }
+  .preview-header h1 { font-size: 14px; }
+  .preview-footer { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); }
+  .preview-toolbar { width: 100%; max-width: 400px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; }
+  .preview-modes { grid-column: 1 / -1; }
+  .preview-modes button { flex: 1; }
+  .preview-version select { width: 100%; font-size: 13px; }
+  #preview-help { font-size: 10px; }
+}
+@media (max-height: 450px) and (min-width: 601px) {
+  .preview-header p, #preview-help { display: none; }
+  .preview-footer { bottom: max(8px, env(safe-area-inset-bottom)); }
+  .preview-toolbar { padding: 4px; }
+}

@@ -22,6 +22,10 @@ import {
   type GameAudio,
   type GameAudioDebugSnapshot,
 } from './audio/GameAudio'
+import {
+  createPostProcessing,
+  type PostProcessingPipeline,
+} from './postprocessing/createPostProcessing'
 import { GAME_TITLE } from './config'
 import { getCoinCourse } from './collectibles/coinCourses'
 import {
@@ -640,6 +644,7 @@ export function createRenderer(
   let pendingOpenWorldActivities: OpenWorldActivitiesVisual | null = null
   let pendingVolcanicActivities: VolcanicActivitiesVisual | null = null
   let pendingCoinCourseVisual: CoinCourseVisual | null = null
+  let pendingPostProcessing: PostProcessingPipeline | null = null
   let pendingGameAudio: GameAudio | null = null
   let pendingVisibilityChangeHandler: (() => void) | null = null
   const pendingQaControls: HTMLButtonElement[] = []
@@ -732,6 +737,15 @@ export function createRenderer(
       hardwareConcurrency: window.navigator.hardwareConcurrency,
     })
     renderer.shadowMap.enabled = renderQuality.shadows
+    const postProcessing = createPostProcessing(
+      renderer,
+      scene,
+      camera,
+      host.clientWidth || window.innerWidth || 1280,
+      host.clientHeight || window.innerHeight || 720,
+      renderQuality.tier,
+    )
+    pendingPostProcessing = postProcessing
     const sandbox = createFlightSandbox(
       scene,
       camera,
@@ -2089,6 +2103,8 @@ export function createRenderer(
       renderer.shadowMap.enabled = renderQuality.shadows
       renderer.setPixelRatio(renderQuality.pixelRatio)
       renderer.setSize(width, height, false)
+      postProcessing.setSize(width, height, renderQuality.pixelRatio)
+      postProcessing.setQuality(renderQuality.tier)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
     }
@@ -2919,7 +2935,7 @@ export function createRenderer(
         camera.updateMatrixWorld()
       }
       geometryLedger?.track(scene, hostFrames)
-      renderer.render(scene, camera)
+      postProcessing.render()
     })
 
     const placeQaExploration = (
@@ -3392,6 +3408,7 @@ export function createRenderer(
         openWorldActivities.dispose()
         volcanicActivities.dispose()
         coinCourseVisual.dispose()
+        postProcessing.dispose()
         resizeObserver.disconnect()
         canvas.removeEventListener('webglcontextlost', handleContextLost)
         disposeScene(scene)
@@ -3432,6 +3449,7 @@ export function createRenderer(
     for (const qaControl of pendingQaControls) {
       qaControl.remove()
     }
+    pendingPostProcessing?.dispose()
     pendingObserver?.disconnect()
 
     if (pendingContextLostHandler !== null) {

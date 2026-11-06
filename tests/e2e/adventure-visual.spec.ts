@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { DEFAULT_SETTINGS } from '../../src/game/persistence/records'
 import {
   EMPTY_ADVENTURE_PROGRESS, canUseAdventureSense, getAdventureObjective,
@@ -8,6 +8,22 @@ import {
 } from '../../src/game/adventure/adventureState'
 import { ADVENTURE_HOME, ADVENTURE_GARDEN_PAD } from '../../src/game/adventure/adventureWorld'
 import { getWindPuzzle } from '../../src/game/adventure/windPuzzle'
+
+async function sceneRange(page: Page) {
+  return page.evaluate(async () => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+    const gl = document.querySelector<HTMLCanvasElement>('canvas')?.getContext('webgl2')
+    if (!gl) return 0
+    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4)
+    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    let low = 255, high = 0
+    for (let offset = 0; offset < pixels.length; offset += 256) {
+      const luma = (pixels[offset] + pixels[offset + 1] + pixels[offset + 2]) / 3
+      low = Math.min(low, luma); high = Math.max(high, luma)
+    }
+    return high - low
+  })
+}
 
 // These are explicit visual fixtures, not real-input quest-completion evidence.
 function visualFixture(stage: AdventureStage) {
@@ -46,6 +62,62 @@ for (const stage of ['restore-nest', 'complete'] as const) {
     const second = (await world())!.windmillRotationRadians
     if (stage === 'complete') expect(second).not.toBe(first)
     else expect(second).toBe(first)
+    expect(errors).toEqual([])
+  })
+}
+
+test('M46 lighting fixture preserves restored rewards through high low high and race re-entry', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'One live quality and resource-lifecycle contract')
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
+  await page.addInitScript(settings => {
+    if (!localStorage.getItem('skyknit-cup:settings')) localStorage.setItem('skyknit-cup:settings', JSON.stringify(settings))
+  }, visualFixture('complete'))
+  const state = () => page.evaluate(() => window.__DRAGON_RACE_TEST__?.snapshot())
+  await page.goto('/')
+  await page.locator('[data-adventure-start]').click()
+  const visits = (await state())!.exploration.adventure.progress.visitedPointIds
+  const memory: number[] = []
+  for (const [index, quality] of ['high', 'low', 'high'].entries()) {
+    await page.getByRole('button', { name: '일시정지', exact: true }).click()
+    await page.getByRole('button', { name: '미션 선택으로', exact: true }).click()
+    await page.locator('.race-hud__quality select').selectOption(quality)
+    await page.getByRole('button', { name: '하늘 탐험', exact: true }).click()
+    await expect.poll(async () => (await state())?.exploration.regionAssets.find(asset => asset.id === 'festival-hub'))
+      .toMatchObject({ id: 'festival-hub', lod: quality, status: 'loaded' })
+    await expect.poll(async () => (await state())?.exploration.adventure.world).toMatchObject({
+      assetStatus: 'loaded', lanternsVisible: true, pennantsVisible: true, secretPathVisible: true, charmVisible: true,
+    })
+    expect((await state())!.exploration.adventure.progress.visitedPointIds).toEqual(visits)
+    expect(await sceneRange(page)).toBeGreaterThan(40)
+    memory.push((await state())!.render.geometries)
+    await page.screenshot({ path: `artifacts/browser-qa/m46-adventure/desktop-lighting-${index}-${quality}.png` })
+  }
+  expect(memory[2]).toBeLessThanOrEqual(memory[0])
+  expect(errors).toEqual([])
+})
+
+for (const side of ['front', 'back'] as const) {
+  test(`M46 lighting fixture shows the ${side} of the festival arch`, async ({ page }, info) => {
+    test.skip(!['desktop', 'touch-landscape'].includes(info.project.name), 'Two camera aspects; full entry matrix is separate')
+    const settings = visualFixture('complete')
+    const value = { ...settings, quality: 'high', exploration: { ...settings.exploration,
+      position: { x: 34, y: 28, z: side === 'front' ? -10 : -90 },
+      headingRadians: side === 'front' ? 0 : Math.PI, movement: 'airborne' } }
+    const errors: string[] = []
+    page.on('pageerror', e => errors.push(e.message))
+    page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
+    await page.addInitScript(settings => localStorage.setItem('skyknit-cup:settings', JSON.stringify(settings)), value)
+    await page.goto('/')
+    await page.locator('[data-adventure-start]').click()
+    await page.keyboard.down('KeyC')
+    await expect.poll(() => page.evaluate(() => window.__DRAGON_RACE_TEST__?.snapshot()?.exploration.regionAssets.find(asset => asset.id === 'festival-hub')))
+      .toMatchObject({ id: 'festival-hub', lod: 'high', status: 'loaded' })
+    await page.waitForTimeout(1100)
+    expect(await sceneRange(page)).toBeGreaterThan(40)
+    await page.screenshot({ path: `artifacts/browser-qa/m46-adventure/${info.project.name}-lighting-arch-${side}.png` })
+    await page.keyboard.up('KeyC')
     expect(errors).toEqual([])
   })
 }

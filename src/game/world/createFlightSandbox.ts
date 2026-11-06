@@ -336,9 +336,9 @@ function createGate(
   const ringMaterial = new THREE.MeshStandardMaterial({
     color: ringColor,
     emissive: ringColor,
-    emissiveIntensity: checkpoint.kind === 'gate' ? 0 : 0.18,
-    roughness: 0.34,
-    metalness: 0.18,
+    emissiveIntensity: checkpoint.kind === 'gate' ? 0.08 : 0.28,
+    roughness: 0.26,
+    metalness: 0.62,
   })
   const runeMaterial = new THREE.MeshStandardMaterial({
     color: runeColor,
@@ -348,13 +348,13 @@ function createGate(
     transparent: true,
   })
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(checkpoint.radius, 0.72, 12, 64),
+    new THREE.TorusGeometry(checkpoint.radius, 0.44, 12, 64),
     ringMaterial,
   )
   const haloMaterial = new THREE.MeshBasicMaterial({
     color: ringColor,
     transparent: true,
-    opacity: 0.12,
+    opacity: 0.08,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   })
@@ -766,6 +766,11 @@ export function createFlightSandbox(
       '1'
   const reducedMotion = (): boolean =>
     reducedMotionQuery.matches || forceReducedMotion
+
+  let cameraRoll = 0
+  let cameraRollVelocity = 0
+  const cameraViewDirection = new THREE.Vector3()
+  const cameraDynamicUp = new THREE.Vector3()
 
   camera.up.copy(WORLD_UP)
   camera.fov = CAMERA_DEFAULT_FOV
@@ -1234,10 +1239,31 @@ export function createFlightSandbox(
       cameraOffset.y,
       cameraOffset.z,
     )
+    if (fixedDt > 0 && !reducedMotion() && !useReadyFraming) {
+      // Bruno Simon style dynamic camera roll & banking (gives tangible G-force)
+      const targetRoll = -flight.bankRadians * 0.28
+      const rollPullStrength = 36.0
+      const rollDamping = 6.0
+      const force = (targetRoll - cameraRoll) * rollPullStrength
+      cameraRollVelocity += force * fixedDt
+      cameraRollVelocity *= Math.exp(-rollDamping * fixedDt)
+      cameraRoll += cameraRollVelocity * fixedDt
+    } else {
+      cameraRoll = 0
+      cameraRollVelocity = 0
+    }
+
     camera.position
       .copy(cameraPosition)
       .add(cameraShakeOffset.set(cameraOffset.x, cameraOffset.y, cameraOffset.z))
-    camera.up.copy(WORLD_UP)
+
+    if (Math.abs(cameraRoll) > 0.001) {
+      cameraViewDirection.subVectors(lookPosition, camera.position).normalize()
+      cameraDynamicUp.copy(WORLD_UP).applyAxisAngle(cameraViewDirection, cameraRoll)
+      camera.up.copy(cameraDynamicUp)
+    } else {
+      camera.up.copy(WORLD_UP)
+    }
     camera.lookAt(lookPosition)
 
     if (fixedDt > 0) {

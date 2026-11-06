@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#102a2e" />
+    <link rel="icon" href="data:," />
+    <title>아트 작업실 · 하늘매듭배</title>
+  </head>
+  <body>
+    <main id="preview">
+      <canvas tabindex="0" role="img" aria-label="드래곤과 부유섬 3D 미리보기" aria-describedby="preview-help"></canvas>
+      <header class="preview-header">
+        <div><h1>하늘매듭배 · 아트 작업실</h1><p>Blender 원본 · 게임 적용 전 비교</p></div>
+        <a class="preview-home" href="/" title="게임으로 돌아가기" aria-label="게임으로 돌아가기">↗</a>
+      </header>
+      <div class="preview-state" role="status" aria-live="polite">
+        <p id="preview-status">모델을 불러오는 중…</p>
+        <button id="preview-retry" type="button" hidden>다시 불러오기</button>
+      </div>
+      <footer class="preview-footer">
+        <p id="preview-help">드래그로 회전 · 휠/두 손가락으로 확대 · 방향키로 이동</p>
+        <div class="preview-toolbar" aria-label="3D 모델 보기 도구">
+          <div class="preview-modes" role="group" aria-label="보기 대상">
+            <button type="button" data-mode="scene" aria-pressed="true">함께</button>
+            <button type="button" data-mode="dragon" aria-pressed="false">드래곤</button>
+            <button type="button" data-mode="hub" aria-pressed="false">부유섬</button>
+          </div>
+          <label class="preview-version"><span class="sr-only">비교 버전</span>
+            <select aria-label="비교 버전"><option value="v2">새 모델 · V2</option><option value="current">현재 게임 모델</option></select>
+          </label>
+          <div class="preview-actions">
+            <button id="preview-motion" type="button" aria-label="동작 일시정지" title="동작 일시정지" aria-pressed="true">Ⅱ</button>
+            <button id="preview-wireframe" type="button" aria-label="와이어프레임" title="와이어프레임" aria-pressed="false">◇</button>
+            <button id="preview-reset" type="button" aria-label="시점 초기화" title="시점 초기화">↺</button>
+          </div>
+        </div>
+      </footer>
+    </main>
+    <script type="module" src="/src/artPreview.ts"></script>
+  </body>
+</html>

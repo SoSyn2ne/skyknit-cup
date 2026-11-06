@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 
 import { SKYKNOT_COURSE, START_ANCHOR } from './course'
 import { WORLD_ISLANDS } from './worldLayout'
@@ -33,6 +34,17 @@ const CLOUD_COUNT = 48
 const DECORATED_ISLAND_COUNT = 12
 const CLOUD_WISP_CAPACITY = 28
 const CLOUD_DECK_CAPACITY = 20
+
+
+function createColorAttr(count: number, r: number, g: number, b: number): THREE.BufferAttribute {
+  const arr = new Float32Array(count * 3)
+  for (let i = 0; i < count; i += 1) {
+    arr[i * 3] = r
+    arr[i * 3 + 1] = g
+    arr[i * 3 + 2] = b
+  }
+  return new THREE.BufferAttribute(arr, 3)
+}
 
 function createSkyDome(palette: WorldPalette): THREE.Mesh {
   const material = new THREE.ShaderMaterial({
@@ -93,19 +105,21 @@ function createSkyDome(palette: WorldPalette): THREE.Mesh {
 function createIslands(palette: WorldPalette): THREE.Group {
   const group = new THREE.Group()
   group.name = 'M3_FloatingArchipelago'
+
+  // Massive sculpted mesa citadel & stepped cliff terraces (breaks the tapered spinning-top silhouette)
   const rockGeometry = new THREE.LatheGeometry(
     [
-      new THREE.Vector2(0.12, -1),
-      new THREE.Vector2(0.24, -0.86),
-      new THREE.Vector2(0.39, -0.74),
-      new THREE.Vector2(0.35, -0.64),
-      new THREE.Vector2(0.67, -0.48),
-      new THREE.Vector2(0.62, -0.37),
-      new THREE.Vector2(0.9, -0.18),
-      new THREE.Vector2(1, -0.045),
-      new THREE.Vector2(0.95, 0),
+      new THREE.Vector2(0.55, -0.68), // wide grounded plateau base (sits naturally in the sea of clouds)
+      new THREE.Vector2(0.66, -0.54),
+      new THREE.Vector2(0.76, -0.42), // prominent lower cliff stratum
+      new THREE.Vector2(0.72, -0.32), // distinct cliff overhang ledge
+      new THREE.Vector2(0.88, -0.22),
+      new THREE.Vector2(0.96, -0.12), // expansive mid-level terrace
+      new THREE.Vector2(1.04, -0.04), // bold projecting rim cornice
+      new THREE.Vector2(1.01, -0.01),
+      new THREE.Vector2(0.96, 0.0),
     ],
-    22,
+    24,
   )
   const rockPositions = rockGeometry.getAttribute('position')
   const rockVertexColors = new Float32Array(rockPositions.count * 3)
@@ -114,16 +128,19 @@ function createIslands(palette: WorldPalette): THREE.Group {
     const y = rockPositions.getY(index)
     const z = rockPositions.getZ(index)
     const angle = Math.atan2(z, x)
-    const normalizedHeight = y + 1
-    const irregularity =
-      1 +
-      Math.sin(angle * 3 + normalizedHeight * 3.4) * 0.095 +
-      Math.sin(angle * 7 - normalizedHeight * 1.3) * 0.035
-    const driftX = Math.sin(normalizedHeight * 8.3) * normalizedHeight * 0.035
-    const driftZ = Math.cos(normalizedHeight * 6.7) * normalizedHeight * 0.028
+    const normalizedHeight = (y + 0.68) / 0.68 // 0 at bottom, 1 at top
+    // Multi-frequency faceted chiseled low-poly cliff carving
+    const facetNoise =
+      Math.sin(angle * 4 + normalizedHeight * 2.8) * 0.12 +
+      Math.sin(angle * 7 - normalizedHeight * 3.5) * 0.05 +
+      Math.cos(angle * 3 + y * 7.0) * 0.07
+    const terrace = Math.sin(normalizedHeight * Math.PI * 3.5) * 0.04
+    const irregularity = 1 + facetNoise + terrace
+    const driftX = Math.sin(normalizedHeight * 5.0) * (1 - normalizedHeight) * 0.06
+    const driftZ = Math.cos(normalizedHeight * 4.5) * (1 - normalizedHeight) * 0.05
     const ridgeHeight =
-      (Math.sin(angle * 3 + y * 5.1) * 0.032 +
-        Math.sin(angle * 5 - y * 3.7) * 0.012) *
+      (Math.sin(angle * 3 + y * 4.2) * 0.032 +
+        Math.sin(angle * 6 - y * 3.0) * 0.015) *
       normalizedHeight
 
     rockPositions.setXYZ(
@@ -132,61 +149,195 @@ function createIslands(palette: WorldPalette): THREE.Group {
       y + ridgeHeight,
       z * irregularity + driftZ,
     )
-    const stratum = (Math.sin(y * 29 + Math.sin(angle * 3) * 0.7) + 1) * 0.5
-    const weathering = normalizedHeight * 0.13 + stratum * 0.16
-    rockVertexColors.set(
-      [0.64 + weathering, 0.76 + weathering * 0.72, 0.84 + weathering * 0.38],
-      index * 3,
-    )
+    // Bruno-style lighting & stratified sandstone: cool azure bedrock at bottom, warm sunlit peach/gold on upper rims
+    const stratum = (Math.sin(y * 24 + Math.sin(angle * 3) * 0.8) + 1) * 0.5
+    const heightFactor = Math.pow(Math.max(0, Math.min(1, normalizedHeight)), 0.72)
+    const r = Math.min(1, Math.max(0, 0.52 * heightFactor + stratum * 0.14 + 0.22))
+    const g = Math.min(1, Math.max(0, 0.62 * heightFactor + stratum * 0.10 + 0.24))
+    const b = Math.min(1, Math.max(0, 0.72 * heightFactor + stratum * 0.06 + 0.25))
+    rockVertexColors.set([r, g, b], index * 3)
   }
   rockGeometry.setAttribute('color', new THREE.BufferAttribute(rockVertexColors, 3))
   rockGeometry.computeVertexNormals()
   rockGeometry.computeBoundingSphere()
-  const topGeometry = new THREE.CylinderGeometry(0.78, 0.9, 0.32, 22, 2)
-  const topPositions = topGeometry.getAttribute('position')
-  const topVertexColors = new Float32Array(topPositions.count * 3)
-  for (let index = 0; index < topPositions.count; index += 1) {
-    const x = topPositions.getX(index)
-    const y = topPositions.getY(index)
-    const z = topPositions.getZ(index)
-    const radius = Math.hypot(x, z)
-    const meadow = (Math.sin(x * 4.8 + z * 3.2) + 1) * 0.5
-    const edge = Math.min(1, radius / 0.9)
-    topVertexColors.set(
-      [0.7 + meadow * 0.18, 0.91 - edge * 0.12, 0.67 + meadow * 0.12],
-      index * 3,
-    )
-    if (radius < 0.1) continue
-    const angle = Math.atan2(z, x)
-    const irregularity =
-      1 + Math.sin(angle * 3 + 0.4) * 0.06 + Math.sin(angle * 7) * 0.022
 
-    topPositions.setXYZ(index, x * irregularity, y, z * irregularity)
+  // Build composite top geometry: grass meadow + lush trees + cute bushes + rocks + stepping stones + satellite floating rocks
+  const topParts: THREE.BufferGeometry[] = []
+
+  // 1. Meadow Ground with gentle hill crown and vibrant edge
+  const groundGeom = new THREE.CylinderGeometry(0.82, 0.96, 0.46, 24, 2)
+  const gPos = groundGeom.getAttribute('position')
+  const gColors = new Float32Array(gPos.count * 3)
+  for (let i = 0; i < gPos.count; i += 1) {
+    const x = gPos.getX(i)
+    const y = gPos.getY(i)
+    const z = gPos.getZ(i)
+    const radius = Math.hypot(x, z)
+    const isTopSurface = y > 0.1
+    const meadow = (Math.sin(x * 4.5 + z * 3.2) + 1) * 0.5
+    const edge = Math.min(1, radius / 0.96)
+
+    gColors[i * 3] = Math.min(1, Math.max(0, 0.52 + meadow * 0.18 + edge * 0.12))
+    gColors[i * 3 + 1] = Math.min(1, Math.max(0, 0.85 - edge * 0.08 + meadow * 0.08))
+    gColors[i * 3 + 2] = Math.min(1, Math.max(0, 0.42 + meadow * 0.10))
+
+    if (radius >= 0.08) {
+      const angle = Math.atan2(z, x)
+      const irregularity = 1 + Math.sin(angle * 4 + 0.3) * 0.05 + Math.sin(angle * 8) * 0.02
+      const crown = isTopSurface ? (1.0 - Math.pow(edge, 2)) * 0.14 : 0
+      gPos.setXYZ(i, x * irregularity, y + crown, z * irregularity)
+    }
   }
-  topGeometry.setAttribute('color', new THREE.BufferAttribute(topVertexColors, 3))
+  groundGeom.setAttribute('color', new THREE.BufferAttribute(gColors, 3))
+  topParts.push(groundGeom)
+
+  // 2. Pine Tree Cluster A (Right rear) - scaled appropriately for island grandeur
+  const pine1Trunk = new THREE.CylinderGeometry(0.014, 0.026, 5.2, 6)
+  pine1Trunk.translate(0.42, 2.6, -0.35)
+  pine1Trunk.setAttribute('color', createColorAttr(pine1Trunk.getAttribute('position').count, 0.45, 0.28, 0.16))
+  topParts.push(pine1Trunk)
+
+  const pine1Foliage1 = new THREE.ConeGeometry(0.14, 4.4, 7)
+  pine1Foliage1.translate(0.42, 4.4, -0.35)
+  pine1Foliage1.setAttribute('color', createColorAttr(pine1Foliage1.getAttribute('position').count, 0.22, 0.60, 0.28))
+  topParts.push(pine1Foliage1)
+
+  const pine1Foliage2 = new THREE.ConeGeometry(0.10, 3.4, 7)
+  pine1Foliage2.translate(0.42, 6.2, -0.35)
+  pine1Foliage2.setAttribute('color', createColorAttr(pine1Foliage2.getAttribute('position').count, 0.28, 0.68, 0.32))
+  topParts.push(pine1Foliage2)
+
+  // Small Pine companion
+  const pine2Trunk = new THREE.CylinderGeometry(0.010, 0.018, 3.6, 6)
+  pine2Trunk.translate(0.54, 1.8, -0.25)
+  pine2Trunk.setAttribute('color', createColorAttr(pine2Trunk.getAttribute('position').count, 0.45, 0.28, 0.16))
+  topParts.push(pine2Trunk)
+
+  const pine2Foliage = new THREE.ConeGeometry(0.10, 3.2, 7)
+  pine2Foliage.translate(0.54, 3.4, -0.25)
+  pine2Foliage.setAttribute('color', createColorAttr(pine2Foliage.getAttribute('position').count, 0.24, 0.64, 0.30))
+  topParts.push(pine2Foliage)
+
+  // 3. Broadleaf Golden-Green Tree (Left front)
+  const broad1Trunk = new THREE.CylinderGeometry(0.018, 0.030, 4.6, 6)
+  broad1Trunk.translate(-0.46, 2.3, 0.30)
+  broad1Trunk.setAttribute('color', createColorAttr(broad1Trunk.getAttribute('position').count, 0.48, 0.30, 0.18))
+  topParts.push(broad1Trunk)
+
+  const canopy1 = new THREE.DodecahedronGeometry(0.12, 0)
+  canopy1.scale(1, 30, 1)
+  canopy1.translate(-0.46, 4.8, 0.30)
+  canopy1.setAttribute('color', createColorAttr(canopy1.getAttribute('position').count, 0.52, 0.78, 0.26))
+  topParts.push(canopy1)
+
+  const canopy2 = new THREE.DodecahedronGeometry(0.08, 0)
+  canopy2.scale(1, 24, 1)
+  canopy2.translate(-0.40, 5.4, 0.36)
+  canopy2.setAttribute('color', createColorAttr(canopy2.getAttribute('position').count, 0.58, 0.84, 0.28))
+  topParts.push(canopy2)
+
+  // 4. Cherry/Autumn Blossom Tree (Left rear)
+  const pinkTrunk = new THREE.CylinderGeometry(0.015, 0.025, 4.2, 6)
+  pinkTrunk.translate(-0.38, 2.1, -0.42)
+  pinkTrunk.setAttribute('color', createColorAttr(pinkTrunk.getAttribute('position').count, 0.45, 0.28, 0.16))
+  topParts.push(pinkTrunk)
+
+  const pinkCanopy = new THREE.DodecahedronGeometry(0.11, 0)
+  pinkCanopy.scale(1, 28, 1)
+  pinkCanopy.translate(-0.38, 4.6, -0.42)
+  pinkCanopy.setAttribute('color', createColorAttr(pinkCanopy.getAttribute('position').count, 0.92, 0.58, 0.65))
+  topParts.push(pinkCanopy)
+
+  // 5. Stylized Bushes / Shrubs
+  const bush1 = new THREE.DodecahedronGeometry(0.06, 0)
+  bush1.scale(1, 16, 1)
+  bush1.translate(0.38, 0.7, -0.22)
+  bush1.setAttribute('color', createColorAttr(bush1.getAttribute('position').count, 0.30, 0.70, 0.32))
+  topParts.push(bush1)
+
+  const bush2 = new THREE.DodecahedronGeometry(0.05, 0)
+  bush2.scale(1, 14, 1)
+  bush2.translate(-0.35, 0.6, 0.40)
+  bush2.setAttribute('color', createColorAttr(bush2.getAttribute('position').count, 0.35, 0.74, 0.30))
+  topParts.push(bush2)
+
+  // 6. Natural Boulders
+  const b1 = new THREE.DodecahedronGeometry(0.06, 0)
+  b1.scale(1.2, 18, 0.9)
+  b1.translate(0.26, 0.7, 0.42)
+  b1.setAttribute('color', createColorAttr(b1.getAttribute('position').count, 0.74, 0.72, 0.68))
+  topParts.push(b1)
+
+  const b2 = new THREE.DodecahedronGeometry(0.045, 0)
+  b2.scale(1.0, 16, 1.1)
+  b2.translate(-0.20, 0.6, -0.32)
+  b2.setAttribute('color', createColorAttr(b2.getAttribute('position').count, 0.78, 0.75, 0.70))
+  topParts.push(b2)
+
+  // 7. Stepping stones path
+  for (let s = 0; s < 4; s += 1) {
+    const stone = new THREE.CylinderGeometry(0.07, 0.08, 0.05, 6)
+    stone.translate(0.03 * s, 0.22, -0.20 + s * 0.16)
+    stone.setAttribute('color', createColorAttr(stone.getAttribute('position').count, 0.82, 0.80, 0.75))
+    topParts.push(stone)
+  }
+
+  // 8. Visual Continuity: Floating Satellite Stepping Rocks (connecting the void between islands)
+  // These mini outcrops extend beyond the island perimeter towards adjacent islands
+  const satelliteConfigs = [
+    { x: 1.25, y: -0.12, z: 0.35, scale: 0.18, heightScale: 22, col: [0.70, 0.68, 0.64] },
+    { x: 1.55, y: 0.08, z: 0.65, scale: 0.14, heightScale: 18, col: [0.74, 0.72, 0.68] },
+    { x: -1.28, y: -0.18, z: -0.45, scale: 0.16, heightScale: 20, col: [0.68, 0.66, 0.62] },
+    { x: -1.60, y: 0.15, z: -0.72, scale: 0.12, heightScale: 16, col: [0.76, 0.74, 0.70] },
+    { x: 0.25, y: -0.22, z: 1.35, scale: 0.15, heightScale: 20, col: [0.72, 0.70, 0.66] },
+  ]
+
+  for (const sat of satelliteConfigs) {
+    const satRock = new THREE.DodecahedronGeometry(sat.scale, 0)
+    satRock.scale(1.1, sat.heightScale, 0.95)
+    satRock.translate(sat.x, sat.y, sat.z)
+    satRock.setAttribute('color', createColorAttr(satRock.getAttribute('position').count, sat.col[0], sat.col[1], sat.col[2]))
+    topParts.push(satRock)
+
+    // Tiny tuft of moss/grass on top of satellite rock
+    const satGrass = new THREE.CylinderGeometry(sat.scale * 0.8, sat.scale * 0.85, 0.04, 6)
+    satGrass.translate(sat.x, sat.y + 0.08, sat.z)
+    satGrass.setAttribute('color', createColorAttr(satGrass.getAttribute('position').count, 0.48, 0.80, 0.36))
+    topParts.push(satGrass)
+  }
+
+  // Normalize all to non-indexed
+  const normalizedParts = topParts.map((p) => {
+    const ni = p.index ? p.toNonIndexed() : p
+    if (ni.getAttribute('uv')) ni.deleteAttribute('uv')
+    return ni
+  })
+
+  const topGeometry = BufferGeometryUtils.mergeGeometries(normalizedParts, false)
   topGeometry.computeVertexNormals()
   topGeometry.computeBoundingSphere()
+
   const cloudColor = new THREE.Color(palette.cloud)
-  const rockBaseColor = new THREE.Color(palette.rock).lerp(cloudColor, 0.23)
+  const rockBaseColor = new THREE.Color(palette.rock).lerp(cloudColor, 0.28)
   const rockEmissiveColor = new THREE.Color(palette.rock).lerp(
     new THREE.Color(palette.skyHaze),
-    0.28,
+    0.32,
   )
   const topBaseColor = new THREE.Color(palette.gateRune)
-    .lerp(new THREE.Color(palette.wingGold), 0.3)
-    .lerp(new THREE.Color(palette.rock), 0.12)
+    .lerp(new THREE.Color(palette.wingGold), 0.35)
+    .lerp(new THREE.Color(palette.rock), 0.08)
   const rockMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     emissive: rockEmissiveColor,
-    emissiveIntensity: 0.1,
-    roughness: 0.92,
-    metalness: 0.02,
+    emissiveIntensity: 0.12,
+    roughness: 0.82,
+    metalness: 0.04,
     flatShading: true,
     vertexColors: true,
   })
   const topMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.9,
+    roughness: 0.75,
     metalness: 0.02,
     flatShading: true,
     vertexColors: true,
@@ -221,7 +372,7 @@ function createIslands(palette: WorldPalette): THREE.Group {
     quaternion.setFromEuler(rotation)
     scale.set(
       island.radius * widthVariation,
-      island.height * 0.72,
+      island.height * 0.46,
       island.radius * depthVariation,
     )
     matrix.compose(position, quaternion, scale)
@@ -267,44 +418,107 @@ function createIslandDecorations(palette: WorldPalette): THREE.Group {
   const group = new THREE.Group()
   group.name = 'M7_IslandFestivalDetails'
   const decoratedIslands = WORLD_ISLANDS.slice(0, DECORATED_ISLAND_COUNT)
+
+  // Classical entasis temple column with base molding and capital
+  const stoneColor = new THREE.Color(palette.cloud)
+    .lerp(new THREE.Color(palette.wingGold), 0.24)
+    .lerp(new THREE.Color(palette.rock), 0.08)
   const stoneMaterial = new THREE.MeshStandardMaterial({
-    color: palette.cloud,
-    roughness: 0.94,
+    color: stoneColor,
+    roughness: 0.62,
+    metalness: 0.04,
     flatShading: true,
   })
   const flagMaterial = new THREE.MeshStandardMaterial({
     color: palette.gateRune,
-    roughness: 0.8,
+    roughness: 0.40,
+    metalness: 0.12,
     transparent: true,
-    opacity: 0.68,
+    opacity: 0.92,
     side: THREE.DoubleSide,
   })
   const runeMaterial = new THREE.MeshStandardMaterial({
     color: palette.gateRune,
     emissive: palette.gateRune,
-    emissiveIntensity: 0.2,
-    roughness: 0.72,
+    emissiveIntensity: 0.75,
+    roughness: 0.20,
+    metalness: 0.40,
   })
+
+  const pillarPoints = [
+    new THREE.Vector2(0.85, -2.75),
+    new THREE.Vector2(0.85, -2.55),
+    new THREE.Vector2(0.68, -2.45),
+    new THREE.Vector2(0.55, -2.15),
+    new THREE.Vector2(0.48, -1.0),
+    new THREE.Vector2(0.46, 0.0),
+    new THREE.Vector2(0.48, 1.0),
+    new THREE.Vector2(0.55, 2.15),
+    new THREE.Vector2(0.68, 2.35),
+    new THREE.Vector2(0.85, 2.55),
+    new THREE.Vector2(0.88, 2.75),
+  ]
+  const pillarGeometry = new THREE.LatheGeometry(pillarPoints, 16)
+  pillarGeometry.computeBoundingBox()
+  pillarGeometry.computeVertexNormals()
+
   const pillars = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(0.5, 0.74, 5.5, 7, 2),
+    pillarGeometry,
     stoneMaterial,
     decoratedIslands.length * 2,
   )
+
+  // Architectural arch-lintel with flared cornice and arched underside
+  const lintelGeometry = new THREE.BoxGeometry(5.2, 0.9, 1.2, 8, 2, 2)
+  const lPos = lintelGeometry.getAttribute('position')
+  for (let i = 0; i < lPos.count; i++) {
+    const x = lPos.getX(i)
+    const y = lPos.getY(i)
+    const z = lPos.getZ(i)
+    if (y > 0.3) {
+      lPos.setX(i, x * 1.08)
+      lPos.setZ(i, z * 1.12)
+    } else if (y < -0.3) {
+      const archUnder = (1 - Math.min(1, Math.abs(x) / 2.3)) * 0.25
+      lPos.setY(i, y + archUnder)
+    }
+  }
+  lintelGeometry.computeVertexNormals()
+  lintelGeometry.computeBoundingBox()
+
   const lintels = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(5, 0.76, 1.08, 3, 1, 1),
+    lintelGeometry,
     stoneMaterial,
     decoratedIslands.length,
   )
+
+  // Flowing 3D fluttered festival banner
+  const flagGeometry = new THREE.PlaneGeometry(3.8, 1.8, 12, 4)
+  const fPos = flagGeometry.getAttribute('position')
+  for (let i = 0; i < fPos.count; i++) {
+    const x = fPos.getX(i)
+    const y = fPos.getY(i)
+    const normX = (x + 1.9) / 3.8
+    const wave = Math.sin(normX * Math.PI * 2.5) * 0.28 * normX
+    const taper = 1.0 - normX * 0.22
+    fPos.setXYZ(i, x, y * taper, wave)
+  }
+  flagGeometry.computeVertexNormals()
+
   const flags = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(3.8, 1.7, 3, 1),
+    flagGeometry,
     flagMaterial,
     decoratedIslands.length,
   )
+
+  // Cut-gemstone floating mystic rune crystal
+  const runeGeometry = new THREE.OctahedronGeometry(0.85, 1)
   const runes = new THREE.InstancedMesh(
-    new THREE.OctahedronGeometry(0.92, 0),
+    runeGeometry,
     runeMaterial,
     decoratedIslands.length,
   )
+
   const matrix = new THREE.Matrix4()
   const position = new THREE.Vector3()
   const scale = new THREE.Vector3(1, 1, 1)
@@ -319,47 +533,120 @@ function createIslandDecorations(palette: WorldPalette): THREE.Group {
     const tangentZ = Math.cos(angle)
     rotation.set(0, -angle - Math.PI / 2, 0)
     quaternion.setFromEuler(rotation)
-    for (const side of [-1, 1] as const) {
+
+    // Variant ruins: some islands have complete portals, some have romantic fallen columns/altars
+    const ruinStyle = index % 3
+
+    if (ruinStyle === 0) {
+      // Complete grand portal: twin pillars + top arch lintel + levitating rune
+      for (const side of [-1, 1] as const) {
+        position.set(
+          island.center.x + offsetX + tangentX * side * 2.2,
+          island.center.y + 2.75,
+          island.center.z + offsetZ + tangentZ * side * 2.2,
+        )
+        matrix.compose(position, quaternion, scale)
+        pillars.setMatrixAt(index * 2 + (side > 0 ? 1 : 0), matrix)
+      }
+      position.set(island.center.x + offsetX, island.center.y + 5.7, island.center.z + offsetZ)
+      matrix.compose(position, quaternion, scale)
+      lintels.setMatrixAt(index, matrix)
+
+      position.set(island.center.x + offsetX, island.center.y + 6.9, island.center.z + offsetZ)
+      rotation.set(0, -angle - Math.PI / 2, Math.sin(index * 1.7) * 0.08)
+      quaternion.setFromEuler(rotation)
+      matrix.compose(position, quaternion, scale)
+      flags.setMatrixAt(index, matrix)
+
+      position.set(island.center.x + offsetX, island.center.y + 3.4, island.center.z + offsetZ)
+      rotation.set(0.3, angle + index * 0.5, 0.2)
+      quaternion.setFromEuler(rotation)
+      matrix.compose(position, quaternion, scale)
+      runes.setMatrixAt(index, matrix)
+    } else if (ruinStyle === 1) {
+      // Fallen ruin: one tall pillar, one broken/sunken pillar, altar slab on ground
+      // Pillar 1: upright
       position.set(
-        island.center.x + offsetX + tangentX * side * 2.3,
-        island.center.y + 3,
-        island.center.z + offsetZ + tangentZ * side * 2.3,
+        island.center.x + offsetX - tangentX * 2.0,
+        island.center.y + 2.75,
+        island.center.z + offsetZ - tangentZ * 2.0,
       )
       matrix.compose(position, quaternion, scale)
-      pillars.setMatrixAt(index * 2 + (side > 0 ? 1 : 0), matrix)
+      pillars.setMatrixAt(index * 2, matrix)
+
+      // Pillar 2: half sunken/broken
+      const pScale = new THREE.Vector3(1, 0.55, 1)
+      rotation.set(0.15, -angle, 0.12)
+      quaternion.setFromEuler(rotation)
+      position.set(
+        island.center.x + offsetX + tangentX * 2.2,
+        island.center.y + 1.5,
+        island.center.z + offsetZ + tangentZ * 2.2,
+      )
+      matrix.compose(position, quaternion, pScale)
+      pillars.setMatrixAt(index * 2 + 1, matrix)
+
+      // Lintel as ground altar stone
+      rotation.set(0, -angle, 0)
+      quaternion.setFromEuler(rotation)
+      position.set(island.center.x + offsetX, island.center.y + 0.45, island.center.z + offsetZ)
+      matrix.compose(position, quaternion, scale)
+      lintels.setMatrixAt(index, matrix)
+
+      // Banner near standing pillar
+      position.set(
+        island.center.x + offsetX - tangentX * 2.0,
+        island.center.y + 5.5,
+        island.center.z + offsetZ - tangentZ * 2.0,
+      )
+      rotation.set(0, -angle - Math.PI / 2, 0.1)
+      quaternion.setFromEuler(rotation)
+      matrix.compose(position, quaternion, scale)
+      flags.setMatrixAt(index, matrix)
+
+      // Floating crystal above the altar
+      position.set(island.center.x + offsetX, island.center.y + 2.0, island.center.z + offsetZ)
+      rotation.set(0.2, angle * 1.5, -0.3)
+      quaternion.setFromEuler(rotation)
+      matrix.compose(position, quaternion, scale)
+      runes.setMatrixAt(index, matrix)
+    } else {
+      // Ancient shrine: pillars flanking a crystal monument
+      for (const side of [-1, 1] as const) {
+        const pScale = new THREE.Vector3(0.85, 0.8, 0.85)
+        position.set(
+          island.center.x + offsetX + tangentX * side * 2.8,
+          island.center.y + 2.2,
+          island.center.z + offsetZ + tangentZ * side * 2.8,
+        )
+        matrix.compose(position, quaternion, pScale)
+        pillars.setMatrixAt(index * 2 + (side > 0 ? 1 : 0), matrix)
+      }
+      // Arch bridge slightly sunken as terrace boundary
+      rotation.set(0, -angle - Math.PI / 2, 0)
+      quaternion.setFromEuler(rotation)
+      position.set(island.center.x + offsetX, island.center.y + 4.8, island.center.z + offsetZ)
+      matrix.compose(position, quaternion, scale)
+      lintels.setMatrixAt(index, matrix)
+
+      // Pennant flying high
+      position.set(
+        island.center.x + offsetX + tangentX * 2.8,
+        island.center.y + 5.2,
+        island.center.z + offsetZ + tangentZ * 2.8,
+      )
+      rotation.set(0, -angle - Math.PI / 2, -0.06)
+      quaternion.setFromEuler(rotation)
+      matrix.compose(position, quaternion, scale)
+      flags.setMatrixAt(index, matrix)
+
+      // Floating mystic diamond in center
+      position.set(island.center.x + offsetX, island.center.y + 2.8, island.center.z + offsetZ)
+      rotation.set(0.4, angle, 0.1)
+      quaternion.setFromEuler(rotation)
+      matrix.compose(position, quaternion, scale)
+      runes.setMatrixAt(index, matrix)
     }
-
-    position.set(
-      island.center.x + offsetX,
-      island.center.y + 5.8,
-      island.center.z + offsetZ,
-    )
-    matrix.compose(position, quaternion, scale)
-    lintels.setMatrixAt(index, matrix)
-
-    position.set(
-      island.center.x + offsetX,
-      island.center.y + 7,
-      island.center.z + offsetZ,
-    )
-    rotation.set(
-      0,
-      -angle - Math.PI / 2,
-      Math.sin(index * 1.7) * 0.08,
-    )
-    quaternion.setFromEuler(rotation)
-    matrix.compose(position, quaternion, scale)
-    flags.setMatrixAt(index, matrix)
-
-    position.set(
-      island.center.x - offsetX * 0.5,
-      island.center.y + 1.65,
-      island.center.z - offsetZ * 0.5,
-    )
-    rotation.set(0, angle, 0)
-    quaternion.setFromEuler(rotation)
-    matrix.compose(position, quaternion, scale)
-    runes.setMatrixAt(index, matrix)
   }
 
   for (const instances of [pillars, lintels, flags, runes]) {
@@ -379,7 +666,7 @@ function createIslandDecorations(palette: WorldPalette): THREE.Group {
 }
 
 function createCloudGeometry(segments: number): THREE.BufferGeometry {
-  // One continuous shell avoids overlapping transparent lobes and keeps each
+  // One continuous sculpted shell avoids overlapping transparent lobes and keeps each
   // complete cloud in the existing instanced draw call.
   const geometry = new THREE.SphereGeometry(1, segments, 8)
   const positions = geometry.getAttribute('position')
@@ -388,13 +675,20 @@ function createCloudGeometry(segments: number): THREE.BufferGeometry {
     const x = positions.getX(index)
     const y = positions.getY(index)
     const z = positions.getZ(index)
-    const crown = 0.91 + Math.cos(x * 5.2) * 0.2 + Math.sin(z * 4.1) * 0.09
-    positions.setXYZ(index, x * 1.2, y > 0 ? y * crown : y * 0.38, z)
-    const sunlight = THREE.MathUtils.smoothstep(y, -0.4, 0.7)
-    colors.set(
-      [0.67 + sunlight * 0.33, 0.8 + sunlight * 0.2, 0.88 + sunlight * 0.12],
-      index * 3,
-    )
+    // Billowy cumulus mounds with soft organic domes
+    const angle = Math.atan2(z, x)
+    const radius = Math.hypot(x, z)
+    const billow1 = Math.sin(x * 3.8 + z * 2.6) * 0.14
+    const billow2 = Math.cos(angle * 3.0 + radius * 4.2) * 0.08
+    const crown = 0.92 + billow1 + billow2
+    // Dome top with organic billows, softly curved underbelly (avoids planar truncation)
+    positions.setXYZ(index, x * 1.2, y > 0 ? y * crown : y * 0.72, z * 1.15)
+    // Bruno-style sunrise lighting: soft warm champagne cream on crests, luminous sky blue in undersides
+    const sunlight = THREE.MathUtils.smoothstep(y, -0.40, 0.65)
+    const r = Math.min(1, Math.max(0, 0.72 + sunlight * 0.22))
+    const g = Math.min(1, Math.max(0, 0.79 + sunlight * 0.16))
+    const b = Math.min(1, Math.max(0, 0.88 + sunlight * 0.08))
+    colors.set([r, g, b], index * 3)
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   geometry.computeVertexNormals()
@@ -403,7 +697,7 @@ function createCloudGeometry(segments: number): THREE.BufferGeometry {
 }
 
 function createClouds(palette: WorldPalette): THREE.InstancedMesh {
-  const geometry = createCloudGeometry(14)
+  const geometry = createCloudGeometry(12)
   const material = new THREE.MeshBasicMaterial({
     color: palette.cloud,
     vertexColors: true,
@@ -421,16 +715,16 @@ function createClouds(palette: WorldPalette): THREE.InstancedMesh {
   for (let index = 0; index < CLOUD_COUNT; index += 1) {
     const anchor = anchors[index % anchors.length] ?? START_ANCHOR.position
     const angle = index * 2.3999632297
-    const distance = 120 + (index % 6) * 30
+    const distance = 95 + (index % 6) * 28
     position.set(
       anchor.x + Math.cos(angle) * distance,
-      anchor.y + 32 + (index % 5) * 13,
+      anchor.y + 24 + (index % 5) * 11,
       anchor.z + Math.sin(angle) * distance,
     )
     scale.set(
-      11 + (index % 4) * 3,
-      6 + (index % 3) * 1.8,
-      7 + (index % 5) * 1.8,
+      15 + (index % 4) * 4.5,
+      7 + (index % 3) * 2.2,
+      10 + (index % 5) * 2.8,
     )
     matrix.compose(position, quaternion, scale)
     clouds.setMatrixAt(index, matrix)
@@ -450,12 +744,13 @@ function createCloudAccentLayer(
   opacity: number,
   horizontalStretch: number,
 ): THREE.InstancedMesh {
-  const geometry = createCloudGeometry(10)
+  const isDeck = name === 'M7_LowerCloudDeck'
+  const geometry = createCloudGeometry(isDeck ? 10 : 8)
   const material = new THREE.MeshBasicMaterial({
     color: palette.cloud,
     vertexColors: true,
     transparent: true,
-    opacity,
+    opacity: isDeck ? 0.84 : opacity,
     depthWrite: false,
   })
   const layer = new THREE.InstancedMesh(geometry, material, count)
@@ -469,19 +764,37 @@ function createCloudAccentLayer(
   const quaternion = new THREE.Quaternion()
 
   for (let index = 0; index < count; index += 1) {
-    const anchor = anchors[(index * 5 + 2) % anchors.length] ?? START_ANCHOR.position
-    const angle = index * 2.3999632297 + 0.7
-    const distance = distanceBase + (index % 5) * 38
-    position.set(
-      anchor.x + Math.cos(angle) * distance,
-      anchor.y + heightOffset + (index % 4) * 7,
-      anchor.z + Math.sin(angle) * distance,
-    )
-    scale.set(
-      (9 + (index % 4) * 3.2) * horizontalStretch,
-      2.4 + (index % 3) * 0.9,
-      5 + (index % 5) * 1.8,
-    )
+    if (isDeck) {
+      // Endless Sea of Clouds Floor: vast continuous rolling cloud carpet underlying the entire archipelago
+      const anchor = anchors[(index * 3) % anchors.length] ?? START_ANCHOR.position
+      const angle = index * 1.884955592
+      const distance = 60 + (index % 5) * 45
+      position.set(
+        anchor.x * 0.85 + Math.cos(angle) * distance,
+        -56 + (index % 4) * 2.5,
+        anchor.z * 0.85 + Math.sin(angle) * distance,
+      )
+      scale.set(
+        (48 + (index % 4) * 16) * horizontalStretch,
+        14 + (index % 3) * 4,
+        (44 + (index % 5) * 15) * horizontalStretch,
+      )
+    } else {
+      // High wisps
+      const anchor = anchors[(index * 5 + 2) % anchors.length] ?? START_ANCHOR.position
+      const angle = index * 2.3999632297 + 0.7
+      const distance = distanceBase + (index % 5) * 38
+      position.set(
+        anchor.x + Math.cos(angle) * distance,
+        anchor.y + heightOffset + (index % 4) * 7,
+        anchor.z + Math.sin(angle) * distance,
+      )
+      scale.set(
+        (9 + (index % 4) * 3.2) * horizontalStretch,
+        2.4 + (index % 3) * 0.9,
+        5 + (index % 5) * 1.8,
+      )
+    }
     matrix.compose(position, quaternion, scale)
     layer.setMatrixAt(index, matrix)
   }
@@ -564,7 +877,7 @@ export function createWorld(
   const rimOffset = new THREE.Vector3(52, 24, -64)
   const sunDiskOffset = new THREE.Vector3(-180, 150, -440)
   const fogColor = new THREE.Color(palette.skyHaze).lerp(sunColor, 0.075)
-  const fog = new THREE.FogExp2(fogColor, 0.00098)
+  const fog = new THREE.FogExp2(fogColor, 0.00075)
   scene.fog = fog
   const sunDisk = new THREE.Mesh(
     new THREE.CircleGeometry(1, 32),
@@ -634,7 +947,7 @@ export function createWorld(
       sun.shadow.map.dispose()
       sun.shadow.map = null
     }
-    fog.density = nextQuality.tier === 'high' ? 0.00098 : 0.00084
+    fog.density = nextQuality.tier === 'high' ? 0.00075 : 0.00065
   }
   applyQuality(quality)
 

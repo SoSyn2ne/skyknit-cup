@@ -40,7 +40,118 @@ function update(material: THREE.Material, scene: THREE.Scene, geometry = new THR
   material.onBeforeRender({} as THREE.WebGLRenderer, scene, new THREE.PerspectiveCamera(), geometry, new THREE.Mesh(), new THREE.Group())
 }
 
+function outputRenderer(overrides: Partial<THREE.WebGLRenderer> = {}): THREE.WebGLRenderer {
+  return { toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.25,
+    outputColorSpace: THREE.SRGBColorSpace, getRenderTarget: () => null, ...overrides } as THREE.WebGLRenderer
+}
+
+function renderOutput(material: THREE.Material, scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
+  material.onBeforeRender(renderer, scene, new THREE.PerspectiveCamera(), new THREE.BufferGeometry(), new THREE.Mesh(), new THREE.Group())
+}
+
 describe('static vertex-lit material', () => {
+  it('routes supported ACES/sRGB output through both vertex colors without changing alpha or the source', () => {
+    const { scene, lighting } = lightingFixture()
+    const source = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, opacity: 0.45, alphaTest: 0.2 })
+    const sourceJson = source.toJSON()
+    const material = createStaticPrelitMaterial(source, lighting)
+    const shader = compile(material)
+    expect(shader.uniforms.uStaticVertexOutput?.value).toBe(false)
+    renderOutput(material, scene, outputRenderer())
+    expect(shader.uniforms.uStaticVertexOutput?.value).toBe(true)
+    expect(shader.vertexShader).toContain('#include <tonemapping_pars_fragment>')
+    expect(shader.vertexShader).toContain('#include <colorspace_pars_fragment>')
+    expect(shader.vertexShader).toContain('if ( uStaticVertexOutput )')
+    expect(shader.vertexShader).toContain('sRGBTransferOETF( vec4( ACESFilmicToneMapping( vStaticBackColor ), 1.0 ) ).rgb')
+    expect(shader.vertexShader).toContain('vColor.rgb = sRGBTransferOETF( vec4( ACESFilmicToneMapping( vColor.rgb ), 1.0 ) ).rgb')
+    expect(shader.vertexShader).not.toContain('vColor.a =')
+    expect(shader.fragmentShader).toContain('diffuseColor.a *= vColor.a')
+    expect(shader.fragmentShader).toContain('if ( !uStaticVertexOutput ) {\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}')
+    const outputEnd = shader.fragmentShader.indexOf('#include <colorspace_fragment>\n}')
+    const fog = shader.fragmentShader.indexOf('#include <fog_fragment>')
+    const premultiplied = shader.fragmentShader.indexOf('#include <premultiplied_alpha_fragment>')
+    const dithering = shader.fragmentShader.indexOf('#include <dithering_fragment>')
+    expect(outputEnd).toBeLessThan(fog)
+    expect(fog).toBeLessThan(premultiplied)
+    expect(premultiplied).toBeLessThan(dithering)
+    expect(material.opacity).toBe(0.45)
+    expect(material.alphaTest).toBe(0.2)
+    expect(source.toJSON()).toEqual(sourceJson)
+  })
+
+  it.each([
+    { toneMapping: THREE.NoToneMapping }, { toneMapping: THREE.ReinhardToneMapping },
+    { outputColorSpace: THREE.LinearSRGBColorSpace }, { outputColorSpace: 'display-p3' },
+    { getRenderTarget: () => new THREE.WebGLRenderTarget() },
+    { getRenderTarget: () => Object.assign(new THREE.WebGLRenderTarget(), { isXRRenderTarget: true }) },
+  ])('retains fragment output transforms for unsupported renderer configuration %#', overrides => {
+    const { scene, lighting } = lightingFixture()
+    const material = createStaticPrelitMaterial(new THREE.MeshStandardMaterial({ vertexColors: true }), lighting)
+    const shader = compile(material)
+    renderOutput(material, scene, outputRenderer())
+    expect(shader.uniforms.uStaticVertexOutput?.value).toBe(true)
+    renderOutput(material, scene, outputRenderer(overrides))
+    expect(shader.uniforms.uStaticVertexOutput?.value).toBe(false)
+    expect(shader.fragmentShader).toContain('#include <tonemapping_fragment>')
+    expect(shader.fragmentShader).toContain('#include <colorspace_fragment>')
+    renderOutput(material, scene, outputRenderer())
+    expect(shader.uniforms.uStaticVertexOutput?.value).toBe(true)
+  })
+
+  it('keeps toneMapped false and disabled color management on the fragment fallback', () => {
+    const { scene, lighting } = lightingFixture()
+    const material = createStaticPrelitMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, toneMapped: false }), lighting)
+    const shader = compile(material)
+    renderOutput(material, scene, outputRenderer())
+    expect(shader.uniforms.uStaticVertexOutput?.value).toBe(false)
+    material.toneMapped = true
+    const enabled = THREE.ColorManagement.enabled
+    try {
+      THREE.ColorManagement.enabled = false
+      renderOutput(material, scene, outputRenderer())
+      expect(shader.uniforms.uStaticVertexOutput?.value).toBe(false)
+    } finally { THREE.ColorManagement.enabled = enabled }
+  })
+
+  it('reuses renderer-owned exposure instead of uploading a stale material uniform', () => {
+    const { scene, lighting } = lightingFixture()
+    const material = createStaticPrelitMaterial(new THREE.MeshStandardMaterial({ vertexColors: true }), lighting)
+    const shader = compile(material), renderer = outputRenderer()
+    renderOutput(material, scene, renderer)
+    renderer.toneMappingExposure = 2.4
+    renderOutput(material, scene, renderer)
+    expect(shader.uniforms.uStaticVertexOutput?.value).toBe(true)
+    expect(shader.uniforms.toneMappingExposure).toBeUndefined()
+    expect(THREE.ShaderChunk.tonemapping_pars_fragment).toContain('uniform float toneMappingExposure;')
+    expect(THREE.ShaderChunk.tonemapping_pars_fragment).toContain('color *= toneMappingExposure / 0.6;')
+    expect(shader.vertexShader).toContain('#include <tonemapping_pars_fragment>')
+    expect(shader.vertexShader).not.toContain('1.25')
+    expect(shader.vertexShader).not.toContain('2.4')
+  })
+
+  it('separates prototype/working-space program caches while reusing safe output switches', () => {
+    const { scene, lighting } = lightingFixture()
+    const material = createStaticPrelitMaterial(new THREE.MeshStandardMaterial({ vertexColors: true }), lighting)
+    const first = compile(material), key = material.customProgramCacheKey()
+    const working = THREE.ColorManagement.workingColorSpace, version = material.version
+    expect(key).not.toBe('m46-static-prelit-v1')
+    renderOutput(material, scene, outputRenderer())
+    expect(material.customProgramCacheKey()).toBe(key)
+    expect(material.version).toBe(version)
+    try {
+      THREE.ColorManagement.workingColorSpace = THREE.SRGBColorSpace
+      renderOutput(material, scene, outputRenderer())
+      expect(first.uniforms.uStaticVertexOutput?.value).toBe(false)
+      expect(material.customProgramCacheKey()).not.toBe(key)
+      expect(material.version).toBe(version + 1)
+      expect(compile(material).uniforms.uStaticVertexOutput).toBe(first.uniforms.uStaticVertexOutput)
+    } finally { THREE.ColorManagement.workingColorSpace = working }
+    renderOutput(material, scene, outputRenderer())
+    expect(material.customProgramCacheKey()).toBe(key)
+    expect(first.uniforms.uStaticVertexOutput?.value).toBe(true)
+    expect(material.version).toBe(version + 2)
+  })
+
   it('finds the exact named world-light rig and rejects missing or wrong light types', () => {
     const { scene, lighting } = lightingFixture()
     expect(getStaticWorldLighting(scene)).toEqual(lighting)

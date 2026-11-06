@@ -1,0 +1,18 @@
+{
+  "score": 91,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": ["Circuit and HUD separation remain readable", "Blender outer-cap winding is repaired and the complete island silhouette is restored", "PBR lighting and guardian geometry remain intact with back-face culling on closed home surfaces"],
+  "suggestions": ["Keep the new32-ray outward-cap inspector alongside48 garden-floor rays", "Continue performance and first-play content work; visual acceptance is not overall completion"],
+  "reasoning": "Fresh overview and five-viewport visual tests confirm the missing cap is repaired. Performance and10-15minute pacing remain separate unmet gates.",
+  "next_actions": ["Fix remaining desktop-high home performance27/25fps with full geometry intact", "Rerun complete performance matrix", "Make sensing a real spatial discovery action and persist discovered landmarks", "First-play pacing evidence", "Broader legacy regression and reward panel audit"],
+  "performance_gate_passed": false,
+  "latest_desktop_high_fps": {"intro": [60, 59], "active_home": [27, 23], "restored_home": [25, 24]},
+  "production_scenarios_passed": 10,
+  "latest_asset_production_viewports_passed": 5,
+  "first_play_pacing_gate_passed": false,
+  "unit_tests_passed": 752,
+  "real_input_routes_passed": 2,
+  "goal_turn_classification": "progress",
+  "goal_status": "active"
+}

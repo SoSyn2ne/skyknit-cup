@@ -1,0 +1,14 @@
+{
+  "score": 92,
+  "verdict": "pass",
+  "category_match": true,
+  "differences": ["Torso has rounded continuous shading instead of angular stacked planes", "Wing membranes have amber gradients and camber", "Sky is cooler with stronger separation from the red dragon"],
+  "suggestions": [],
+  "reasoning": "Compared with the original mustard sky and faceted torso, the final cool sky separates the guardians and gold gate. Curved dragon membranes, feather layers, regional stone shading and billowy clouds read consistently in the five tested viewports. Existing portrait ready-menu overlap is outside this model/world comparison.",
+  "threshold": 90,
+  "next_actions": ["Human and physical-device playtest"],
+  "status": "complete",
+  "validation": {"unit": 631, "browser": 60, "realInput": 2, "production": 5, "performanceProfiles": 12, "medianFps": 60, "minimumBucketFps": 60},
+  "reference": "artifacts/browser-qa/m45-before/desktop-ready-character.png",
+  "screenshot": "artifacts/browser-qa/m45-after/desktop-ready-character.png"
+}
