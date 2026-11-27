@@ -165,4 +165,37 @@ describe('coin course visual', () => {
 
     visual.dispose()
   })
+
+  it('gives the active collectible a visible but bounded pulse', () => {
+    const scene = new THREE.Scene()
+    const visual = createCoinCourseVisual(scene)
+    const coin = getCoinCourse('festival-hub').coins[0]
+    const mesh = scene.getObjectByName('RC6_SkyCoins') as THREE.InstancedMesh
+    const earlyMatrix = new THREE.Matrix4()
+    const laterMatrix = new THREE.Matrix4()
+    const earlyScale = new THREE.Vector3()
+    const laterScale = new THREE.Vector3()
+
+    visual.update(coin, 0)
+    mesh.getMatrixAt(0, earlyMatrix)
+    earlyMatrix.decompose(
+      new THREE.Vector3(),
+      new THREE.Quaternion(),
+      earlyScale,
+    )
+
+    visual.update(coin, 0.35)
+    mesh.getMatrixAt(0, laterMatrix)
+    laterMatrix.decompose(
+      new THREE.Vector3(),
+      new THREE.Quaternion(),
+      laterScale,
+    )
+
+    expect(laterScale.x).not.toBeCloseTo(earlyScale.x, 4)
+    expect(laterScale.x).toBeGreaterThanOrEqual(0.96)
+    expect(laterScale.x).toBeLessThanOrEqual(1.12)
+
+    visual.dispose()
+  })
 })

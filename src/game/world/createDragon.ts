@@ -38,7 +38,7 @@ export interface CreateDragonOptions {
 
 export const GHOST_DRAGON_VISUAL_SPEC = Object.freeze({
   teal: '#62e9df',
-  opacity: 0.42,
+  opacity: 0.32,
   emissiveIntensity: 0.72,
   renderOrder: 4,
 })
@@ -69,6 +69,7 @@ export interface DragonVisual {
     pose: DragonPoseState,
   ): void
   setShadows(enabled: boolean): void
+  setGhostOpacity(opacity: number): void
   setVolcanicReaction(intensity: number): void
   debugSnapshot(): DragonDebugSnapshot
   dispose(): void
@@ -359,7 +360,6 @@ function createGhostMaterial(
   source: THREE.Material,
   color: THREE.ColorRepresentation,
   detail: GhostDragonDetail,
-  wireframe: boolean,
 ): THREE.Material {
   if (detail === 'echo') {
     const material = new THREE.MeshBasicMaterial({
@@ -371,7 +371,7 @@ function createGhostMaterial(
       blending: THREE.NormalBlending,
       side: source.side,
       fog: true,
-      wireframe,
+      wireframe: false,
     })
     material.toneMapped = false
     material.userData.skyLeagueGhost = true
@@ -435,9 +435,8 @@ function applyGhostAppearance(
       const color = usesGold
         ? palette.wingGold
         : GHOST_DRAGON_VISUAL_SPEC.teal
-      const wireframe = detail === 'echo' && !usesGold
       const replacementKey = detail === 'echo'
-        ? `${detail}:${color}:${wireframe}:${material.side}`
+        ? `${detail}:${color}:${material.side}`
         : `${material.uuid}:${color}`
       const existing = replacements.get(replacementKey)
       if (existing !== undefined) return existing
@@ -446,7 +445,6 @@ function applyGhostAppearance(
         material,
         color,
         detail,
-        wireframe,
       )
       replacements.set(replacementKey, replacement)
       return replacement
@@ -462,6 +460,22 @@ function applyGhostAppearance(
   })
 
   for (const material of sourceMaterials) material.dispose()
+}
+
+function setGhostMaterialOpacity(
+  root: THREE.Object3D,
+  opacity: number,
+): void {
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material]
+    for (const material of materials) {
+      if (material.userData.skyLeagueGhost !== true) continue
+      material.opacity = opacity
+    }
+  })
 }
 
 function createWingGeometry(side: -1 | 1): THREE.BufferGeometry {
@@ -668,6 +682,7 @@ export function createDragon(
   const volcanicReactionSpec = VOLCANIC_REACTION_SPECS[character.id]
   const volcanicReactionColor = new THREE.Color(volcanicReactionSpec.color)
   const isGhost = appearance === 'ghost'
+  let ghostOpacity: number = GHOST_DRAGON_VISUAL_SPEC.opacity
   const movementRoot = new THREE.Group()
   movementRoot.name = isGhost
     ? 'M33_SkyLeagueGhostDragonMovementRoot'
@@ -739,7 +754,10 @@ export function createDragon(
         }
       }
 
-      if (isGhost) applyGhostAppearance(characterAsset, palette)
+      if (isGhost) {
+        applyGhostAppearance(characterAsset, palette)
+        setGhostMaterialOpacity(characterAsset, ghostOpacity)
+      }
       const loadedRig = collectRig(characterAsset)
       if (loadedRig === null) {
         disposeObject(characterAsset)
@@ -804,11 +822,10 @@ export function createDragon(
         (pose.bodyBankRadians - pose.shoulderBankRadians) *
         motionProfile.bankScale
       rig.bodyRoot.rotation.x =
-        (pose.bodyPitchRadians ?? 0) * motionProfile.bodyPitchScale
+        pose.bodyPitchRadians * motionProfile.bodyPitchScale
       rig.head.rotation.x =
         pose.headPitchRadians * motionProfile.headPitchScale
-      rig.head.rotation.y =
-        (pose.headYawRadians ?? 0) * motionProfile.headYawScale
+      rig.head.rotation.y = pose.headYawRadians * motionProfile.headYawScale
       if (rig.jaw !== null) {
         rig.jaw.rotation.x = pose.jawOpenRadians * motionProfile.jawScale
       }
@@ -819,9 +836,8 @@ export function createDragon(
       const wingRotation =
         pose.wingFlapRadians * motionProfile.wingFlapScale +
         pose.wingFoldRadians * motionProfile.wingFoldScale +
-        (pose.boostLaunchRadians ?? 0) * motionProfile.wingFlapScale
-      const wingSpread =
-        (pose.wingSpreadRadians ?? 0) * motionProfile.wingSpreadScale
+        pose.boostLaunchRadians * motionProfile.wingFlapScale
+      const wingSpread = pose.wingSpreadRadians * motionProfile.wingSpreadScale
       rig.leftWing.rotation.z = wingRotation
       rig.rightWing.rotation.z = -wingRotation
       rig.leftWing.rotation.x = wingSpread
@@ -831,8 +847,7 @@ export function createDragon(
         tail.rotation.y =
           (pose.tailYawRadians[index] ?? 0) * motionProfile.tailYawScale
         tail.rotation.x =
-          (pose.tailPitchRadians?.[index] ?? 0) *
-          motionProfile.tailPitchScale
+          (pose.tailPitchRadians[index] ?? 0) * motionProfile.tailPitchScale
       }
 
       const feedbackActive = pose.recoilRadians < -0.01
@@ -863,6 +878,16 @@ export function createDragon(
         if (loadedAsset !== null) {
           setObjectShadows(loadedAsset, shadowsEnabled)
         }
+      }
+    },
+    setGhostOpacity: (opacity) => {
+      if (disposed || !isGhost || !Number.isFinite(opacity)) return
+      ghostOpacity = Math.min(1, Math.max(0, opacity))
+      if (!fallbackDisposed) {
+        setGhostMaterialOpacity(fallback.root, ghostOpacity)
+      }
+      if (loadedAsset !== null) {
+        setGhostMaterialOpacity(loadedAsset, ghostOpacity)
       }
     },
     setVolcanicReaction: (intensity) => {

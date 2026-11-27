@@ -6,6 +6,7 @@ import {
   type RendererRecoveryState,
   type RendererSession,
 } from './game/createRenderer'
+import { PhysicsSession } from './game/physics/PhysicsSession'
 import { QA_MODE } from './qaMode'
 
 const appElement = document.querySelector<HTMLElement>('#app')
@@ -16,6 +17,7 @@ if (appElement === null) {
 
 const app: HTMLElement = appElement
 let rendererSession: RendererSession | null = null
+let physicsSession: PhysicsSession | null = null
 let debugMirrorTimer: number | null = null
 let pendingRecovery: RendererRecoveryState | null = null
 
@@ -106,9 +108,81 @@ function showRendererFailure(
   retry.focus()
 }
 
-function startApplication(recovery?: RendererRecoveryState): void {
+function startPhysicsApplication(): void {
   rendererSession?.dispose()
   rendererSession = null
+  physicsSession?.dispose()
+  physicsSession = null
+  clearTestHook()
+  app.replaceChildren()
+
+  const container = document.createElement('div')
+  container.className = 'physics-canvas-container'
+  container.style.width = '100vw'
+  container.style.height = '100vh'
+  container.style.overflow = 'hidden'
+  container.style.position = 'relative'
+
+  // HUD Overlay
+  const hud = document.createElement('div')
+  hud.className = 'physics-hud'
+  hud.style.position = 'absolute'
+  hud.style.top = '16px'
+  hud.style.left = '16px'
+  hud.style.padding = '14px 20px'
+  hud.style.background = 'rgba(18, 24, 33, 0.82)'
+  hud.style.color = '#fff'
+  hud.style.borderRadius = '12px'
+  hud.style.backdropFilter = 'blur(8px)'
+  hud.style.fontFamily = 'system-ui, sans-serif'
+  hud.style.boxShadow = '0 8px 32px rgba(0,0,0,0.25)'
+  hud.style.zIndex = '100'
+
+  hud.innerHTML = `
+    <div style="font-weight: 700; font-size: 16px; margin-bottom: 4px; color: #ffaa33;">
+      🚗 Bruno Simon 스타일 Rapier3D 물리 놀이터
+    </div>
+    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">
+      <b>WASD / 방향키</b>: 가속 및 조향 &nbsp;|&nbsp; <b>Shift</b>: 드리프트 &nbsp;|&nbsp; <b>Space</b>: 점프
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+      <div id="physics-speed" style="font-size: 14px; font-weight: 600; color: #38bdf8;">속도: 0.0 km/h</div>
+      <a href="?mode=race" style="margin-left: 16px; font-size: 12px; color: #94a3b8; text-decoration: underline;">🐉 드래곤 비행 복귀</a>
+    </div>
+  `
+
+  container.appendChild(hud)
+  app.appendChild(container)
+
+  const speedEl = hud.querySelector<HTMLElement>('#physics-speed')
+
+  physicsSession = new PhysicsSession(container, {
+    onSpeedChange: (speed) => {
+      if (speedEl) {
+        speedEl.textContent = `속도: ${(Math.abs(speed) * 3.6).toFixed(1)} km/h`
+      }
+    },
+  })
+
+  physicsSession.init().catch((err) => {
+    console.error('Failed to init physics session', err)
+  })
+}
+
+function startApplication(recovery?: RendererRecoveryState): void {
+  const urlParams = new URLSearchParams(window.location.search)
+  const isPhysicsMode =
+    urlParams.get('mode') === 'physics' || urlParams.get('mode') === 'bruno'
+
+  if (isPhysicsMode) {
+    startPhysicsApplication()
+    return
+  }
+
+  rendererSession?.dispose()
+  rendererSession = null
+  physicsSession?.dispose()
+  physicsSession = null
   clearTestHook()
   app.replaceChildren()
 

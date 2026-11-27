@@ -1,4 +1,8 @@
 import {
+  cloneAdventureProgress,
+  type AdventureProgress,
+} from '../adventure/adventureState'
+import {
   deriveUnlockedMissionIds,
   getMissionDefinition,
   getNextMissionId,
@@ -83,6 +87,7 @@ export interface RacePersistentState {
   readonly skyLeague: SkyLeagueRecords
   readonly ghosts: SkyLeagueGhosts
   readonly exploration: ExplorationProgress
+  readonly adventure?: AdventureProgress
 }
 
 export interface RaceLeaguePlacement {
@@ -338,6 +343,9 @@ export function createInitialRaceState(
       coinBestTimesMs: { ...options.persistent.coinBestTimesMs },
       skyLeague: cloneSkyLeagueRecords(options.persistent.skyLeague),
       ghosts: cloneSkyLeagueGhosts(options.persistent.ghosts),
+      ...(options.persistent.adventure === undefined
+        ? {}
+        : { adventure: cloneAdventureProgress(options.persistent.adventure) }),
     },
     config,
   }

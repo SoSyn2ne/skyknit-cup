@@ -9,9 +9,9 @@ test('loads the ready race with a live WebGL canvas', async ({ page }) => {
   })
   page.on('pageerror', (error) => errors.push(error.message))
 
-  await page.goto('/')
+  await page.goto('/?mode=race')
 
-  await expect(page).toHaveTitle('하늘매듭배')
+  await expect(page).toHaveTitle('하늘섬 드래곤')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -20,7 +20,7 @@ test('loads the ready race with a live WebGL canvas', async ({ page }) => {
     'data-renderer-ready',
     'true',
   )
-  await expect(page.getByRole('heading', { name: '하늘매듭배' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '하늘섬 드래곤' })).toBeVisible()
   await expect
     .poll(async () => {
       const raw = await page.locator('#app').getAttribute('data-flight-debug')

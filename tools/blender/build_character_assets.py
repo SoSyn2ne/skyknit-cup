@@ -395,7 +395,11 @@ def append_feather_leaf(
                         + (tip_channel - root_channel) * progress
                         for root_channel, tip_channel in zip(root_color, tip_color)
                     )
-                    edge_shade = 0.88 + 0.12 * edge_camber
+                    # A darker vane edge and underside keep overlapping rows
+                    # readable without extra seams, materials or geometry.
+                    edge_shade = (0.68 + 0.32 * edge_camber) * (
+                        1.0 if layer == 0 else 0.78
+                    )
                     colors.append(
                         (
                             color[0] * edge_shade,
@@ -794,10 +798,12 @@ def phoenix_body_color(
 ) -> tuple[float, float, float, float]:
     height = min(1.0, max(0.0, point.z / 5.2))
     breast = math.exp(-((point.x / 0.72) ** 2)) * max(0.0, point.y + 0.15)
+    if point.z < 1.12:
+        return (0.19 + height * 0.28, 0.105 + height * 0.16, 0.060, 1.0)
     return (
-        min(0.92, 0.52 + height * 0.20 + breast * 0.035),
-        min(0.48, 0.075 + height * 0.18 + breast * 0.055),
-        min(0.22, 0.018 + height * 0.085),
+        min(0.94, 0.38 + height * 0.36 + breast * 0.055),
+        min(0.48, 0.035 + height * 0.12 + breast * 0.080),
+        min(0.22, 0.022 + height * 0.032),
         1.0,
     )
 
@@ -834,6 +840,7 @@ def phoenix_head_color(
 def append_phoenix_wing(
     vertices: list[tuple[float, float, float]],
     faces: list[tuple[int, int, int]],
+    colors: list[tuple[float, float, float, float]],
     *,
     side: int,
 ) -> None:
@@ -852,6 +859,10 @@ def append_phoenix_wing(
         ],
         [(0.12, 0.09), (0.105, 0.078), (0.074, 0.054), (0.045, 0.032), (0.025, 0.018)],
         sides=14,
+    )
+    colors.extend(
+        phoenix_feather_color(Vector(point), index)
+        for index, point in enumerate(vertices)
     )
 
     # Four inner primaries stay buried under the middle tier; seven outer
@@ -888,6 +899,9 @@ def append_phoenix_wing(
             surface_normal=(0.0, 1.0, 0.0),
             length_steps=8,
             width_steps=5,
+            colors=colors,
+            root_color=(0.42, 0.042 + index * 0.004, 0.025, 1.0),
+            tip_color=(1.0, 0.60 + index * 0.018, 0.12, 1.0),
         )
 
     # Six inner secondaries disappear below the coverts; four outer tips form a
@@ -923,6 +937,9 @@ def append_phoenix_wing(
             surface_normal=(0.0, 1.0, 0.0),
             length_steps=8,
             width_steps=5,
+            colors=colors,
+            root_color=(0.57, 0.065, 0.022, 1.0),
+            tip_color=(0.96, 0.43 + index * 0.018, 0.06, 1.0),
         )
 
     # Wide coverts hug the spar closely enough to hide it without merging the
@@ -950,6 +967,9 @@ def append_phoenix_wing(
             surface_normal=(0.0, 1.0, 0.0),
             length_steps=8,
             width_steps=4,
+            colors=colors,
+            root_color=(0.38, 0.032, 0.025, 1.0),
+            tip_color=(0.89, 0.28 + index * 0.011, 0.045, 1.0),
         )
 
 
@@ -1067,6 +1087,7 @@ def build_phoenix() -> bpy.types.Object:
 
     chest_vertices: list[tuple[float, float, float]] = []
     chest_faces: list[tuple[int, int, int]] = []
+    chest_colors: list[tuple[float, float, float, float]] = []
     for row in range(5):
         count = 4 + row
         for column in range(count):
@@ -1093,6 +1114,9 @@ def build_phoenix() -> bpy.types.Object:
                 surface_normal=(0.0, 1.0, 0.0),
                 length_steps=6,
                 width_steps=4,
+                colors=chest_colors,
+                root_color=(0.42, 0.055, 0.028, 1.0),
+                tip_color=(0.95, 0.54 - row * 0.060, 0.09, 1.0),
             )
 
     make_mesh(
@@ -1111,7 +1135,7 @@ def build_phoenix() -> bpy.types.Object:
         materials["membrane"],
         rig["root"],
         smooth=False,
-        vertex_color_fn=phoenix_feather_color,
+        vertex_colors=chest_colors,
     )
 
     for side, parent, name in (
@@ -1120,7 +1144,8 @@ def build_phoenix() -> bpy.types.Object:
     ):
         vertices: list[tuple[float, float, float]] = []
         faces: list[tuple[int, int, int]] = []
-        append_phoenix_wing(vertices, faces, side=side)
+        colors: list[tuple[float, float, float, float]] = []
+        append_phoenix_wing(vertices, faces, colors, side=side)
         make_mesh(
             name,
             vertices,
@@ -1128,7 +1153,7 @@ def build_phoenix() -> bpy.types.Object:
             materials["membrane"],
             parent,
             smooth=False,
-            vertex_color_fn=phoenix_feather_color,
+            vertex_colors=colors,
         )
 
     head_vertices: list[tuple[float, float, float]] = []
@@ -1203,6 +1228,7 @@ def build_phoenix() -> bpy.types.Object:
         )
     crown_vertices: list[tuple[float, float, float]] = []
     crown_faces: list[tuple[int, int, int]] = []
+    crown_colors: list[tuple[float, float, float, float]] = []
     crown_specs = (
         (0.00, (0.00, 0.27, 0.28), (0.00, -0.66, 1.02), 0.115),
         (-0.17, (-0.17, 0.18, 0.25), (-0.32, -0.74, 0.88), 0.105),
@@ -1225,6 +1251,9 @@ def build_phoenix() -> bpy.types.Object:
             surface_normal=(0.0, 1.0, 0.0),
             length_steps=7,
             width_steps=4,
+            colors=crown_colors,
+            root_color=(0.46, 0.028, 0.018, 1.0),
+            tip_color=(1.0, 0.65, 0.13, 1.0),
         )
     for side in (-1, 1):
         for index in range(3):
@@ -1249,6 +1278,9 @@ def build_phoenix() -> bpy.types.Object:
                 surface_normal=(0.0, 1.0, 0.0),
                 length_steps=6,
                 width_steps=4,
+                colors=crown_colors,
+                root_color=(0.52, 0.045, 0.025, 1.0),
+                tip_color=(0.97, 0.40, 0.06, 1.0),
             )
     make_mesh(
         "Phoenix_AvianHeadBeak",
@@ -1266,7 +1298,7 @@ def build_phoenix() -> bpy.types.Object:
         materials["membrane"],
         rig["head"],
         smooth=False,
-        vertex_color_fn=phoenix_feather_color,
+        vertex_colors=crown_colors,
     )
 
     jaw_vertices: list[tuple[float, float, float]] = []
@@ -1309,6 +1341,7 @@ def build_phoenix() -> bpy.types.Object:
     for index in range(1, 6):
         vertices: list[tuple[float, float, float]] = []
         faces: list[tuple[int, int, int]] = []
+        colors: list[tuple[float, float, float, float]] = []
         # Every segment extends beyond 1.02 units while the rig advances only
         # 0.78, guaranteeing a hidden overlap instead of visible ring gaps.
         segment_length = 1.10 if index < 5 else 1.06
@@ -1333,6 +1366,10 @@ def build_phoenix() -> bpy.types.Object:
             segment_centers,
             segment_radii,
             sides=12,
+        )
+        colors.extend(
+            phoenix_feather_color(Vector(point), vertex_index)
+            for vertex_index, point in enumerate(vertices)
         )
         if index == 5:
             plume_specs = (
@@ -1374,6 +1411,9 @@ def build_phoenix() -> bpy.types.Object:
                     surface_normal=normal,
                     length_steps=11,
                     width_steps=4,
+                    colors=colors,
+                    root_color=(0.51, 0.045, 0.025, 1.0),
+                    tip_color=(1.0, 0.71, 0.17, 1.0),
                 )
                 split_root = tuple(Vector(root).lerp(Vector(tip), 0.55))
                 split_tip = tuple(Vector(tip) + Vector(split_offset))
@@ -1389,6 +1429,9 @@ def build_phoenix() -> bpy.types.Object:
                     surface_normal=normal,
                     length_steps=5,
                     width_steps=3,
+                    colors=colors,
+                    root_color=(0.81, 0.25, 0.035, 1.0),
+                    tip_color=(1.0, 0.80, 0.25, 1.0),
                 )
         make_mesh(
             f"Phoenix_TailPlumes_{index}",
@@ -1397,7 +1440,7 @@ def build_phoenix() -> bpy.types.Object:
             materials["membrane"],
             rig[f"tail_{index}"],
             smooth=False,
-            vertex_color_fn=phoenix_feather_color,
+            vertex_colors=colors,
         )
 
     finish_character(
@@ -1415,10 +1458,21 @@ def build_phoenix() -> bpy.types.Object:
 def tiger_stripe_color(
     point: Vector, _index: int
 ) -> tuple[float, float, float, float]:
-    dark = (0.02, 0.03, 0.045, 1.0)
-    white = (0.88, 0.91, 0.98, 1.0)
-    phase = point.y * 4.3 + abs(point.x) * 2.5 - point.z * 0.85
-    stripe = abs(math.sin(phase)) < 0.46
+    dark = (0.025, 0.045, 0.072, 1.0)
+    # Curved, tapering bands follow the flank instead of repeating as parallel
+    # rings; soft countershading makes the chest and haunch planes distinct.
+    upper = min(1.0, max(0.0, (point.z - 0.6) / 2.7))
+    flank = min(1.0, abs(point.x) / 1.05)
+    white = (
+        0.91 - upper * 0.15 - flank * 0.07,
+        0.91 - upper * 0.095 - flank * 0.045,
+        0.90 + upper * 0.045,
+        1.0,
+    )
+    phase = (point.y * 4.3 + abs(point.x) * 2.5 - point.z * 0.85
+             + math.sin(point.z * 2.2 + point.y * 1.4) * 0.32)
+    stripe_width = 0.23 + 0.18 * upper
+    stripe = abs(math.sin(phase)) < stripe_width
     side_or_back = abs(point.x) > 0.16 or point.z > 2.22
     limb_band = (
         abs(point.x) > 0.42
@@ -1435,8 +1489,9 @@ def tiger_stripe_color(
 def tiger_head_color(
     point: Vector, _index: int
 ) -> tuple[float, float, float, float]:
-    dark = (0.02, 0.03, 0.045, 1.0)
-    white = (0.88, 0.91, 0.98, 1.0)
+    dark = (0.025, 0.045, 0.072, 1.0)
+    crown = min(1.0, max(0.0, (point.z + 0.1) / 0.65))
+    white = (0.94 - crown * 0.18, 0.93 - crown * 0.105, 0.91 + crown * 0.04, 1.0)
     ax = abs(point.x)
     ear_dark = (
         point.z > 0.33
@@ -1446,7 +1501,7 @@ def tiger_head_color(
     eye_mask = (
         0.12 < ax < 0.46
         and 0.18 < point.z < 0.30
-        and abs(point.y - (0.44 - ax * 0.32)) < 0.028
+        and abs(point.y - (0.44 - ax * 0.32)) < 0.042
     )
     forehead_half_width = 0.045 + max(0.0, 0.34 - point.z) * 0.16
     central = (
@@ -1467,15 +1522,20 @@ def tiger_head_color(
         and abs(point.z - (point.y * 0.55 - 0.14)) < 0.045
     )
     nose = point.y > 0.49 and point.z < 0.055 and ax < 0.235
-    if ear_dark or eye_mask or central or upper_cheek or lower_cheek or nose:
+    forehead_bars = (
+        point.z > 0.20 and -0.18 < point.y < 0.20 and ax < 0.40
+        and abs(math.sin((point.y + ax * 0.34) * 20.0)) < 0.30
+    )
+    if ear_dark or eye_mask or central or forehead_bars or upper_cheek or lower_cheek or nose:
         return dark
     return white
 
 
 def tiger_muzzle_color(
-    _point: Vector, _index: int
+    point: Vector, _index: int
 ) -> tuple[float, float, float, float]:
-    return (0.88, 0.91, 0.98, 1.0)
+    chin = min(1.0, max(0.0, (-point.z - 0.06) / 0.30))
+    return (0.97 - chin * 0.19, 0.94 - chin * 0.14, 0.86 - chin * 0.04, 1.0)
 
 
 def tiger_wing_color(
@@ -1494,6 +1554,7 @@ def tiger_wing_color(
 def append_tiger_wing(
     vertices: list[tuple[float, float, float]],
     faces: list[tuple[int, int, int]],
+    colors: list[tuple[float, float, float, float]],
     *,
     side: int,
 ) -> None:
@@ -1517,6 +1578,10 @@ def append_tiger_wing(
             (0.04, 0.03),
         ],
         sides=16,
+    )
+    colors.extend(
+        tiger_wing_color(Vector(point), index)
+        for index, point in enumerate(vertices)
     )
 
     for index in range(10):
@@ -1542,6 +1607,9 @@ def append_tiger_wing(
             surface_normal=(0.0, 1.0, 0.0),
             length_steps=8,
             width_steps=5,
+            colors=colors,
+            root_color=(0.79, 0.85, 0.92, 1.0),
+            tip_color=(0.08 + index * 0.008, 0.14 + index * 0.009, 0.22 + index * 0.012, 1.0),
         )
 
     for index in range(8):
@@ -1567,6 +1635,9 @@ def append_tiger_wing(
             surface_normal=(0.0, 1.0, 0.0),
             length_steps=8,
             width_steps=5,
+            colors=colors,
+            root_color=(0.50, 0.61, 0.73, 1.0),
+            tip_color=(0.88, 0.92, 0.96, 1.0),
         )
     for index in range(10):
         root = (
@@ -1591,6 +1662,9 @@ def append_tiger_wing(
             surface_normal=(0.0, 1.0, 0.0),
             length_steps=7,
             width_steps=4,
+            colors=colors,
+            root_color=(0.41, 0.52, 0.65, 1.0),
+            tip_color=(0.96, 0.96, 0.92, 1.0),
         )
 
 
@@ -1880,7 +1954,7 @@ def build_white_tiger() -> bpy.types.Object:
         body_faces,
         materials["base"],
         rig["root"],
-        smooth=False,
+        smooth=True,
         vertex_colors=body_colors,
     )
 
@@ -1890,7 +1964,8 @@ def build_white_tiger() -> bpy.types.Object:
     ):
         vertices: list[tuple[float, float, float]] = []
         faces: list[tuple[int, int, int]] = []
-        append_tiger_wing(vertices, faces, side=side)
+        colors: list[tuple[float, float, float, float]] = []
+        append_tiger_wing(vertices, faces, colors, side=side)
         make_mesh(
             name,
             vertices,
@@ -1898,7 +1973,7 @@ def build_white_tiger() -> bpy.types.Object:
             materials["membrane"],
             parent,
             smooth=False,
-            vertex_color_fn=tiger_wing_color,
+            vertex_colors=colors,
         )
 
     head_vertices: list[tuple[float, float, float]] = []
@@ -1960,8 +2035,8 @@ def build_white_tiger() -> bpy.types.Object:
     add_ellipsoid_part(
         head_vertices,
         head_faces,
-        (0.0, 0.575, -0.06),
-        (0.20, 0.080, 0.105),
+        (0.0, 0.575, -0.035),
+        (0.18, 0.080, 0.078),
         segments=14,
         rings=7,
     )
@@ -2055,7 +2130,7 @@ def build_white_tiger() -> bpy.types.Object:
             vertices,
             faces,
             (0.0, 0.0, 0.0),
-            (0.105, 0.034, 0.035),
+            (0.105, 0.043, 0.050),
             segments=14,
             rings=7,
             rotation=(0.0, -side * 0.14, 0.0),

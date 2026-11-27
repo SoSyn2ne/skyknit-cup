@@ -96,7 +96,7 @@ test('keeps the prologue accessible and the paused mission state intact at every
     height: expectedViewport[1],
   }
 
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',

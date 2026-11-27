@@ -53,6 +53,8 @@ export interface ExplorationHudView {
   readonly selectedMissionId: MissionId
   readonly journey: FestivalJourneyHudView
   readonly discoveryNotice: string | null
+  readonly adventureActive?: boolean
+  readonly adventureContext?: boolean
 }
 
 export interface ExplorationHudActions {
@@ -602,7 +604,7 @@ export function createExplorationHud(
         view.canLand,
         view.currentRegionId,
       )
-      context.hidden = label === null || view.paused || view.mapOpen
+      context.hidden = label === null || view.paused || view.mapOpen || view.adventureContext === true
       context.textContent = label ?? ''
       context.setAttribute('aria-label', label ?? '상황 동작')
       map.hidden = !view.mapOpen || view.paused
@@ -632,7 +634,7 @@ export function createExplorationHud(
       controls.hidden = view.paused
       region.hidden = view.paused
       coinRun.hidden = view.paused
-      journey.hidden = view.paused
+      journey.hidden = view.paused || view.adventureActive === true
       destination.hidden = view.paused || guidance === null
     },
     dispose: () => root.remove(),

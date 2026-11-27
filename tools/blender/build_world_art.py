@@ -44,10 +44,16 @@ def make_material(
     roughness: float,
     metallic: float = 0.0,
     emission_strength: float = 0.0,
+    *,
+    surface: str = "paint",
+    cap_color: tuple[float, float, float] | None = None,
 ) -> bpy.types.Material:
     material = bpy.data.materials.new(name)
     material.diffuse_color = color
     material["vertex_color"] = list(color)
+    material["surface"] = surface
+    if cap_color is not None:
+        material["cap_color"] = list(cap_color)
     material.use_nodes = True
     shader = material.node_tree.nodes.get("Principled BSDF")
     if shader is not None:
@@ -68,11 +74,14 @@ def make_material(
 
 
 def apply_vertex_color(mesh: bpy.types.Mesh, material: bpy.types.Material) -> None:
+    if material.get("surface", "paint") != "paint":
+        apply_stone_vertex_color(mesh, material)
+        return
     color = tuple(material.get("vertex_color", (1.0, 1.0, 1.0, 1.0)))
     attribute = mesh.color_attributes.get("WorldColor")
     if attribute is None:
         attribute = mesh.color_attributes.new(
-            name="WorldColor", type="FLOAT_COLOR", domain="POINT"
+            name="WorldColor", type="FLOAT_COLOR", domain="CORNER"
         )
     if mesh.vertices:
         z_values = [vertex.co.z for vertex in mesh.vertices]
@@ -81,7 +90,8 @@ def apply_vertex_color(mesh: bpy.types.Mesh, material: bpy.types.Material) -> No
     else:
         z_min = 0.0
         z_span = 1.0
-    for index, item in enumerate(attribute.data):
+    for loop_index, item in enumerate(attribute.data):
+        index = mesh.loops[loop_index].vertex_index
         vertex = mesh.vertices[index]
         height = (vertex.co.z - z_min) / z_span
         facet = 0.5 + 0.5 * math.sin(
@@ -98,6 +108,55 @@ def apply_vertex_color(mesh: bpy.types.Mesh, material: bpy.types.Material) -> No
             min(1.0, color[2] * shade * (1.04 - facet * 0.05)),
             color[3],
         )
+    mesh.color_attributes.active_color = attribute
+
+
+def apply_stone_vertex_color(
+    mesh: bpy.types.Mesh, material: bpy.types.Material
+) -> None:
+    """Bake strata and exposed caps into existing faces, without new draw calls."""
+    color = tuple(material["vertex_color"])
+    cap_color = tuple(material.get("cap_color", color[:3]))
+    surface = material["surface"]
+    attribute = mesh.color_attributes.new(
+        name="WorldColor", type="FLOAT_COLOR", domain="CORNER"
+    )
+    z_values = [vertex.co.z for vertex in mesh.vertices]
+    z_min = min(z_values, default=0.0)
+    z_span = max(max(z_values, default=1.0) - z_min, 1e-5)
+    strata = (0.58, 0.77, 0.66, 0.88, 0.79, 0.96)
+    for polygon in mesh.polygons:
+        center = polygon.center
+        height = (center.z - z_min) / z_span
+        normal = polygon.normal
+        # Neighboring faces share broad mineral bands instead of vertex noise.
+        facet = 0.5 + 0.5 * math.sin(
+            normal.x * 4.1 + normal.y * 3.7 + center.x * 0.041 + center.y * 0.033
+        )
+        if surface == "terrain":
+            band = min(len(strata) - 1, int(height * len(strata)))
+            shade = strata[band] + facet * 0.13
+        else:
+            shade = 0.72 + height * 0.20 + facet * 0.12
+        underside = max(0.0, -normal.z)
+        shade *= 1.0 - underside * 0.30
+        cap = max(0.0, normal.z) * min(1.0, max(0.0, (height - 0.58) / 0.26))
+        if surface == "stone":
+            cap *= 0.42
+        warmth = 0.94 + facet * 0.10
+        tint = (warmth, 1.0, 1.06 - facet * 0.08)
+        for loop_index in polygon.loop_indices:
+            vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
+            # A quiet within-face gradient keeps broad caps from looking flat.
+            grain = 0.98 + 0.025 * math.sin(vertex.co.x * 0.19 + vertex.co.y * 0.23)
+            attribute.data[loop_index].color = (
+                *(
+                    min(1.0, ((1.0 - cap) * color[channel] * shade * tint[channel]
+                              + cap * cap_color[channel]) * grain)
+                    for channel in range(3)
+                ),
+                color[3],
+            )
     mesh.color_attributes.active_color = attribute
 
 
@@ -1788,10 +1847,12 @@ def main() -> None:
     clear_file()
     materials = {
         "festival_earth": make_material(
-            "M_Festival_Earth", (0.17, 0.19, 0.24, 1.0), 0.96
+            "M_Festival_Earth", (0.20, 0.23, 0.28, 1.0), 0.96,
+            surface="terrain", cap_color=(0.17, 0.31, 0.19),
         ),
         "festival_stone": make_material(
-            "M_Festival_Stone", (0.38, 0.32, 0.40, 1.0), 0.74
+            "M_Festival_Stone", (0.43, 0.36, 0.41, 1.0), 0.74,
+            surface="stone", cap_color=(0.64, 0.55, 0.43),
         ),
         "gold": make_material(
             "M_World_Gold", (0.96, 0.57, 0.10, 1.0), 0.34, 0.14, 0.10
@@ -1803,10 +1864,12 @@ def main() -> None:
             "M_World_Charcoal", (0.06, 0.08, 0.09, 1.0), 0.88
         ),
         "canyon_rock": make_material(
-            "M_Canyon_Rock", (0.42, 0.19, 0.095, 1.0), 0.94
+            "M_Canyon_Rock", (0.47, 0.20, 0.09, 1.0), 0.94,
+            surface="terrain", cap_color=(0.57, 0.34, 0.16),
         ),
         "canyon_strata": make_material(
-            "M_Canyon_Strata", (0.57, 0.31, 0.14, 1.0), 0.88
+            "M_Canyon_Strata", (0.62, 0.34, 0.16, 1.0), 0.88,
+            surface="terrain", cap_color=(0.66, 0.44, 0.25),
         ),
         "wood": make_material(
             "M_Canyon_Wood", (0.20, 0.10, 0.055, 1.0), 0.9
@@ -1815,10 +1878,12 @@ def main() -> None:
             "M_World_Rune", (0.08, 0.76, 0.68, 1.0), 0.3, 0.04, 0.32
         ),
         "ruin_stone": make_material(
-            "M_Ruin_Stone", (0.58, 0.68, 0.69, 1.0), 0.78
+            "M_Ruin_Stone", (0.57, 0.69, 0.72, 1.0), 0.78,
+            surface="stone", cap_color=(0.49, 0.62, 0.45),
         ),
         "ruin_dark": make_material(
-            "M_Ruin_Dark", (0.25, 0.31, 0.34, 1.0), 0.92
+            "M_Ruin_Dark", (0.24, 0.32, 0.38, 1.0), 0.92,
+            surface="terrain", cap_color=(0.28, 0.40, 0.31),
         ),
         "ruin_gold": make_material(
             "M_Ruin_Gold", (0.84, 0.61, 0.20, 1.0), 0.42, 0.10, 0.08

@@ -11,7 +11,7 @@ async function readSnapshot(page: Page): Promise<FlightDebugSnapshot | null> {
 test('frames the RC3 dragon closely on the ready screen', async ({
   page,
 }, testInfo) => {
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -63,7 +63,7 @@ test('frames the RC3 dragon closely on the ready screen', async ({
 test('keeps the dragon, wind threads, and active gate readable in flight', async ({
   page,
 }, testInfo) => {
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -136,7 +136,7 @@ test('keeps the dragon, wind threads, and active gate readable in flight', async
 test('drives the RC3 boost and collision expressions', async ({
   page,
 }, testInfo) => {
-  await page.goto('/?qaBoost=1&qaCollision=1')
+  await page.goto('/?mode=race&qaBoost=1&qaCollision=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',

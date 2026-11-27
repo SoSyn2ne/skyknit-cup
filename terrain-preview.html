@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#102a2e" />
+    <link rel="icon" href="data:," />
+    <title>Terrain3D 지형 실험실 · 하늘섬 드래곤</title>
+  </head>
+  <body>
+    <main id="terrain-app">
+      <canvas
+        tabindex="0"
+        role="img"
+        aria-label="Terrain3D GPU 클립맵 지형 미리보기"
+        aria-describedby="terrain-help"
+      ></canvas>
+
+      <header class="terrain-header">
+        <div class="terrain-title">
+          <h1>하늘섬 드래곤 · Terrain3D 실험실</h1>
+          <p id="terrain-metrics" class="terrain-metrics" aria-live="off">
+            GPU Clipmap 5단 · 지형 1 DC · 32,768△
+          </p>
+        </div>
+        <div class="terrain-header-actions">
+          <button
+            id="terrain-inspector-toggle"
+            type="button"
+            aria-label="지형 브러시 및 셰이더 설정"
+            title="지형 브러시 및 셰이더 설정"
+            aria-expanded="false"
+            aria-controls="terrain-inspector"
+          >⚙</button>
+          <a
+            class="terrain-home"
+            href="/"
+            title="게임으로 돌아가기"
+            aria-label="게임으로 돌아가기"
+          >↗</a>
+        </div>
+      </header>
+
+      <aside
+        id="terrain-inspector"
+        class="terrain-inspector"
+        aria-label="Terrain3D 설정 패널"
+        hidden
+      >
+        <div class="inspector-head">
+          <h2>Terrain3D 제어</h2>
+          <button
+            id="terrain-inspector-close"
+            type="button"
+            aria-label="설정 닫기"
+            title="설정 닫기"
+          >✕</button>
+        </div>
+
+        <section class="inspector-section" aria-label="도구 모드">
+          <h3>도구 모드</h3>
+          <div class="segmented" role="group" aria-label="탐색 또는 브러시 편집">
+            <button type="button" data-tool="orbit" aria-pressed="true">탐색</button>
+            <button type="button" data-tool="sculpt" aria-pressed="false">브러시 편집</button>
+          </div>
+        </section>
+
+        <section id="brush-controls" class="inspector-section" aria-label="지형 브러시" hidden>
+          <h3>브러시 종류</h3>
+          <div class="brush-grid" role="group" aria-label="브러시 모드">
+            <button type="button" data-brush="raise" aria-pressed="true">융기</button>
+            <button type="button" data-brush="lower" aria-pressed="false">침식</button>
+            <button type="button" data-brush="smooth" aria-pressed="false">다듬기</button>
+            <button type="button" data-brush="flatten" aria-pressed="false">평탄</button>
+            <button type="button" data-brush="paint" aria-pressed="false">페인트</button>
+            <button type="button" data-brush="autoshader" aria-pressed="false">오토복원</button>
+            <button type="button" data-brush="hole" aria-pressed="false">구멍</button>
+          </div>
+
+          <label id="paint-slot-row" class="slider-row" hidden>
+            <span>페인트 재질</span>
+            <select id="paint-slot" aria-label="페인트 재질 슬롯">
+              <option value="0">0 · 해안 / 분지</option>
+              <option value="1">1 · 초원 / 대지</option>
+              <option value="2">2 · 고원 / 능선</option>
+              <option value="3" selected>3 · 절벽 암반</option>
+              <option value="4">4 · 설원 / 석회</option>
+            </select>
+          </label>
+
+          <label class="slider-row">
+            <span>브러시 반경 <strong id="val-brush-radius">24m</strong></span>
+            <input id="slider-brush-radius" type="range" min="8" max="64" step="2" value="24" />
+          </label>
+        </section>
+
+        <section class="inspector-section" aria-label="CC0 외부 에셋 레이어">
+          <h3>CC0 에셋 레이어</h3>
+          <div class="segmented" role="group" aria-label="PBR 텍스처 및 3D 프롭 토글">
+            <button id="toggle-pbr" type="button" aria-pressed="true">PBR 텍스처</button>
+            <button id="toggle-props" type="button" aria-pressed="true">3D 프롭·드래곤</button>
+          </div>
+        </section>
+
+        <section class="inspector-section" aria-label="Autoshader 파라미터">
+          <h3>Autoshader (경사 · 고도)</h3>
+          <label class="slider-row">
+            <span>절벽 경사 임계값 <strong id="val-auto-slope">0.24</strong></span>
+            <input id="slider-auto-slope" type="range" min="0.10" max="0.70" step="0.02" value="0.24" />
+          </label>
+          <label class="slider-row">
+            <span>고산 지대 고도 <strong id="val-auto-height">62m</strong></span>
+            <input id="slider-auto-height" type="range" min="20" max="95" step="1" value="62" />
+          </label>
+          <label class="slider-row">
+            <span>지형 높이 배율 <strong id="val-height-scale">1.00×</strong></span>
+            <input id="slider-height-scale" type="range" min="0.40" max="1.80" step="0.05" value="1.00" />
+          </label>
+        </section>
+
+        <div class="inspector-footer">
+          <button id="terrain-regenerate" type="button">지형 초기화</button>
+        </div>
+      </aside>
+
+      <div class="terrain-state" role="status" aria-live="polite" hidden>
+        <p id="terrain-status"></p>
+        <button id="terrain-retry" type="button" hidden>다시 시도</button>
+      </div>
+
+      <footer class="terrain-footer">
+        <p id="terrain-help">드래그로 회전 · WASD/방향키로 클립맵 이동 · ⚙에서 브러시 편집</p>
+        <div class="terrain-toolbar" aria-label="Terrain3D 보기 도구">
+          <div class="terrain-views" role="group" aria-label="시각화 모드">
+            <button type="button" data-view="lit" aria-pressed="true">렌더</button>
+            <button type="button" data-view="lod" aria-pressed="false">LOD</button>
+            <button type="button" data-view="slope" aria-pressed="false">경사</button>
+            <button type="button" data-view="normals" aria-pressed="false">법선</button>
+          </div>
+          <label class="terrain-preset">
+            <span class="sr-only">지형 프리셋</span>
+            <select id="terrain-preset" aria-label="지형 프리셋">
+              <option value="sky-highlands">하늘 고원</option>
+              <option value="wind-canyon">바람 협곡</option>
+              <option value="volcanic-caldera">화산 칼데라</option>
+            </select>
+          </label>
+          <div class="terrain-actions">
+            <button
+              id="terrain-motion"
+              type="button"
+              aria-label="자동 공전 일시정지"
+              title="자동 공전 일시정지"
+              aria-pressed="true"
+            >Ⅱ</button>
+            <button
+              id="terrain-wireframe"
+              type="button"
+              aria-label="와이어프레임"
+              title="와이어프레임"
+              aria-pressed="false"
+            >◇</button>
+            <button
+              id="terrain-reset-cam"
+              type="button"
+              aria-label="시점 초기화"
+              title="시점 초기화"
+            >↺</button>
+          </div>
+        </div>
+      </footer>
+    </main>
+    <script type="module" src="/src/terrainPreview.ts"></script>
+  </body>
+</html>

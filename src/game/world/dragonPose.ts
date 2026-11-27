@@ -17,24 +17,24 @@ export interface DragonPoseInput {
 }
 
 export interface DragonPoseState {
-  readonly wingMode?: GuardianWingMode
+  readonly wingMode: GuardianWingMode
   readonly shoulderBankRadians: number
   readonly bodyBankRadians: number
-  readonly bodyPitchRadians?: number
+  readonly bodyPitchRadians: number
   readonly headPitchRadians: number
-  readonly headYawRadians?: number
+  readonly headYawRadians: number
   readonly wingFoldRadians: number
-  readonly wingSpreadRadians?: number
+  readonly wingSpreadRadians: number
   readonly wingFlapRadians: number
-  readonly boostLaunchRadians?: number
+  readonly boostLaunchRadians: number
   readonly tailYawRadians: readonly number[]
-  readonly tailPitchRadians?: readonly number[]
+  readonly tailPitchRadians: readonly number[]
   readonly recoilRadians: number
   readonly breathScale: number
   readonly blinkAmount: number
   readonly jawOpenRadians: number
-  readonly boostLaunchRemainingSeconds?: number
-  readonly wasBoosting?: boolean
+  readonly boostLaunchRemainingSeconds: number
+  readonly wasBoosting: boolean
 }
 
 interface GuardianPoseProfile {
@@ -232,12 +232,13 @@ export function stepDragonPose(
   input: DragonPoseInput,
   dt: number,
 ): DragonPoseState {
-  if (!Number.isFinite(dt) || dt <= 0) return state
+  if (!Number.isFinite(dt) || dt <= 0) {
+    return state
+  }
 
   const profile = getPoseProfile(input)
   const wingMode = resolveWingMode(input)
   const shoulderBankRadians = finiteOrZero(input.bankRadians)
-  const pitchRadians = finiteOrZero(input.pitchRadians)
   const bodyBankRadians = follow(
     state.bodyBankRadians,
     shoulderBankRadians,
@@ -245,19 +246,19 @@ export function stepDragonPose(
     dt,
   )
   const bodyPitchRadians = follow(
-    state.bodyPitchRadians ?? 0,
-    pitchRadians * profile.bodyPitchScale,
+    state.bodyPitchRadians,
+    finiteOrZero(input.pitchRadians) * profile.bodyPitchScale,
     profile.bodyFollowRate,
     dt,
   )
   const headPitchRadians = follow(
     state.headPitchRadians,
-    pitchRadians * 0.35,
+    finiteOrZero(input.pitchRadians) * 0.35,
     profile.headFollowRate,
     dt,
   )
   const headYawRadians = follow(
-    state.headYawRadians ?? 0,
+    state.headYawRadians,
     shoulderBankRadians * profile.headYawScale,
     profile.headFollowRate,
     dt,
@@ -269,47 +270,32 @@ export function stepDragonPose(
     dt,
   )
   const wingSpreadRadians = follow(
-    state.wingSpreadRadians ?? 0,
+    state.wingSpreadRadians,
     profile.wingSpreadTarget[wingMode],
     8,
     dt,
   )
-  const boostStarted = input.isBoosting && !state.wasBoosting
-  const boostLaunchRemainingSeconds = input.isBoosting
-    ? boostStarted
-      ? BOOST_LAUNCH_DURATION_SECONDS
-      : Math.max(0, (state.boostLaunchRemainingSeconds ?? 0) - dt)
-    : 0
-  const launchProgress =
-    1 - boostLaunchRemainingSeconds / BOOST_LAUNCH_DURATION_SECONDS
-  const boostLaunchRadians =
-    boostLaunchRemainingSeconds > 0
-      ? Math.sin(Math.max(0, Math.min(1, launchProgress)) * Math.PI) *
-        profile.boostLaunchAmplitude
-      : 0
-  const animationSeconds = Math.max(0, finiteOrZero(input.animationSeconds))
-  const wingFlapRadians =
-    Math.sin(
-      animationSeconds * Math.PI * 2 * profile.flapFrequency +
-        profile.flapPhaseRadians,
-    ) * profile.flapAmplitude[wingMode]
   const tailYawRadians: number[] = []
   const tailPitchRadians: number[] = []
-  let yawTarget = -shoulderBankRadians * 0.72
-  let pitchTarget = pitchRadians * profile.tailPitchScale
+  let target = -shoulderBankRadians * 0.72
 
   for (const [index, rate] of profile.tailFollowRates.entries()) {
-    const yaw = follow(state.tailYawRadians[index] ?? 0, yawTarget, rate, dt)
-    const pitch = follow(
-      state.tailPitchRadians?.[index] ?? 0,
-      pitchTarget,
+    const value = follow(
+      state.tailYawRadians[index] ?? 0,
+      target,
       rate,
       dt,
     )
-    tailYawRadians.push(yaw)
-    tailPitchRadians.push(pitch)
-    yawTarget = yaw
-    pitchTarget = pitch
+    tailYawRadians.push(value)
+    target = value
+
+    const pitchValue = follow(
+      state.tailPitchRadians[index] ?? 0,
+      bodyPitchRadians * profile.tailPitchScale,
+      rate,
+      dt,
+    )
+    tailPitchRadians.push(pitchValue)
   }
 
   const recoilRadians = follow(
@@ -318,6 +304,25 @@ export function stepDragonPose(
     18,
     dt,
   )
+  const animationSeconds = Math.max(0, finiteOrZero(input.animationSeconds))
+  const wingFlapRadians = Math.sin(
+    animationSeconds * Math.PI * 2 * profile.flapFrequency +
+      profile.flapPhaseRadians,
+  ) * profile.flapAmplitude[wingMode]
+  const boostJustStarted = input.isBoosting && !state.wasBoosting
+  const boostLaunchRemainingSeconds = input.isBoosting
+    ? boostJustStarted
+      ? Math.max(0, BOOST_LAUNCH_DURATION_SECONDS - dt)
+      : Math.max(0, state.boostLaunchRemainingSeconds - dt)
+    : 0
+  const boostLaunchElapsedSeconds =
+    BOOST_LAUNCH_DURATION_SECONDS - boostLaunchRemainingSeconds
+  const boostLaunchRadians =
+    boostLaunchRemainingSeconds > 0
+      ? Math.sin(
+          (boostLaunchElapsedSeconds / BOOST_LAUNCH_DURATION_SECONDS) * Math.PI,
+        ) * profile.boostLaunchAmplitude
+      : 0
   const breathScale =
     1 +
     Math.sin(animationSeconds * Math.PI * 2 * profile.breathFrequency) *

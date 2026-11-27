@@ -429,13 +429,16 @@ def _add_lava_channel(
 def _build_materials() -> dict[str, bpy.types.Material]:
     return {
         "obsidian": world.make_material(
-            "M_Volcanic_Obsidian", (0.045, 0.078, 0.118, 1.0), 0.24, 0.58
+            "M_Volcanic_Obsidian", (0.073, 0.095, 0.16, 1.0), 0.29, 0.46,
+            surface="terrain", cap_color=(0.15, 0.13, 0.19),
         ),
         "basalt": world.make_material(
-            "M_Volcanic_Basalt", (0.038, 0.022, 0.031, 1.0), 0.80, 0.12
+            "M_Volcanic_Basalt", (0.085, 0.048, 0.064, 1.0), 0.84, 0.08,
+            surface="terrain", cap_color=(0.19, 0.105, 0.095),
         ),
         "ruin": world.make_material(
-            "M_Volcanic_Ruin", (0.27, 0.33, 0.34, 1.0), 0.70, 0.10
+            "M_Volcanic_Ruin", (0.30, 0.37, 0.40, 1.0), 0.74, 0.08,
+            surface="stone", cap_color=(0.43, 0.48, 0.43),
         ),
         "cooling": world.make_material(
             "M_Volcanic_Cooling", (0.025, 0.94, 0.84, 1.0), 0.20, 0.12, 1.65

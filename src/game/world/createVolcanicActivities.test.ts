@@ -88,6 +88,31 @@ describe('volcanic activity visuals', () => {
     expect(visual.debugSnapshot().triangles).toBeLessThanOrEqual(220)
   })
 
+  it('primes the first lava-wave draw invisibly before active gameplay', () => {
+    const scene = new THREE.Scene()
+    const visual = createVolcanicActivities(scene, 'high')
+    const telegraph = sampleVolcanicHazards(0, 80741)
+
+    visual.update(telegraph, 0, true, true)
+    const lavaWave = scene.getObjectByName(
+      'M39_VolcanicLavaWave',
+    ) as THREE.InstancedMesh
+    const material = lavaWave.material as THREE.MeshBasicMaterial
+    expect(lavaWave.count).toBe(0)
+    expect(lavaWave.visible).toBe(false)
+
+    visual.primeFirstLavaWaveDraw()
+
+    expect(lavaWave.count).toBe(40)
+    expect(lavaWave.visible).toBe(true)
+    expect(material.opacity).toBe(0)
+
+    visual.update(telegraph, 0, true, true)
+    expect(lavaWave.count).toBe(0)
+    expect(lavaWave.visible).toBe(false)
+    expect(material.opacity).toBe(0.92)
+  })
+
   it('changes only the hazard presentation, never its collision contract', () => {
     const scene = new THREE.Scene()
     const visual = createVolcanicActivities(scene, 'high')

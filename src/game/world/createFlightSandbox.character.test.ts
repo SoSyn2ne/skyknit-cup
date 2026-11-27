@@ -7,6 +7,7 @@ const dragonFactoryMock = vi.hoisted(() => ({
 
 vi.mock('./createDragon', () => ({
   createDragon: (...args: unknown[]) => dragonFactoryMock.create(...args),
+  GHOST_DRAGON_VISUAL_SPEC: { opacity: 0.32 },
 }))
 
 vi.mock('./createWorld', () => ({
@@ -19,6 +20,7 @@ vi.mock('./createWorld', () => ({
 
 import { resolveRenderQuality } from '../quality/qualityPolicy'
 import type { CharacterLoadout } from '../customization/characterCatalog'
+import { createInitialFlightState } from '../flight/flightModel'
 import {
   createFlightSandbox,
   type FlightSandboxPalette,
@@ -131,6 +133,50 @@ describe('Milestone 38 transactional guardian visuals', () => {
       loadout: WHITE_TIGER_LOADOUT,
     })
     expect(scene.children).toContain(restored.movementRoot)
+  })
+
+  it('uses the selected guardian profile for visual poses without changing the flight state', async () => {
+    const phoenix = createMockDragon(
+      'M41_PhoenixGuardian',
+      Promise.resolve('glb'),
+    )
+    const tiger = createMockDragon(
+      'M41_TigerGuardian',
+      Promise.resolve('glb'),
+    )
+    dragonFactoryMock.create
+      .mockReturnValueOnce(phoenix)
+      .mockReturnValueOnce(tiger)
+    const scene = new THREE.Scene()
+    const sandbox = createSandbox(scene, PHOENIX_LOADOUT)
+    const flight = {
+      ...createInitialFlightState(),
+      bankRadians: 0.34,
+      pitchRadians: 0.24,
+    }
+    const flightBefore = structuredClone(flight)
+
+    await sandbox.ready
+    sandbox.step(flight, 1 / 60, 1 / 60, 0, 0, 'race')
+    const phoenixPose = phoenix.update.mock.calls.at(-1)?.[1]
+
+    await expect(sandbox.setCharacterLoadout(WHITE_TIGER_LOADOUT)).resolves.toBe(
+      'glb',
+    )
+    sandbox.step(flight, 2 / 60, 1 / 60, 0, 0, 'race')
+    const tigerPose = tiger.update.mock.calls.at(-1)?.[1]
+
+    expect(phoenixPose).toMatchObject({ wingMode: 'climb' })
+    expect(tigerPose).toMatchObject({ wingMode: 'climb' })
+    expect(tigerPose.wingFlapRadians).not.toBeCloseTo(
+      phoenixPose.wingFlapRadians,
+      6,
+    )
+    expect(tigerPose.tailYawRadians[0]).not.toBeCloseTo(
+      phoenixPose.tailYawRadians[0],
+      6,
+    )
+    expect(flight).toEqual(flightBefore)
   })
 
   it('lets only the latest completed load request replace the current visual', async () => {

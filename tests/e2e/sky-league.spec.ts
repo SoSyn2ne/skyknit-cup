@@ -54,7 +54,7 @@ async function readStoredSettings(
 }
 
 async function openQaCourse(page: Page): Promise<void> {
-  await page.goto('/?qaCourse=1')
+  await page.goto('/?mode=race&qaCourse=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -144,7 +144,7 @@ test.describe('Sky League offline record competition', () => {
     const stored = await readStoredSettings(page)
     expect(stored).not.toBeNull()
     expect(stored).toMatchObject({
-      version: 11,
+      version: 12,
       bestTimeMs: finalElapsedMs,
       missionGrades: { [FIRST_MISSION_ID]: 'gold' },
       skyLeague: {
@@ -207,7 +207,7 @@ test.describe('Sky League offline record competition', () => {
   test('saves a completed regional coin run to its v11 Top 10 board and ghost slot', async ({
     page,
   }) => {
-    await page.goto('/')
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',
@@ -224,7 +224,7 @@ test.describe('Sky League offline record competition', () => {
     expect(completedTime).not.toBeNull()
     const stored = await readStoredSettings(page)
     expect(stored).toMatchObject({
-      version: 11,
+      version: 12,
       coinBestTimesMs: { [FESTIVAL_REGION_ID]: completedTime },
       skyLeague: {
         coinTop10Ms: { [FESTIVAL_REGION_ID]: [completedTime] },
@@ -239,7 +239,7 @@ test.describe('Sky League offline record competition', () => {
   test('replays the regional coin ghost and reports a stable second-place tie', async ({
     page,
   }) => {
-    await page.goto('/')
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',
@@ -355,7 +355,7 @@ test.describe('Sky League offline record competition', () => {
 })
 
 test.describe('Sky League v7 migration', () => {
-  test('migrates records and Festival discoveries to v11 without fabrication', async ({
+  test('migrates records and Festival discoveries to v12 without fabrication', async ({
     page,
   }, testInfo) => {
     test.skip(
@@ -391,7 +391,7 @@ test.describe('Sky League v7 migration', () => {
         },
       },
     )
-    await page.goto('/')
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',
@@ -399,7 +399,7 @@ test.describe('Sky League v7 migration', () => {
 
     const stored = await readStoredSettings(page)
     expect(stored).toMatchObject({
-      version: 11,
+      version: 12,
       bestTimeMs: 88_000,
       missionGrades: { 'time-trial': 'silver' },
       coinBestTimesMs: { [FESTIVAL_REGION_ID]: 14_500 },
@@ -430,7 +430,7 @@ test.describe('Sky League responsive surfaces', () => {
       'Minimum viewport contract runs once on its target profile',
     )
     await page.addInitScript((key) => localStorage.removeItem(key), SETTINGS_KEY)
-    await page.goto('/')
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',

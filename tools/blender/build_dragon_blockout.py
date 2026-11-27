@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import json
 import math
+import sys
 from pathlib import Path
 
 import bpy
@@ -18,10 +20,10 @@ REFERENCE_PATH = (
     / "skyknit-dragon-turnaround-v01.png"
 )
 BLEND_PATH = (
-    ROOT / "assets" / "source" / "dragon" / "skyknit-dragon-v07.blend"
+    ROOT / "assets" / "source" / "dragon" / "skyknit-dragon-v08.blend"
 )
-RENDER_DIR = ROOT / "artifacts" / "dragon-v07" / "turntable"
-REPORT_PATH = ROOT / "artifacts" / "dragon-v07" / "dragon-v07-report.json"
+RENDER_DIR = ROOT / "artifacts" / "dragon-v08" / "turntable"
+REPORT_PATH = ROOT / "artifacts" / "dragon-v08" / "dragon-v08-report.json"
 
 DRAGON_COLLECTION_NAME = "DRAGON_BLOCKOUT"
 ENV_COLLECTION_NAME = "STUDIO_ENVIRONMENT"
@@ -812,10 +814,22 @@ def add_wing_membrane(
     if side < 0:
         surface_faces = [tuple(reversed(face)) for face in surface_faces]
 
+    # Camber each membrane panel between the existing finger bones. Keeping the
+    # perimeter fixed preserves the wing silhouette and the runtime wing pivots.
+    panel_points = list(points)
+    cambered_faces = []
+    for face in surface_faces:
+        center = sum((Vector(points[index]) for index in face), Vector()) / 3.0
+        center.z += 0.16
+        center_index = len(panel_points)
+        panel_points.append(tuple(center))
+        for edge_index in range(3):
+            cambered_faces.append((face[edge_index], face[(edge_index + 1) % 3], center_index))
+    surface_faces = cambered_faces
     half_thickness = 0.032
-    top = [(x, y, z + half_thickness) for x, y, z in points]
-    bottom = [(x, y, z - half_thickness) for x, y, z in points]
-    offset = len(points)
+    top = [(x, y, z + half_thickness) for x, y, z in panel_points]
+    bottom = [(x, y, z - half_thickness) for x, y, z in panel_points]
+    offset = len(panel_points)
     faces = list(surface_faces)
     faces.extend(
         tuple(index + offset for index in reversed(face))
@@ -828,15 +842,23 @@ def add_wing_membrane(
             (current, following, following + offset, current + offset)
         )
 
-    add_mesh(
+    membrane = add_mesh(
         f"Wing_{label}_Membrane",
         top + bottom,
         faces,
         material,
         collection,
         root,
-        bevel_width=0.015,
+        smooth=True,
     )
+    colors = membrane.data.color_attributes["DragonColor"]
+    for index, item in enumerate(colors.data):
+        # Raised panel centers catch a pale amber highlight; the outer rim stays
+        # darker so the ribs and scalloped edge read from the chase camera.
+        is_panel_center = index % offset >= len(points)
+        shade = 1.10 if is_panel_center else 0.82
+        color = item.color[:]
+        item.color = (min(1.0, color[0] * shade), min(1.0, color[1] * shade), min(1.0, color[2] * shade), 1.0)
 
 
 def add_wing(
@@ -1157,8 +1179,8 @@ def add_dragon(
         root,
         radial_segments=18,
         subdivision_levels=2,
-        subdivision_type="SIMPLE",
-        smooth=False,
+        subdivision_type="CATMULL_CLARK",
+        smooth=True,
         profile_power=0.84,
         ring_shadows=[
             0.08,
@@ -1500,6 +1522,16 @@ def add_dragon(
             vertices=4,
         )
 
+    # Overlapping shoulder scutes add a readable dorsal rhythm without adding
+    # runtime draw calls: the exporter joins them into Dragon_Body.
+    for side in (-1, 1):
+        for index, (y, z, width) in enumerate(((0.48, 3.57, 0.24), (0.08, 3.28, 0.22), (-0.32, 3.01, 0.18))):
+            add_diamond_prism(
+                f"ShoulderScale_{side}_{index}",
+                (side * (0.48 - index * 0.05), y, z),
+                width, 0.11, 0.30, ember_light, collection, root,
+            )
+
     add_wing(-1, red, burgundy, membrane, charcoal, teal, collection, root)
     add_wing(1, red, burgundy, membrane, charcoal, teal, collection, root)
     add_leg("Fore", -1, red, burgundy, charcoal, collection, root)
@@ -1724,6 +1756,9 @@ def validate_source_contract(
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--skip-renders", action="store_true")
+    args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else [])
     if not REFERENCE_PATH.exists():
         raise FileNotFoundError(f"Missing reference image: {REFERENCE_PATH}")
 
@@ -1733,7 +1768,8 @@ def main() -> None:
 
     clear_file()
     scene = bpy.context.scene
-    scene.name = "Skyknot_Dragon_Visual_Remaster_v07"
+    scene.name = "Skyknot_Dragon_Visual_Remaster_v08"
+    bpy.context.preferences.filepaths.save_version = 0
 
     dragon_collection = make_collection(DRAGON_COLLECTION_NAME)
     environment_collection = make_collection(ENV_COLLECTION_NAME)
@@ -1742,7 +1778,8 @@ def main() -> None:
     root.empty_display_type = "ARROWS"
     root.empty_display_size = 1.0
     root["asset_version"] = "0.7"
-    root["blockout_iteration"] = 7
+    root["blockout_iteration"] = 8
+    root["visual_revision"] = "m45-cambered-wings-sculpted-torso"
     root["asset_status"] = "rc7-visual-remaster"
     root["asset_license"] = "project-authored"
     root["anatomy_contract"] = "rc7-flight-athlete-v1"
@@ -1754,22 +1791,22 @@ def main() -> None:
 
     materials = {
         "red": make_material(
-            "M_Dragon_Ember", (0.64, 0.026, 0.010, 1.0), 0.82
+            "M_Dragon_Ember", (0.70, 0.105, 0.040, 1.0), 0.60
         ),
         "ember_light": make_material(
-            "M_Dragon_EmberLight", (0.82, 0.060, 0.016, 1.0), 0.74
+            "M_Dragon_EmberLight", (0.96, 0.38, 0.12, 1.0), 0.57
         ),
         "burgundy": make_material(
-            "M_Dragon_Burgundy", (0.19, 0.006, 0.014, 1.0), 0.92
+            "M_Dragon_Burgundy", (0.21, 0.035, 0.042, 1.0), 0.80
         ),
         "gold": make_material(
             "M_Dragon_Gold", (1.0, 0.50, 0.055, 1.0), 0.68
         ),
         "membrane": make_material(
             "M_Wing_Membrane",
-            (0.76, 0.16, 0.020, 1.0),
-            0.86,
-            tip_color=(1.0, 0.62, 0.10, 1.0),
+            (0.66, 0.24, 0.055, 1.0),
+            0.64,
+            tip_color=(1.0, 0.80, 0.34, 1.0),
         ),
         "charcoal": make_material(
             "M_Horn_Charcoal", (0.022, 0.016, 0.028, 1.0), 0.86
@@ -1792,16 +1829,16 @@ def main() -> None:
     camera, target = create_studio(environment_collection, materials)
     set_camera_angle(camera, target, 0)
 
-    bpy.ops.wm.save_as_mainfile(filepath=str(BLEND_PATH), check_existing=False)
-    rendered_files = render_turntable(camera, target)
-    bpy.ops.wm.save_as_mainfile(filepath=str(BLEND_PATH), check_existing=False)
-
     stats = collect_mesh_stats(dragon_collection)
     validate_source_contract(dragon_collection, root, stats)
+    bpy.ops.wm.save_as_mainfile(filepath=str(BLEND_PATH), check_existing=False)
+    rendered_files = [] if args.skip_renders else render_turntable(camera, target)
+    if not args.skip_renders:
+        bpy.ops.wm.save_as_mainfile(filepath=str(BLEND_PATH), check_existing=False)
     report = {
-        "asset": "skyknit-dragon-v07",
+        "asset": "skyknit-dragon-v08",
         "status": "rc7-visual-remaster-source",
-        "iteration": 7,
+        "iteration": 8,
         "blender_version": bpy.app.version_string,
         "blend_file": str(BLEND_PATH.relative_to(ROOT)),
         "reference_file": str(REFERENCE_PATH.relative_to(ROOT)),

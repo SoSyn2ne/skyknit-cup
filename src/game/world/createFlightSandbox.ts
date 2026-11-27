@@ -15,6 +15,7 @@ import {
 } from '../flight/flightModel'
 import {
   createDragon as createDragonVisual,
+  GHOST_DRAGON_VISUAL_SPEC,
   type DragonDebugSnapshot,
   type DragonPalette,
   type DragonVisual,
@@ -54,6 +55,7 @@ export interface FlightSandboxDebugSnapshot {
   readonly gatePassWaveActive: boolean
   readonly gatePulseScale: number
   readonly gateHaloOpacity: number
+  readonly gateApproachHaloOpacity: number
   readonly boostRingCount: number
   readonly boostRingsVisible: boolean
   readonly speedStreakCount: number
@@ -139,11 +141,24 @@ export interface ReadyCameraFraming {
   readonly fov: number
 }
 
+function getMotionProfileForLoadout(
+  loadout: CharacterLoadout,
+): 'dragon' | 'avian' | 'feline' {
+  return (
+    CHARACTER_CATALOG.find((character) => character.id === loadout.characterId)
+      ?.motionProfile ?? 'dragon'
+  )
+}
+
 interface GateVisual {
   readonly group: THREE.Group
   readonly ringMaterial: THREE.MeshStandardMaterial
   readonly runeMaterial: THREE.MeshStandardMaterial
   readonly haloMaterial: THREE.MeshBasicMaterial
+  readonly approachHalo: THREE.Mesh<
+    THREE.TorusGeometry,
+    THREE.MeshBasicMaterial
+  >
   readonly runeWheel: THREE.InstancedMesh
 }
 
@@ -159,7 +174,7 @@ const CAMERA_HEIGHT = 3.2
 const CAMERA_LOOK_AHEAD = 7
 const CAMERA_LOOK_HEIGHT = 1
 const THREAD_POINT_COUNT = 28
-const GATE_PASS_WAVE_SECONDS = 0.65
+const GATE_PASS_WAVE_SECONDS = 0.76
 const BOOST_RING_COUNT = 3
 const SPEED_STREAK_CAPACITY = 18
 
@@ -169,6 +184,42 @@ export const WIND_THREAD_VISUAL_SPEC = Object.freeze({
   leftColorRole: 'gateRune' as const,
   rightColorRole: 'wingGold' as const,
 })
+
+export const GATE_VISUAL_FEEDBACK_SPEC = Object.freeze({
+  approachHaloBaseOpacity: 0.19,
+  approachHaloPulseOpacity: 0.08,
+  activeRingEmissiveIntensity: 0.48,
+  activeRuneEmissiveIntensity: 0.86,
+  passWavePeakOpacity: 0.84,
+  passWaveScaleGain: 0.62,
+  boostRingPeakOpacity: 0.32,
+  speedStreakOpacity: 0.26,
+})
+
+export const GHOST_SEPARATION_VISUAL_SPEC = Object.freeze({
+  overlapDistance: 3,
+  fullOpacityDistance: 14,
+  overlapOpacity: 0.1,
+})
+
+export function getGhostOpacityForPlayerDistance(distance: number): number {
+  if (!Number.isFinite(distance)) return GHOST_DRAGON_VISUAL_SPEC.opacity
+  const progress = Math.min(
+    1,
+    Math.max(
+      0,
+      (distance - GHOST_SEPARATION_VISUAL_SPEC.overlapDistance) /
+        (GHOST_SEPARATION_VISUAL_SPEC.fullOpacityDistance -
+          GHOST_SEPARATION_VISUAL_SPEC.overlapDistance),
+    ),
+  )
+  return (
+    GHOST_SEPARATION_VISUAL_SPEC.overlapOpacity +
+    (GHOST_DRAGON_VISUAL_SPEC.opacity -
+      GHOST_SEPARATION_VISUAL_SPEC.overlapOpacity) *
+      progress
+  )
+}
 
 export function getGhostWingFlapRadians(
   elapsedMs: number,
@@ -285,9 +336,9 @@ function createGate(
   const ringMaterial = new THREE.MeshStandardMaterial({
     color: ringColor,
     emissive: ringColor,
-    emissiveIntensity: checkpoint.kind === 'gate' ? 0 : 0.18,
-    roughness: 0.34,
-    metalness: 0.18,
+    emissiveIntensity: checkpoint.kind === 'gate' ? 0.08 : 0.28,
+    roughness: 0.26,
+    metalness: 0.62,
   })
   const runeMaterial = new THREE.MeshStandardMaterial({
     color: runeColor,
@@ -297,13 +348,13 @@ function createGate(
     transparent: true,
   })
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(checkpoint.radius, 0.72, 12, 64),
+    new THREE.TorusGeometry(checkpoint.radius, 0.44, 12, 64),
     ringMaterial,
   )
   const haloMaterial = new THREE.MeshBasicMaterial({
     color: ringColor,
     transparent: true,
-    opacity: 0.12,
+    opacity: 0.08,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   })
@@ -311,6 +362,18 @@ function createGate(
     new THREE.TorusGeometry(checkpoint.radius, 1.22, 8, 64),
     haloMaterial,
   )
+  const approachHaloMaterial = new THREE.MeshBasicMaterial({
+    color: runeColor,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+  const approachHalo = new THREE.Mesh(
+    new THREE.TorusGeometry(checkpoint.radius + 0.9, 0.14, 6, 64),
+    approachHaloMaterial,
+  )
+  approachHalo.name = 'M42_GateApproachHalo'
   const innerRune = new THREE.Mesh(
     new THREE.TorusGeometry(checkpoint.radius - 1.4, 0.16, 6, 40),
     runeMaterial,
@@ -339,7 +402,7 @@ function createGate(
   runeWheel.instanceMatrix.needsUpdate = true
   runeWheel.name = `M3_GateRunes_${String(index + 1).padStart(2, '0')}`
 
-  group.add(halo, ring, innerRune, runeWheel)
+  group.add(halo, approachHalo, ring, innerRune, runeWheel)
   group.position.set(
     checkpoint.center.x,
     checkpoint.center.y,
@@ -354,7 +417,14 @@ function createGate(
     ),
   )
 
-  return { group, ringMaterial, runeMaterial, haloMaterial, runeWheel }
+  return {
+    group,
+    ringMaterial,
+    runeMaterial,
+    haloMaterial,
+    approachHalo,
+    runeWheel,
+  }
 }
 
 function createWindThread(
@@ -569,10 +639,9 @@ export function createFlightSandbox(
   const initialDragonReady = dragon.ready
   dragon.setShadows(initialQuality.shadows)
   let activeCharacterLoadout = normalizedInitialLoadout
-  const getActiveMotionProfile = () =>
-    CHARACTER_CATALOG.find(
-      (character) => character.id === activeCharacterLoadout.characterId,
-    )?.motionProfile ?? 'dragon'
+  let activeMotionProfile = getMotionProfileForLoadout(
+    activeCharacterLoadout,
+  )
   let characterLoadRequestId = 0
   let ghostDragon: DragonVisual | null = null
   let dragonPose = createDragonPoseState()
@@ -628,7 +697,7 @@ export function createFlightSandbox(
     new THREE.MeshBasicMaterial({
       color: palette.cloud,
       transparent: true,
-      opacity: 0.18,
+      opacity: GATE_VISUAL_FEEDBACK_SPEC.speedStreakOpacity,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     }),
@@ -698,6 +767,11 @@ export function createFlightSandbox(
   const reducedMotion = (): boolean =>
     reducedMotionQuery.matches || forceReducedMotion
 
+  let cameraRoll = 0
+  let cameraRollVelocity = 0
+  const cameraViewDirection = new THREE.Vector3()
+  const cameraDynamicUp = new THREE.Vector3()
+
   camera.up.copy(WORLD_UP)
   camera.fov = CAMERA_DEFAULT_FOV
 
@@ -763,19 +837,36 @@ export function createFlightSandbox(
       gate.group.visible = active
       gate.ringMaterial.opacity = active ? 1 : 0.2
       gate.ringMaterial.emissive.set(active ? palette.wingGold : 0x000000)
-      gate.ringMaterial.emissiveIntensity = active ? 0.22 : 0
+      gate.ringMaterial.emissiveIntensity = active
+        ? GATE_VISUAL_FEEDBACK_SPEC.activeRingEmissiveIntensity
+        : 0
       gate.runeMaterial.opacity = active ? 1 : 0.16
-      gate.runeMaterial.emissiveIntensity = active ? 0.7 : 0.08
+      gate.runeMaterial.emissiveIntensity = active
+        ? GATE_VISUAL_FEEDBACK_SPEC.activeRuneEmissiveIntensity
+        : 0.08
       gate.haloMaterial.opacity = active
         ? motionReduced
-          ? 0.08
-          : 0.1 + Math.sin(simulationSeconds * 2.4) * 0.025
+          ? 0.1
+          : 0.16 + Math.sin(simulationSeconds * 2.4) * 0.05
         : 0
+      const approachCycle = motionReduced
+        ? 0
+        : (simulationSeconds * 0.42 + index * 0.13) % 1
+      gate.approachHalo.material.opacity = active
+        ? motionReduced
+          ? 0.16
+          : GATE_VISUAL_FEEDBACK_SPEC.approachHaloBaseOpacity +
+            Math.sin(approachCycle * Math.PI) *
+              GATE_VISUAL_FEEDBACK_SPEC.approachHaloPulseOpacity
+        : 0
+      gate.approachHalo.scale.setScalar(
+        active && !motionReduced ? 1.01 + approachCycle * 0.1 : 1,
+      )
       gate.runeWheel.rotation.z = motionReduced
         ? 0
-        : simulationSeconds * 0.2
+        : simulationSeconds * 0.32
       const pulse = active && !motionReduced
-        ? 1 + Math.sin(simulationSeconds * 3.2) * 0.018
+        ? 1 + Math.sin(simulationSeconds * 3.2) * 0.026
         : 1
       gate.group.scale.setScalar(pulse)
     }
@@ -792,8 +883,11 @@ export function createFlightSandbox(
         1,
         passWaveAgeSeconds / GATE_PASS_WAVE_SECONDS,
       )
-      passWave.scale.setScalar(1 + progress * 0.42)
-      passWaveMaterial.opacity = (1 - progress) * 0.72
+      passWave.scale.setScalar(
+        1 + progress * GATE_VISUAL_FEEDBACK_SPEC.passWaveScaleGain,
+      )
+      passWaveMaterial.opacity =
+        (1 - progress) * GATE_VISUAL_FEEDBACK_SPEC.passWavePeakOpacity
       passWave.visible = progress < 1
     }
 
@@ -811,7 +905,8 @@ export function createFlightSandbox(
       ring.scale.setScalar(0.7 + cycle * 0.42)
       const ringMaterial = ring.material as THREE.MeshBasicMaterial
       ringMaterial.opacity =
-        Math.sin(cycle * Math.PI) * 0.24
+        Math.sin(cycle * Math.PI) *
+        GATE_VISUAL_FEEDBACK_SPEC.boostRingPeakOpacity
     }
 
     const showSpeedStreaks =
@@ -830,7 +925,7 @@ export function createFlightSandbox(
           Math.sin(angle * 1.7) * (0.75 + (index % 3) * 0.28),
           1.2 + phase * 7.2,
         )
-        speedStreakScale.set(1, 1, 0.62 + phase * 0.9)
+        speedStreakScale.set(1, 1, 0.78 + phase * 1.04)
         speedStreakMatrix.compose(
           speedStreakPosition,
           speedStreakQuaternion,
@@ -940,8 +1035,8 @@ export function createFlightSandbox(
       const motion = reducedMotion()
         ? 0
         : Math.sin(simulationSeconds * 2.1 + thread.side) * 0.06
-      thread.outer.material.opacity = 0.48 + motion
-      thread.core.material.opacity = 0.94 + motion * 0.4
+      thread.outer.material.opacity = 0.56 + motion
+      thread.core.material.opacity = 0.98 + motion * 0.28
     }
   }
 
@@ -962,7 +1057,7 @@ export function createFlightSandbox(
           isBoosting: flight.isBoosting,
           collisionFeedbackSeconds,
           animationSeconds: characterAnimationSeconds,
-          motionProfile: getActiveMotionProfile(),
+          motionProfile: activeMotionProfile,
         },
         fixedDt,
       )
@@ -1031,7 +1126,7 @@ export function createFlightSandbox(
         isBoosting: pose.boost,
         collisionFeedbackSeconds: 0,
         animationSeconds: elapsedMs / 1_000,
-        motionProfile: getActiveMotionProfile(),
+        motionProfile: activeMotionProfile,
       },
       fixedDt,
     )
@@ -1047,6 +1142,17 @@ export function createFlightSandbox(
     ghostFlight.pitchRadians = pose.pitchRadians
     ghostFlight.bankRadians = pose.bankRadians
     ghostFlight.isBoosting = pose.boost
+    const ghostDistance =
+      lastDragonFlight === null
+        ? Number.POSITIVE_INFINITY
+        : Math.hypot(
+            pose.position.x - lastDragonFlight.position.x,
+            pose.position.y - lastDragonFlight.position.y,
+            pose.position.z - lastDragonFlight.position.z,
+          )
+    activeGhostDragon.setGhostOpacity(
+      getGhostOpacityForPlayerDistance(ghostDistance),
+    )
     activeGhostDragon.update(ghostFlight, ghostDragonPose)
     activeGhostDragon.movementRoot.visible = true
   }
@@ -1133,10 +1239,31 @@ export function createFlightSandbox(
       cameraOffset.y,
       cameraOffset.z,
     )
+    if (fixedDt > 0 && !reducedMotion() && !useReadyFraming) {
+      // Bruno Simon style dynamic camera roll & banking (gives tangible G-force)
+      const targetRoll = -flight.bankRadians * 0.28
+      const rollPullStrength = 36.0
+      const rollDamping = 6.0
+      const force = (targetRoll - cameraRoll) * rollPullStrength
+      cameraRollVelocity += force * fixedDt
+      cameraRollVelocity *= Math.exp(-rollDamping * fixedDt)
+      cameraRoll += cameraRollVelocity * fixedDt
+    } else {
+      cameraRoll = 0
+      cameraRollVelocity = 0
+    }
+
     camera.position
       .copy(cameraPosition)
       .add(cameraShakeOffset.set(cameraOffset.x, cameraOffset.y, cameraOffset.z))
-    camera.up.copy(WORLD_UP)
+
+    if (Math.abs(cameraRoll) > 0.001) {
+      cameraViewDirection.subVectors(lookPosition, camera.position).normalize()
+      cameraDynamicUp.copy(WORLD_UP).applyAxisAngle(cameraViewDirection, cameraRoll)
+      camera.up.copy(cameraDynamicUp)
+    } else {
+      camera.up.copy(WORLD_UP)
+    }
     camera.lookAt(lookPosition)
 
     if (fixedDt > 0) {
@@ -1199,6 +1326,8 @@ export function createFlightSandbox(
     candidate.movementRoot.add(speedStreaks)
     dragon = candidate
     activeCharacterLoadout = normalizedLoadout
+    activeMotionProfile = getMotionProfileForLoadout(normalizedLoadout)
+    dragonPose = createDragonPoseState()
 
     scene.remove(previousDragon.movementRoot)
     previousDragon.dispose()
@@ -1260,7 +1389,7 @@ export function createFlightSandbox(
       passWave.position.copy(passedGate.group.position)
       passWave.quaternion.copy(passedGate.group.quaternion)
       passWave.scale.setScalar(1)
-      passWaveMaterial.opacity = 0.72
+      passWaveMaterial.opacity = GATE_VISUAL_FEEDBACK_SPEC.passWavePeakOpacity
       passWaveAgeSeconds = 0
       passWave.visible = true
     },
@@ -1385,6 +1514,8 @@ export function createFlightSandbox(
               gatePassWaveActive: passWave.visible,
               gatePulseScale: activeGate?.group.scale.x ?? 1,
               gateHaloOpacity: activeGate?.haloMaterial.opacity ?? 0,
+              gateApproachHaloOpacity:
+                activeGate?.approachHalo.material.opacity ?? 0,
               boostRingCount: quality.boostRingCount,
               boostRingsVisible: boostRings.some((ring) => ring.visible),
               speedStreakCount: quality.speedStreakCount,

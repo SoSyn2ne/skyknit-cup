@@ -42,7 +42,7 @@ function stableRun(snapshot: FlightDebugSnapshot | null): unknown {
 
 test.describe('lifecycle pause', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/?mode=race')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',

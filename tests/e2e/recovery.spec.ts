@@ -35,7 +35,7 @@ test('keeps BGM inactive when context recovery happens before first flight', asy
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await expect.poll(async () => (await readSnapshot(page))?.audio).toMatchObject({
     musicActive: false,
     bgmCreated: false,
@@ -65,7 +65,7 @@ test('recovers from WebGL context loss without resetting progress', async ({
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
   await unlockAllMissions(page)
-  await page.goto('/?qaCourse=1&qaCollision=1&qaBoost=1')
+  await page.goto('/?mode=race&qaCourse=1&qaCollision=1&qaBoost=1')
   await page
     .locator('[data-mission-select="true"]')
     .selectOption('golden-knot')
@@ -177,7 +177,7 @@ test('uses a visible non-blocking fallback when the GLB resource fails', async (
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
-  await page.goto('/?forceDragonFailure=1')
+  await page.goto('/?mode=race&forceDragonFailure=1')
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
     'renderer-ready',
@@ -206,7 +206,7 @@ test('restores game BGM from the context-loss retry gesture', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
-  await page.goto('/')
+  await page.goto('/?mode=race')
   await page.getByRole('button', { name: '하늘 탐험' }).click()
   await expect
     .poll(async () => (await readSnapshot(page))?.audio.bgmPlaying)

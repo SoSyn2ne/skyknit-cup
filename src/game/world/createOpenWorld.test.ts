@@ -40,6 +40,34 @@ async function settleLoads(): Promise<void> {
 }
 
 describe('open-world region GLB streaming', () => {
+  it('uses vertex-lit static festival materials with the dawn rig and owns replacements exactly once', async () => {
+    const scene = new THREE.Scene()
+    const hemisphere = new THREE.HemisphereLight(); hemisphere.name = 'RC7_DawnFillLight'
+    const key = new THREE.DirectionalLight(); key.name = 'RC7_DawnKeyLight'
+    const rim = new THREE.DirectionalLight(); rim.name = 'RC7_SkyRimLight'
+    scene.add(hemisphere, key, rim)
+    const source = new THREE.MeshStandardMaterial({ color: 0x56789a, vertexColors: true, side: THREE.DoubleSide })
+    const sourceDispose = vi.spyOn(source, 'dispose')
+    const geometry = new THREE.BoxGeometry()
+    const geometryDispose = vi.spyOn(geometry, 'dispose')
+    const first = new THREE.Mesh(geometry, source)
+    const second = new THREE.Mesh(geometry, source)
+    const asset = new THREE.Group(); asset.add(first, second)
+    const world = createOpenWorld(scene, { assetLoader: { load: async () => asset } })
+    world.update({ x: 0, y: 8, z: -40 }, 0)
+    await settleLoads()
+    expect(first.material).toBeInstanceOf(THREE.MeshBasicMaterial)
+    expect(second.material).toBe(first.material)
+    expect(first.material.color.getHex()).toBe(0x56789a)
+    expect(first.material.side).toBe(THREE.DoubleSide)
+    expect(first.geometry).toBe(geometry)
+    expect(sourceDispose).toHaveBeenCalledOnce()
+    const convertedDispose = vi.spyOn(first.material, 'dispose')
+    world.dispose()
+    expect(sourceDispose).toHaveBeenCalledOnce()
+    expect(convertedDispose).toHaveBeenCalledOnce()
+    expect(geometryDispose).toHaveBeenCalledOnce()
+  })
   it('does not traverse loaded region objects during a steady-state update', async () => {
     const asset = createAsset('SteadyStateAsset')
     const beacon = new THREE.Object3D()

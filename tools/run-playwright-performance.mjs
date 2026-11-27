@@ -19,6 +19,7 @@ const result = spawnSync(
     playwrightCli,
     'test',
     'tests/e2e/performance.spec.ts',
+    'tests/e2e/adventure-performance.spec.ts',
     '--project=desktop',
     '--workers=1',
     '--trace=off',

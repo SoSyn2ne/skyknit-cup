@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { prepareRaceForRecovery } from './recoveryState'
 import type { RacePhase, RaceState } from '../race/raceState'
+import { normalizeAdventureProgress } from '../adventure/adventureState'
 
 function makeState(phase: RacePhase): RaceState {
   return {
@@ -67,7 +68,7 @@ function makeState(phase: RacePhase): RaceState {
       },
     },
     config: {
-      checkpointCount: 12,
+      checkpointCount: 8,
       boostCapacity: 100,
       spawnPosition: { x: 0, y: 10, z: 20 },
     },
@@ -75,6 +76,29 @@ function makeState(phase: RacePhase): RaceState {
 }
 
 describe('renderer recovery race state', () => {
+  it('preserves rewards in a detached adventure snapshot without touching legacy progress', () => {
+    const previous = makeState('racing')
+    const adventure = normalizeAdventureProgress({
+      started: true,
+      visitedPointIds: ['keeper', 'rescue', 'bird-return'],
+      placedDecorations: ['lanterns'],
+      elapsedPlaySeconds: 123,
+    })
+    const state = {
+      ...previous,
+      persistent: { ...previous.persistent, adventure },
+    }
+    const recovered = prepareRaceForRecovery(state)
+
+    expect(recovered.persistent).toEqual(state.persistent)
+    expect(recovered.persistent.adventure).not.toBe(adventure)
+    expect(recovered.persistent.adventure?.visitedPointIds).not.toBe(adventure.visitedPointIds)
+    expect(recovered.persistent.adventure?.claimedRewardIds).not.toBe(adventure.claimedRewardIds)
+    expect(recovered.persistent.adventure?.materials).not.toBe(adventure.materials)
+    expect(recovered.persistent.adventure?.placedDecorations).not.toBe(adventure.placedDecorations)
+    expect(prepareRaceForRecovery(previous).persistent).not.toHaveProperty('adventure')
+  })
+
   it.each(['countdown', 'racing'] as const)(
     'pauses %s while preserving timer and checkpoint progress',
     (phase) => {

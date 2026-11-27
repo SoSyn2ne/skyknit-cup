@@ -427,7 +427,7 @@ test('keeps Sky League retries, Top 10 boards, ghosts, and renderer memory stabl
       (key) => localStorage.removeItem(key),
       SETTINGS_KEY,
     )
-    await page.goto('/?qaCourse=1')
+    await page.goto('/?mode=race&qaCourse=1')
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',
       'renderer-ready',

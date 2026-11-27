@@ -64,6 +64,48 @@ describe('RC7 world quality layers', () => {
     })
   })
 
+  it('spreads the dawn shadow filter instead of leaving a hard cutout', () => {
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera()
+    const high = resolveRenderQuality({
+      preference: 'high',
+      ...desktopSignals,
+    })
+    const world = createWorld(scene, camera, palette, high)
+    const sun = scene.getObjectByName(
+      'RC7_DawnKeyLight',
+    ) as THREE.DirectionalLight
+
+    // PCF here filters through a fixed five-tap Vogel disk scaled by this
+    // radius, so widening it softens the edge without adding samples. The
+    // default of 1 is what leaves the stair-stepped edge.
+    expect(sun.shadow.radius).toBeGreaterThan(1)
+    expect(world.debugSnapshot().shadowRadius).toBe(sun.shadow.radius)
+  })
+
+  it('keeps the key light visually dominant over the dawn fill', () => {
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera()
+    const high = resolveRenderQuality({
+      preference: 'high',
+      ...desktopSignals,
+    })
+
+    createWorld(scene, camera, palette, high)
+
+    const dawnFill = scene.getObjectByName(
+      'RC7_DawnFillLight',
+    ) as THREE.HemisphereLight
+    const dawnKey = scene.getObjectByName(
+      'RC7_DawnKeyLight',
+    ) as THREE.DirectionalLight
+
+    expect(dawnFill.intensity).toBeLessThan(1.5)
+    expect(dawnKey.intensity).toBeGreaterThan(4)
+    expect(scene.fog).toBeInstanceOf(THREE.FogExp2)
+    expect((scene.fog as THREE.FogExp2).density).toBeLessThan(0.0011)
+  })
+
   it('keeps the race islands readable as faceted authored landforms', () => {
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera()
@@ -110,5 +152,40 @@ describe('RC7 world quality layers', () => {
       (dawnFill as THREE.HemisphereLight).groundColor
         .getHSL({ h: 0, s: 0, l: 0 }).l,
     ).toBeGreaterThan(paletteRockColor.getHSL({ h: 0, s: 0, l: 0 }).l)
+  })
+
+  it('keeps the colored landforms and billowy clouds in the existing draw budget', () => {
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera()
+    const world = createWorld(scene, camera, palette, resolveRenderQuality({
+      preference: 'high',
+      ...desktopSignals,
+    }))
+    const batches: THREE.InstancedMesh[] = []
+    scene.traverse((object) => {
+      if (object instanceof THREE.InstancedMesh) batches.push(object)
+    })
+
+    expect(batches).toHaveLength(9)
+    expect(world.debugSnapshot().instancedMeshCount).toBe(batches.length)
+    let cloudTriangles = 0
+    for (const name of [
+      'M3_IslandRockInstances',
+      'M3_IslandTopInstances',
+      'M3_CloudInstances',
+      'M7_HighCloudWisps',
+      'M7_LowerCloudDeck',
+    ]) {
+      const batch = scene.getObjectByName(name) as THREE.InstancedMesh
+      const color = batch.geometry.getAttribute('color')
+      expect(color.count).toBe(batch.geometry.getAttribute('position').count)
+      expect(Array.from(color.array).every((value) => Number.isFinite(value) && value >= 0 && value <= 1)).toBe(true)
+      expect(new Set(Array.from(color.array)).size).toBeGreaterThan(6)
+      expect((batch.material as THREE.MeshBasicMaterial).map).toBeNull()
+      if (name.includes('Cloud')) {
+        cloudTriangles += (batch.geometry.index!.count / 3) * batch.count
+      }
+    }
+    expect(cloudTriangles).toBeLessThan(10_000)
   })
 })

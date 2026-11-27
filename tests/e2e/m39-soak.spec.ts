@@ -867,7 +867,7 @@ test('keeps M39 streaming, LOD, retries, pause, guardians, and resources stable 
       )
     }, { seededKey: SETTINGS_SEEDED_KEY, settingsKey: SETTINGS_KEY })
     await page.goto(
-      '/?qaCourse=1&qaBoost=1&qaWave=1&qaGeometryLedger=1',
+      '/?mode=race&qaCourse=1&qaBoost=1&qaWave=1&qaGeometryLedger=1',
     )
     await expect(page.locator('#app')).toHaveAttribute(
       'data-state',

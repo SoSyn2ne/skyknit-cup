@@ -1,0 +1,18 @@
+{
+  "score": 93,
+  "threshold": 90,
+  "pass": true,
+  "verdict": "pass",
+  "category_match": true,
+  "reference": "artifacts/browser-qa/m43-baseline",
+  "generated_screenshots": "artifacts/browser-qa/m43-navigation-final",
+  "differences": [
+    "Ready-screen copy names the actual keyboard or touch controls instead of the previous vague flight-key instruction.",
+    "Off-course, collision slowdown, and respawn notices fit the existing mission progress line.",
+    "The covered next-gate aim point after progress 4 in 844x390 now has a visible gold guide outside the upper-right counter. All five real-input viewport runs keep a readable gate or guide clear of HUD and controls."
+  ],
+  "suggestions": [],
+  "reasoning": "Full-color before/after captures show the uncovered fallback guide in the reproduced landscape case, with existing guardian/world art and HUD composition preserved. Five-viewport input, recovery, collision, pixel, and performance checks pass; this layout assessment is separate from human and physical-device playtesting.",
+  "next_actions": [],
+  "verified_on": "2026-08-28"
+}

@@ -7,6 +7,7 @@ const dragonFactoryMock = vi.hoisted(() => ({
 
 vi.mock('./createDragon', () => ({
   createDragon: (...args: unknown[]) => dragonFactoryMock.create(...args),
+  GHOST_DRAGON_VISUAL_SPEC: { opacity: 0.32 },
 }))
 
 vi.mock('./createWorld', () => ({
@@ -18,6 +19,7 @@ vi.mock('./createWorld', () => ({
 }))
 
 import type { GhostPose } from '../competition/ghostRun'
+import { createInitialFlightState } from '../flight/flightModel'
 import { resolveRenderQuality } from '../quality/qualityPolicy'
 import {
   createFlightSandbox,
@@ -45,6 +47,7 @@ function createMockDragon(name: string) {
     ready: Promise.resolve('fallback' as const),
     update: vi.fn(),
     setShadows: vi.fn(),
+    setGhostOpacity: vi.fn(),
     setVolcanicReaction: vi.fn(),
     debugSnapshot: vi.fn(),
     dispose: vi.fn(() => movementRoot.clear()),
@@ -142,5 +145,43 @@ describe('flight sandbox ghost dragon', () => {
     sandbox.dispose()
     expect(ghost.dispose).toHaveBeenCalledTimes(1)
     expect(scene.children).not.toContain(ghost.movementRoot)
+  })
+
+  it('fades a ghost that shares the player position until their paths separate', () => {
+    const player = createMockDragon('M3_DragonMovementRoot')
+    const ghost = createMockDragon('M33_SkyLeagueGhostDragonMovementRoot')
+    dragonFactoryMock.create
+      .mockReturnValueOnce(player)
+      .mockReturnValueOnce(ghost)
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera()
+    const quality = resolveRenderQuality({
+      preference: 'low',
+      coarsePointer: false,
+      viewportWidth: 1_280,
+      devicePixelRatio: 1,
+    })
+    const sandbox = createFlightSandbox(scene, camera, PALETTE, quality, [])
+    const flight = createInitialFlightState({
+      position: GHOST_POSE.position,
+    })
+
+    sandbox.step(flight, 1, 1 / 60, 0, 0, 'race')
+    sandbox.updateGhost(GHOST_POSE, 1 / 60)
+
+    expect(ghost.setGhostOpacity).toHaveBeenCalled()
+    expect(ghost.setGhostOpacity.mock.calls.at(-1)?.[0]).toBeLessThan(0.2)
+
+    sandbox.updateGhost(
+      {
+        ...GHOST_POSE,
+        position: { x: 42, y: 24, z: -36 },
+      },
+      1 / 60,
+    )
+
+    expect(ghost.setGhostOpacity.mock.calls.at(-1)?.[0]).toBeGreaterThan(0.3)
+
+    sandbox.dispose()
   })
 })

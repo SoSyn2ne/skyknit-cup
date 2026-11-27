@@ -1,0 +1,33 @@
+{
+  "score": 90,
+  "verdict": "pass",
+  "category_match": true,
+  "threshold": 90,
+  "threshold_pass": true,
+  "reference": "assets/source/art-v2/reference/skyknit-rebuild-target.png",
+  "generated_screenshots": ["artifacts/art-v2/hub-overview.png", "artifacts/art-v2/hub-detail.png"],
+  "differences": [
+    "Landing pavers and their border are now readable, and the nest is no longer interrupted by protruding boulders.",
+    "Three staggered sandstone ledges and visible branching ivy improve the cliff silhouette and surface layering.",
+    "The result remains deliberately faceted and sparse compared with the reference's high-resolution textured foliage."
+  ],
+  "suggestions": [
+    "Keep the verified floor and semantic coordinates intact during runtime integration.",
+    "Use the browser preview to judge the models under real-time lighting and all camera angles.",
+    "Treat texture baking and richer foliage as a separate art scope, not an achieved reference match."
+  ],
+  "reasoning": "Actual overview and detail renders show the requested paving, unobstructed architecture, layered cliff and connected plant groups clearly. The score covers the bounded stylized geometry repair, not photoreal reference equivalence or production integration.",
+  "verification": {
+    "triangles": 58308,
+    "primitives": 15,
+    "materials": 2,
+    "bytes": 4854884,
+    "gzip9_bytes": 965292,
+    "terrain_floor_samples": "48/48",
+    "garden_floor_samples": "48/48",
+    "invalid_geometry_meshes": [],
+    "degenerate_triangles": 0,
+    "errors": []
+  },
+  "next_actions": ["Leader browser preview verification", "Independent visual/architect review", "Production integration remains out of scope"]
+}

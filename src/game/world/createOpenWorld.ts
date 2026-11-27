@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { createStaticPrelitMaterial, getStaticWorldLighting } from './staticPrelitMaterial'
 
 import type { Vec3Value } from '../flight/flightModel'
 import type { RenderQualityTier } from '../quality/qualityPolicy'
@@ -242,6 +243,101 @@ function applyFestivalLanternStyle(
   })
 }
 
+function applyFestivalAestheticRefinement(
+  root: THREE.Object3D,
+  regionId: OpenWorldRegionId,
+): void {
+  if (regionId !== 'festival-hub') return
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+    if (object.name.includes('RaceArch')) {
+      const positions = object.geometry.getAttribute('position')
+      const colors = object.geometry.getAttribute('color')
+      if (positions && colors) {
+        // Classical masonry strata: brick courses & decorative keystone accents matching adventure-hub
+        for (let i = 0; i < positions.count; i++) {
+          const y = positions.getY(i)
+          const x = positions.getX(i)
+          const band = Math.sin(y * 1.8) * 0.06 + Math.cos(x * 1.2) * 0.04
+          const keystone = y > 12 ? 0.08 : 0
+          const r = Math.min(1, Math.max(0, 0.94 + band + keystone))
+          const g = Math.min(1, Math.max(0, 0.90 + band + keystone))
+          const b = Math.min(1, Math.max(0, 0.82 + band * 0.5 + keystone))
+          colors.setXYZ(i, r, g, b)
+        }
+        colors.needsUpdate = true
+      }
+      // Clone material so it doesn't share the dark stone cache with other props
+      if (object.material instanceof THREE.MeshStandardMaterial) {
+        const cloned = object.material.clone()
+        cloned.name = 'M_RaceArch_Sandstone'
+        cloned.color.setHex(0xfbf7ed)
+        cloned.emissive.setHex(0x9a866e)
+        cloned.emissiveIntensity = 0.48
+        cloned.roughness = 0.54
+        cloned.metalness = 0.04
+        object.material = cloned
+      }
+    } else if (object.name.includes('LandingPad')) {
+      const colors = object.geometry.getAttribute('color')
+      if (colors) {
+        for (let i = 0; i < colors.count; i++) {
+          colors.setXYZ(i, 0.92, 0.88, 0.82)
+        }
+        colors.needsUpdate = true
+      }
+      if (object.material instanceof THREE.MeshStandardMaterial) {
+        const cloned = object.material.clone()
+        cloned.name = 'M_LandingPad_Stone'
+        cloned.color.setHex(0xfbf6ec)
+        cloned.emissive.setHex(0x6e5e4c)
+        cloned.emissiveIntensity = 0.35
+        cloned.roughness = 0.58
+        cloned.metalness = 0.04
+        object.material = cloned
+      }
+    } else if (object.name.includes('FestivalTower') || object.name.includes('WindLoom')) {
+      const colors = object.geometry.getAttribute('color')
+      if (colors) {
+        for (let i = 0; i < colors.count; i++) {
+          colors.setXYZ(i, 0.90, 0.86, 0.80)
+        }
+        colors.needsUpdate = true
+      }
+      if (object.material instanceof THREE.MeshStandardMaterial) {
+        const cloned = object.material.clone()
+        cloned.name = `${object.name}_Sandstone`
+        cloned.color.setHex(0xf8f2e6)
+        cloned.emissive.setHex(0x5a4c3e)
+        cloned.emissiveIntensity = 0.32
+        cloned.roughness = 0.60
+        cloned.metalness = 0.04
+        object.material = cloned
+      }
+    }
+  })
+}
+
+function applyFestivalStaticLighting(root: THREE.Object3D, scene: THREE.Scene, regionId: OpenWorldRegionId): void {
+  if (regionId !== 'festival-hub') return
+  const lighting = getStaticWorldLighting(scene)
+  if (!lighting) return
+  const converted = new Map<THREE.Material, THREE.Material>()
+  const convert = (source: THREE.Material): THREE.Material => {
+    let material = converted.get(source)
+    if (!material) {
+      material = createStaticPrelitMaterial(source, lighting)
+      converted.set(source, material)
+    }
+    return material
+  }
+  root.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return
+    object.material = Array.isArray(object.material) ? object.material.map(convert) : convert(object.material)
+  })
+  for (const [source, material] of converted) if (source !== material) source.dispose()
+}
+
 function disposeMaterial(
   material: THREE.Material,
   disposedTextures: Set<THREE.Texture>,
@@ -457,6 +553,8 @@ export function createOpenWorld(
         }
         removeCurrentAsset(entry)
         applyFestivalLanternStyle(asset, entry.region.id)
+        applyFestivalAestheticRefinement(asset, entry.region.id)
+        applyFestivalStaticLighting(asset, scene, entry.region.id)
         entry.lavaTimeUniforms = applyVolcanicLavaStyle(asset, entry.region.id)
         applyVolcanicRenderPolicy(asset, entry.region.id)
         applyShadowPolicy(asset, requestedLod, entry.region.id)
