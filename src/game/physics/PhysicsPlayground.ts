@@ -117,8 +117,6 @@ export class PhysicsPlayground {
     // Standard 4-row bowling pin triangle formation
     const rows = 4
     const spacing = 1.4
-    let pinIndex = 0
-
     for (let r = 0; r < rows; r++) {
       const zOffset = r * spacing * 0.866
       const startX = -(r * spacing) / 2
@@ -150,8 +148,6 @@ export class PhysicsPlayground {
           0.6, // lightweight 0.6 kg for dramatic strikes
           group,
         )
-
-        pinIndex++
       }
     }
   }

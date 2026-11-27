@@ -1,50 +1,66 @@
-# Art V2 — 드래곤과 하늘 둥지 상세 제작 시안
+# Art V2 — 드래곤과 하늘 둥지 상세 제작 및 AI 3D → Blender 보정 파이프라인
 
-2026-10-07. 사용자의 생성 콘셉트 승인과 “해봐, 더 디테일하게” 요청에 따른 첫 Blender 제작 세트.
+2026-10-07 첫 시안 수립, 2026-11-23 `2D 단품 시트 → AI 3D 초안 → Blender 4.5 보정·리깅·PBR → GLB 감사` 파이프라인으로 개편.
 
-## 목표와 가정
+## 1. 목표와 핵심 철학
 
-AI 예시를 실제 편집 가능한 3D 원본으로 옮기는 첫 수직 슬라이스다. 대상은 주홍 드래곤과 첫 둥지/풍차/공중섬이다. 레이스·의뢰 확장이나 나머지 수호수/지역 전체 교체는 이번 범위가 아니다.
+- **파이썬 절차 조형의 한계 돌파**: 코드 좌표만으로 유기체(드래곤 얼굴·근육·날개막)와 자연물(절벽·둥지·풍차)을 조형하고 vertex color만 입히면 6만 폴리곤을 써도 장난감처럼 보인다.
+- **“AI 티 지우기” 파이프라인**:
+  1. **설계 규격 고정**: 축(`-Z` 전방, `+Y` 상방), 스케일, 런타임 리그 피벗, 착륙/상호작용 좌표와 폴리곤·텍스처 예산을 먼저 고정한다.
+  2. **3D 생성 전용 2D 레퍼런스 시트**: 복합 배경 일러스트(`skyknit-rebuild-target.png`)는 전체 무드보드로만 쓰고, 3D 생성기 입력에는 **단색 배경·중립 포즈(T/A-Pose)·단품 턴어라운드 시트**(`dragon-v2-turnaround-sheet.png`)를 사용한다.
+  3. **AI 3D 초안 생성 (Tripo / Meshy / Rodin / VARCO)**: 단품 이미지를 입력해 고밀도 형태와 PBR 텍스처(Albedo / Normal / Roughness) 초안을 생성한다.
+  4. **Blender 4.5 후처리·리깅 (`tools/blender/process_ai_dragon_v2.py`)**:
+     - 방향·원점·스케일 정규화 및 좌우 대칭·아티팩트(눈·발톱·날개막 두께) 보정
+     - 게임 예산에 맞춘 리토폴로지/Decimate(드래곤 목표 15k~25k, 상한 60k triangles) 및 1024px PBR 텍스처 정리
+     - 런타임 필수 피벗(`DragonRoot`, `HeadRig`, `JawRig`, `EyeRig_L/R`, `WingRig_L/R`, `LegRig_Fore/Hind_L/R`, `TailRig_1..5`) 바인딩
+     - GLB 내보내기 및 재임포트 자동 감사(`dragon-report.json`)
 
-참고: assets/source/art-v2/reference/skyknit-rebuild-target.png. 이 이미지는 목표 외형이지 현재 게임 화면이나 Blender 산출물이 아니다.
+## 2. 결과물과 소유권
 
-## 결과물과 소유권
+- **무드보드 참고**: `assets/source/art-v2/reference/skyknit-rebuild-target.png`
+- **드래곤 3D 생성용 2D 턴어라운드 시트**: `assets/source/art-v2/reference/dragon-v2-turnaround-sheet.png`
+- **드래곤 생성·후처리**:
+  - 절차 생성 베이스라인: `tools/blender/build_dragon_art_v2.py`
+  - AI 3D 임포트·정규화·리깅·감사 파이프라인: `tools/blender/process_ai_dragon_v2.py`
+  - 출력물: `assets/source/art-v2/dragon-v2.blend`, `artifacts/art-v2/dragon-v2.glb`, `artifacts/art-v2/dragon-report.json`, `artifacts/art-v2/dragon-*.png`
+- **거점(부유섬) 모듈 파이프라인**:
+  - 섬 전체를 AI 3D로 통짜 생성하지 않는다(착륙장 평탄도·풍차 회전축·충돌 판정 붕괴 방지).
+  - **베이스 지형**: `tools/blender/build_hub_art_v2.py`에서 `AdventureRoot`, `LandingPad`(반경 14), `Keeper`, `WindmillTower`, `WindmillRotor`, 비밀 정원 좌표를 고정한다.
+  - **히어로 프롭(풍차, 나뭇가지 둥지, 석조 아치, 절벽 바위 모듈)**: 단품 AI 3D 생성 → Blender 로우폴리(512~1024px PBR) 보정 후 베이스 지형에 조합한다.
+- **독립 3D 비교 프리뷰**: `art-preview.html`, `src/artPreview.ts`, `src/artPreview.css`, `tests/e2e/art-preview.spec.ts`
 
-- 드래곤: tools/blender/build_dragon_art_v2.py, assets/source/art-v2/dragon-v2.blend, artifacts/art-v2/dragon-v2.glb 및 dragon-*.png.
-- 거점: tools/blender/build_hub_art_v2.py, assets/source/art-v2/hub-v2.blend, artifacts/art-v2/hub-v2.glb 및 hub-*.png.
-- 루트: art-preview.html, src/artPreview.ts/.css, 프리뷰 테스트, 공통 검사·보고서.
-- 기존 생성기의 실제 유틸리티를 재사용하되 원본 출력 경로를 호출하지 않는다. 새 파일에만 저장한다.
+## 3. 모델·텍스처·용량 예산 및 라이선스 정책
 
-## 모델 기준
+- **폴리곤 예산**:
+  - 드래곤: 권장 `15,000 ~ 25,000` triangles (프리뷰 상한 `60,000` triangles), `24` primitives 이하
+  - 거점(지형 + 프롭 합산): 상한 `60,000` triangles, `24` primitives 이하
+- **재질 및 텍스처**:
+  - Art V2부터 `vertex color 전용` 제약을 해제하고 **PBR 텍스처(BaseColor, Normal, Roughness/Metallic — 캐릭터 최대 1024×1024, 프롭 512×512~1024×1024)** 및 vertex color 병행을 허용한다.
+- **번들 및 로딩 정책**:
+  - 본 게임의 초기 프로덕션 gzip `10MiB` 예산은 유지한다.
+  - 미검증 Art V2 GLB는 `artifacts/art-v2/`에만 두어 프로덕션 빌드에 바로 포함하지 않는다.
+  - 본 게임 정식 교체 단계에서는 Draco/Meshopt 및 WebP/KTX2 압축을 적용하고, 시작 화면에 필요한 활성 수호수 1종 + 첫 거점만 선로드하며 나머지 지역·수호수는 지연 로딩한다.
+- **라이선스 및 출시 공시**:
+  - 외부 AI 3D 도구(Tripo, Meshy, Rodin, VARCO 등) 사용 시 반드시 **상업적 이용이 허용된 유료 플랜 생성물**만 사용하고, 도구명·플랜·생성일자를 `dragon-report.json` / `hub-report.json`의 `license` 및 `source_tool` 메타데이터에 기록한다.
+  - 스팀(Steam) 등 스토어 출시 시 게임 내 AI 생성 3D/텍스처/오디오 사용 내역을 상점 페이지 AI 공시란에 명시한다.
 
-- 드래곤: 연속적인 몸통/목 실루엣, 읽히는 눈·콧구멍·턱선, 뿔과 귀, 정확히 네 다리와 두 날개, 두꺼운 어깨/날개뿌리, 관절형 날개 손가락·곡면 날개막, 길고 가는 꼬리, 선택적으로 배치한 겹비늘과 복부판. 원시 도형을 붙인 모습이나 비늘만 추가한 재색칠은 피한다.
-- 리그: 가능한 기존 DragonRoot/HeadRig/JawRig/EyeRig_L/R/WingRig_L/R/TailRig_1..5 이름과 축을 보존한다. 원본 mesh와 리그를 실제로 검사하며, 자동으로 게임 호환을 선언하지 않는다.
-- 거점: 불규칙한 절벽 층, 명확한 착륙 마당, 옆으로 분리한 녹지와 테라스/계단, 실제 가지로 엮은 둥지, 목재 구조·창·벽돌·돛살이 읽히는 풍차, 제한된 풀/꽃/덩굴과 랜턴. 랜드마크 밀도는 높이되 비행로와 착륙 중심을 가리지 않는다.
-- 거점의 기존 의미 노드와 중심 착륙 반경14, 누리·풍차 회전축·비밀 정원 위치는 가능한 유지하고 변경이 필요하면 보고한다.
-- 자체 제작 geometry/vertex color/PBR를 기본으로 한다. 새로운 외부 에셋·의존성은 넣지 않는다. 고해상도 미세 디테일은 무한한 개별 오브젝트 대신 제한된 merged geometry로 표현한다.
+## 4. 실행 명령
 
-## 경계와 예산
+```powershell
+# 1) 절차 생성 베이스라인 빌드
+& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --threads 2 --python-exit-code 1 --python tools/blender/build_dragon_art_v2.py
+& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --threads 2 --python-exit-code 1 --python tools/blender/build_hub_art_v2.py
 
-- 기본 게임/저장/물리/기록과 기존 미커밋 셰이더 변경은 보존한다.
-- 모델별 목표: 드래곤60k triangles/24 primitives 이하, 거점60k triangles/24 primitives 이하. 목표를 넘으면 결과를 보고하고 무작정 더하지 않는다.
-- 현재 production gzip10MiB 예산은 유지한다. 새 GLB는 production 경로에 넣지 않으며, 프리뷰 자체의 실제 전송량/성능을 별도 측정한다. 이 분리는 성능 통과를 의미하지 않는다.
-- 커밋·푸시·배포, 기존 원본 삭제/덮어쓰기, 신규 패키지 설치는 하지 않는다.
+# 2) AI 3D 원본(Tripo/Meshy/Rodin/VARCO GLB·OBJ·FBX) 후처리·리깅·감사 파이프라인
+& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --threads 2 --python-exit-code 1 --python tools/blender/process_ai_dragon_v2.py -- --input path/to/raw-ai-dragon.glb --target-triangles 24000 --source-tool "Tripo3D-Pro"
 
-## 프리뷰
+# 3) 후처리 파이프라인 자체 검증 (Self-Test)
+& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --threads 2 --python-exit-code 1 --python tools/blender/process_ai_dragon_v2.py -- --self-test --skip-renders
 
-Three.js full-bleed 캔버스가 주 콘텐츠다. 장면/드래곤/거점 선택, 회전·확대, 모션 정지와 와이어프레임 정도만 제공한다. 기존 팔레트의 의미 토큰을 사용하고 44px 터치·키보드 접근·로딩/오류 상태를 갖춘다. 로그인이나 저장 마이그레이션은 없다.
-
-## 명령
-
-`& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --threads 2 --python-exit-code 1 --python tools/blender/build_dragon_art_v2.py`
-`& 'C:\Program Files\Blender Foundation\Blender 4.5\blender.exe' --background --threads 2 --python-exit-code 1 --python tools/blender/build_hub_art_v2.py`
-`npm test`; `npm run typecheck`; `npm run lint`; `npm run build`
-`npm run dev -- --host 127.0.0.1 --port 4176`
-
-## 코드와 검증
-
-기존 Python/vanilla TypeScript 스타일과 순수 데이터 함수를 사용한다. 예: `const mode: PreviewMode = 'scene'`처럼 모드와 렌더 객체를 분리하고 새 프레임워크를 만들지 않는다.
-
-완료 기준: 두 blend/GLB 생성, 오류 없는 실제 GLB 재로드, 유한 정점·노멀/리그/의미 노드·삼각형·재질·용량 보고, 실제 모델 렌더3장 이상, 프리뷰 세 모드/회전/모션/와이어프레임 동작, 1440×900·1280×720·844×390·390×844·320×568에서 canvas nonblank/시간 변화·UI 가독성·오류0 검증. 실제 렌더를 보고 형태 개선을 판정한다.
-
-프리뷰 검증과 본 게임 완주/성능 검증은 구분한다. 사람·실기기와 정식 게임 적용이 미검증이면 그대로 명시한다.
+# 4) 앱 검증 및 프리뷰 서버
+npm test
+npm run typecheck
+npm run lint
+npm run build
+npm run dev -- --host 127.0.0.1 --port 4176
+```

@@ -58,7 +58,7 @@ test('Art V2 opens a responsive inspectable scene without changing game saves', 
     }
   })
   await page.goto('/art-preview.html')
-  await expect(page.getByRole('heading', { name: '하늘매듭배 · 아트 작업실' })).toBeVisible({ timeout: 5000 })
+  await expect(page.getByRole('heading', { name: '하늘섬 드래곤 · 아트 작업실' })).toBeVisible({ timeout: 5000 })
   await expect.poll(() => snapshot(page)).toMatchObject({ mode: 'scene', variant: 'v2', status: 'ready' })
   const canvas = page.getByRole('img', { name: '드래곤과 부유섬 3D 미리보기' })
   await expect(canvas).toBeVisible()

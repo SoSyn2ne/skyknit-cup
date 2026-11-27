@@ -899,6 +899,13 @@ M0의 관문 테스트는 기하 함수 계약만 고정한다. 체크포인트 
 3. 루트가 독립 Three.js 프리뷰, Blender 실제 렌더, 자산 구조 검사와 5뷰포트 입력/화면 검증을 통합한다.
 4. 실제 제작 이미지와 AI 참고 이미지를 명확히 구분하고, 삼각형·재질·전송량·프리뷰 성능 및 정식 게임 미적용 상태를 보고한다.
 
+### Terrain3D Three.js 독립 지형 샌드박스 (`/terrain-preview.html`)
+
+1. `src/terrain3d/`에 Three.js 렌더러와 분리된 순수 모듈(`clipmapGeometry.ts`, `heightmapData.ts`, `terrainShader.ts`)과 실패 단위 테스트를 먼저 작성한다.
+2. 단일 드로우콜 GPU Geomorphing Clipmap + L-Trim, `R32F` 4-tap bilinear 하이트맵, `RGBA8` 비트패킹 컨트롤 맵(Autoshader/수동 페인트/구멍), 경사도·고도 기반 Autoshader, 실시간 브러시 스컬프팅/페인팅을 구현한다.
+3. `terrain-preview.html` + `src/terrainPreview.ts`로 풀블리드 반응형 샌드박스를 구성하고 기존 게임 저장과 프로덕션 빌드에 영향을 주지 않는다.
+4. `test`, `typecheck`, `lint`, `build`와 5개 필수 뷰포트(`1440x900`, `1280x720`, `844x390`, `390x844`, `320x568`) 실브라우저 E2E 및 픽셀·시각 검증을 통과한다.
+
 
 ## 테스트 매트릭스
 
